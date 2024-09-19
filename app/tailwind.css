@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #F2EFE5;
+  }
+}
+
+@keyframes slide {
+  0%, 100% { background-position: 0% 0%; }
+  50% { background-position: 0% 5%; }
+}
