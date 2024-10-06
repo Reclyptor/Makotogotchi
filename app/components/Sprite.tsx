@@ -30,7 +30,7 @@ const Sprite = <Keys extends string>(props: SpriteProps<Keys extends string ? Ke
       const box = sequence.boxes[frame];
       context.drawImage(sprites.current, box.x, box.y, box.w, box.h, box.dx, box.dy, box.w, box.h);
     }
-  }, [props.width, props.height]);
+  }, []);
 
   const loop = useCallback((frame: number, sequence: Sequence) => {
     clear();
