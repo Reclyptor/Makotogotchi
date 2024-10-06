@@ -3,7 +3,6 @@ import { Box, Sequence, SpriteProps } from "~/components/Sprite";
 const SPRITESHEET = "app/resources/sprites.png" as const;
 const CANVAS_WIDTH = 139 as const;
 const CANVAS_HEIGHT = 139 as const;
-const DEFAULT_SEQUENCE: keyof typeof SEQUENCES = "idle";
 
 type Rectangle = { x: number, y: number, w: number, h: number };
 
@@ -76,11 +75,57 @@ const centered = (sprite: Rectangle): Box => ({
 });
 
 const SEQUENCES = {
+  clonePhase1: {
+    interval: 1000,
+    boxes: [
+      centered(SPRITES.clone1),
+      centered(SPRITES.clone2),
+    ],
+  },
+  clonePhase2: {
+    interval: 1000,
+    boxes: [
+      centered(SPRITES.clone3),
+      centered(SPRITES.clone4),
+    ],
+  },
+  clonePhase3: {
+    interval: 1000,
+    boxes: [
+      centered(SPRITES.clone5),
+      centered(SPRITES.clone6),
+    ],
+  },
+  clonePhase4: {
+    interval: 1000,
+    boxes: [
+      centered(SPRITES.clone7),
+      centered(SPRITES.clone8),
+    ],
+  },
   walking: {
     interval: 1000,
     boxes: [
       centered(SPRITES.jog1),
       centered(SPRITES.jog2),
+    ],
+  },
+  jogging: {
+    interval: 200,
+    boxes: [
+      centered(SPRITES.jog1),
+      centered(SPRITES.jog2),
+      centered(SPRITES.jog1),
+      centered(SPRITES.jog2),
+      centered(SPRITES.jog1),
+      centered(SPRITES.jog2),
+      centered(SPRITES.jog1),
+      centered(SPRITES.jog2),
+      centered(SPRITES.jog1),
+      centered(SPRITES.jog2),
+      centered(SPRITES.jog1),
+      centered(SPRITES.jog2),
+      centered(SPRITES.jog3),
     ],
   },
   tired: {
@@ -113,13 +158,33 @@ const SEQUENCES = {
       centered(SPRITES.sleep2),
     ],
   },
+  sick: {
+    interval: 1000,
+    boxes: [
+      centered(SPRITES.sick1),
+      centered(SPRITES.sick2),
+    ],
+  },
+  dead: {
+    interval: 1000,
+    boxes: [
+      centered(SPRITES.dead1),
+      centered(SPRITES.dead2),
+    ],
+  },
+  hungry: {
+    interval: 1000,
+    boxes: [
+      centered(SPRITES.eat1),
+      centered(SPRITES.eat2),
+    ],
+  },
 } as const satisfies Record<string, Sequence>;
 
-const configuration: SpriteProps<keyof typeof SEQUENCES> = {
+const configuration: Omit<SpriteProps<keyof typeof SEQUENCES>, "sequence"> = {
   src: SPRITESHEET,
   width: CANVAS_WIDTH,
   height: CANVAS_HEIGHT,
-  sequence: DEFAULT_SEQUENCE,
   sequences: SEQUENCES,
 };
 
