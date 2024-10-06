@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 
 export type Box = { x: number; y: number, w: number, h: number, dx: number, dy: number, m?: 1 };
-export type Sequence = { duration: number; boxes: Box[] };
+export type Sequence = { interval: number; boxes: readonly Box[] };
 export type Sequences<Keys extends string> = { [K in Keys]: Sequence };
 
 export type SpriteProps<Keys extends string> = {
@@ -35,7 +35,7 @@ const Sprite = <Keys extends string>(props: SpriteProps<Keys extends string ? Ke
   const loop = useCallback((frame: number, sequence: Sequence) => {
     clear();
     draw(frame, sequence);
-    timeout.current = setTimeout(() => loop((frame + 1) % sequence.boxes.length, sequence), sequence.duration);
+    timeout.current = setTimeout(() => loop((frame + 1) % sequence.boxes.length, sequence), sequence.interval);
   }, [clear, draw]);
 
   useEffect(() => {
