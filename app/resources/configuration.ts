@@ -1,6 +1,6 @@
 import { Box, Sequence, SpriteProps } from "~/components/Sprite";
+import SPRITESHEET from "~/resources/sprites.png";
 
-const SPRITESHEET = "app/resources/sprites.png" as const;
 const CANVAS_WIDTH = 139 as const;
 const CANVAS_HEIGHT = 139 as const;
 

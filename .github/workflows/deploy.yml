@@ -27,4 +27,4 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_ACCESS_KEY_SECRET }}
         aws-region: us-east-1
     - name: Deploy
-      run: aws s3 rm s3://makotogotchi.com --recursive && aws s3 sync build s3://makotogotchi.com --delete
+      run: aws s3 rm s3://makotogotchi.com --recursive && aws s3 sync build/client s3://makotogotchi.com --delete
