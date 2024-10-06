@@ -4,16 +4,16 @@ const sequences = {
   walking: {
     duration: 400,
     boxes: [
-      { x: 36, y: 32 },
-      { x: 150, y: 32 },
+      { x: 40, y: 32 },
+      { x: 161, y: 32 },
     ],
   },
 };
 
 const configuration: SpriteProps<keyof typeof sequences> = {
   src: "app/resources/sprites.png",
-  width: 110,
-  height: 129,
+  width: 118,
+  height: 140,
   sequence: "walking",
   sequences,
 };
