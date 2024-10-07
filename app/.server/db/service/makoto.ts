@@ -5,8 +5,17 @@ import { UpdateWriteOpResult } from "mongoose";
 
 const GLOBAL_MAKOTO_ID: ObjectId = ObjectId.createFromHexString("000000000000000000000000");
 
-export const getMakoto = (): Promise<Makoto | null> => {
-  return makotoRepository.getMakotoByID(GLOBAL_MAKOTO_ID);
+const INITIAL_STATE = (): Makoto => ({
+  _id: GLOBAL_MAKOTO_ID,
+  born: new Date(Date.now()),
+  hunger: 0,
+  happiness: 100,
+  sick: false,
+  sleeping: false
+});
+
+export const getMakoto = (): Promise<Makoto> => {
+  return makotoRepository.getMakotoByID(GLOBAL_MAKOTO_ID).then(makoto => makoto || makotoRepository.createMakoto(INITIAL_STATE()));
 };
 
 export const updateMakoto = (makoto: Partial<Makoto>): Promise<UpdateWriteOpResult> => {

@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
 export type Makoto = {
+  _id?: mongoose.Types.ObjectId;
   born: Date;
   hunger: number;
   happiness: number;
@@ -16,4 +17,4 @@ const schema = new mongoose.Schema<Makoto>({
   sleeping: { type: Boolean, required: true },
 }, { collection: "makotos", versionKey: false });
 
-export const Makoto = mongoose.model<Makoto>("Makoto", schema);
+export const Makoto = mongoose.models.Makoto || mongoose.model<Makoto>("Makoto", schema);

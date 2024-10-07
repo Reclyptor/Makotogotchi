@@ -3,13 +3,6 @@ import Sprite from "~/components/Sprite";
 import configuration from "~/resources/configuration";
 import dayjs from "dayjs";
 
-const INITIAL_STATE: Omit<State, 'born'> = {
-  hunger: 0,
-  happiness: 100,
-  sick: false,
-  sleeping: false,
-} as const;
-
 export type State = {
   born: Date;
   hunger: number;
@@ -61,11 +54,11 @@ export const sequenceOf = (state: State): keyof typeof configuration.sequences =
 };
 
 export type MakotoProps = {
-  state?: State;
+  state: State;
 };
 
 const Makoto = (props: MakotoProps) => {
-  const [state, setState] = useState<State>(props.state || { ...INITIAL_STATE, born: new Date(Date.now()) });
+  const [state, setState] = useState<State>(props.state);
   const [sequence, setSequence] = useState<keyof typeof configuration.sequences>(sequenceOf(state));
   const timeout = useRef<ReturnType<typeof setInterval> | null>(null);
 
