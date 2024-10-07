@@ -46,10 +46,10 @@ export const sequenceOf = (state: State): keyof typeof configuration.sequences =
   if (dayjs().diff(state.born, "minute") < 4) return "clonePhase4";
   if (state.sick) return "sick";
   if (state.sleeping) return "sleeping";
+  if (state.happiness >= 80) return "dead";
   if (state.hunger >= 50) return "hungry";
   if (state.happiness <= 50) return "walking";
   if (state.happiness <= 25) return "tired";
-  if (state.happiness <= 10) return "dead";
   return "idle";
 };
 
@@ -58,22 +58,8 @@ export type MakotoProps = {
 };
 
 const Makoto = (props: MakotoProps) => {
-  const [state, setState] = useState<State>(props.state);
-  const [sequence, setSequence] = useState<keyof typeof configuration.sequences>(sequenceOf(state));
-  const timeout = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    timeout.current = setInterval(() => {
-      const newState = reduce(state);
-      const newSequence = sequenceOf(newState);
-      setState(newState);
-      setSequence(newSequence);
-    }, 1000);
-    return () => { timeout.current && clearInterval(timeout.current); };
-  }, [state]);
-
   return (
-    <Sprite { ...configuration } sequence={ sequence } />
+    <Sprite { ...configuration } sequence={ sequenceOf(props.state) } />
   );
 };
 
