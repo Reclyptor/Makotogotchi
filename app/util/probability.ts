@@ -1,0 +1,1 @@
+export const probability = (chance: number): boolean => 100 * Math.random() < chance;
