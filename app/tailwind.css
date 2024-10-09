@@ -5,6 +5,9 @@
 @layer base {
   :root {
     --background: #F2EFE5;
+    --brown-primary: rgba(147,126,92,1);
+    --brown-secondary: rgba(179,161,132,1);
+    --brown-tertiary: rgba(217,202,178,1);
   }
 }
 
