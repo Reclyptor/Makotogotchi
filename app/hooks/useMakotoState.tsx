@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { useEffect, useRef, useState } from "react";
+import { probability } from "~/util/probability";
 
 const TICK_INTERVAL = 1000 as const;
 const SAVE_INTERVAL = 60 as const;
@@ -8,8 +9,8 @@ export type MakotoState = {
   _id: string;
   born: Date;
   age: number;
-  hunger: number;
-  happiness: number;
+  hp: number;
+  energy: number;
   sick: boolean;
   dirty: boolean;
   sleeping: boolean;
@@ -29,7 +30,7 @@ const reduce = (state: MakotoState, action: MakotoAction): MakotoState => {
     case MakotoAction.FEED:
       return {
         ...state,
-        hunger: Math.max(state.hunger - 10, 0)
+        energy: Math.max(state.energy - 10, 0)
       };
     case MakotoAction.SLEEP:
       return {
@@ -39,7 +40,7 @@ const reduce = (state: MakotoState, action: MakotoAction): MakotoState => {
     case MakotoAction.PLAY:
       return {
         ...state,
-        happiness: Math.min(state.happiness + 20, 100)
+        hp: Math.min(state.hp + 20, 100)
       };
     case MakotoAction.MEDICATE:
       return {
@@ -49,12 +50,12 @@ const reduce = (state: MakotoState, action: MakotoAction): MakotoState => {
     case MakotoAction.BATHE:
       return {
         ...state,
-        happiness: Math.min(state.happiness + 10, 100)
+        hp: Math.min(state.hp + 10, 100)
       };
     case MakotoAction.PET:
       return {
         ...state,
-        happiness: Math.min(state.happiness + 10, 100)
+        hp: Math.min(state.hp + 10, 100)
       };
     default:
       return state;
@@ -66,8 +67,8 @@ const tick = (state: MakotoState): MakotoState => {
     _id: state._id,
     born: state.born,
     age: state.age + 1,
-    hunger: 0,
-    happiness: 100,
+    hp: state.age >= 240 ? state.hp - (probability(10) ? 1 : 0) : state.hp,
+    energy: state.age >= 240 ? state.energy - (probability(10) ? 1 : 0) : state.energy,
     sick: false,
     dirty: false,
     sleeping: false
@@ -78,8 +79,8 @@ const initializeState = (): MakotoState => ({
   _id: uuidv4(),
   born: new Date(Date.now()),
   age: 0,
-  hunger: 0,
-  happiness: 100,
+  hp: 100,
+  energy: 100,
   sick: false,
   dirty: false,
   sleeping: false
@@ -125,7 +126,7 @@ const useMakotoState = (props?: Props) => {
     }
   }, [state]);
 
-  return { state, dispatch: (action: MakotoAction) => setState(reduce(state, action)) };
+  return { state, dispatch: (action: MakotoAction) => setState(reduce(state, action)), reset: () => setState({ ...initializeState(), _id: state._id }) };
 };
 
 export default useMakotoState;
