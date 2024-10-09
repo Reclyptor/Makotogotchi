@@ -1,22 +1,13 @@
-import { useEffect, useState } from "react";
-import { useEventSource } from "remix-utils/sse/react";
-import Makoto, { State } from "~/components/Makoto";
+import Makoto from "~/components/Makoto";
+import useMakotoState from "~/hooks/useMakotoState";
+import type { MakotoState } from "~/types/makoto";
 
 export default function Index() {
-  const [state, setState] = useState<State>();
-  const newState = useEventSource("/sse/state");
-
-  useEffect(() => {
-    if (newState) {
-      const data = JSON.parse(newState);
-      const state: State = { ...data, born: new Date(data.born) };
-      setState(state);
-    }
-  }, [newState]);
+  const state: MakotoState = useMakotoState();
 
   return (
     <div className="flex items-center justify-center w-screen h-screen overflow-hidden">
-      { state && <Makoto state={ state } /> }
+      <Makoto initialState={ state } />
     </div>
   );
 }

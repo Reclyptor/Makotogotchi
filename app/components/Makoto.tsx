@@ -1,15 +1,8 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import Sprite from "~/components/Sprite";
 import configuration from "~/resources/configuration";
 import dayjs from "dayjs";
-
-export type State = {
-  born: Date;
-  hunger: number;
-  happiness: number;
-  sick: boolean;
-  sleeping: boolean;
-};
+import { MakotoState } from "~/types/makoto";
 
 export enum Action {
   PET,
@@ -20,7 +13,7 @@ export enum Action {
   CURE,
 }
 
-export const reduce = (state: State, action?: Action): State => {
+export const reduce = (state: MakotoState, action?: Action): MakotoState => {
   switch (action) {
     case Action.PET:
       return { ...state, happiness: Math.min(state.happiness + 10, 100) };
@@ -39,27 +32,23 @@ export const reduce = (state: State, action?: Action): State => {
   }
 };
 
-export const sequenceOf = (state: State): keyof typeof configuration.sequences => {
+export const sequenceOf = (state: MakotoState): keyof typeof configuration.sequences => {
   if (dayjs().diff(state.born, "minute") < 1) return "clonePhase1";
   if (dayjs().diff(state.born, "minute") < 2) return "clonePhase2";
   if (dayjs().diff(state.born, "minute") < 3) return "clonePhase3";
   if (dayjs().diff(state.born, "minute") < 4) return "clonePhase4";
-  if (state.sick) return "sick";
-  if (state.sleeping) return "sleeping";
-  if (state.happiness >= 80) return "dead";
-  if (state.hunger >= 50) return "hungry";
-  if (state.happiness <= 50) return "walking";
-  if (state.happiness <= 25) return "tired";
   return "idle";
 };
 
 export type MakotoProps = {
-  state: State;
+  initialState: MakotoState;
 };
 
 const Makoto = (props: MakotoProps) => {
+  const [state, setState] = useState<MakotoState>(props.initialState);
+
   return (
-    <Sprite { ...configuration } sequence={ sequenceOf(props.state) } />
+    <Sprite { ...configuration } sequence={ sequenceOf(state) } />
   );
 };
 
