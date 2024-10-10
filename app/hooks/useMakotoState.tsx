@@ -67,7 +67,8 @@ const reduce = (state: MakotoState, action: MakotoAction): MakotoState => {
       return {
         ...state,
         neglect: 0,
-        happiness: Math.min(Math.max(state.happiness + 10, 0), 100)
+        happiness: Math.min(Math.max(state.happiness + 10, 0), 100),
+        status: state.status === Status.GAMING ? Status.IDLE : Status.GAMING
       };
     case MakotoAction.MEDICATE:
       return {
@@ -98,6 +99,7 @@ const status = (state: MakotoState): Status => {
   if (state.age < 180) return Status.CLONE3;
   if (state.age < 240) return Status.CLONE4;
   if (state.neglect >= 100) return Status.DEAD;
+  if (state.status === Status.GAMING) return Status.GAMING;
   return Status.IDLE;
 };
 

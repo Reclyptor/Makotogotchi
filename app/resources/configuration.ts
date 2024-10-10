@@ -171,6 +171,29 @@ export const SEQUENCES = {
       centered(SPRITES.dead1),
     ],
   },
+  gaming: {
+    interval: 1000,
+    boxes: [
+      centered(SPRITES.game1),
+      centered(SPRITES.game2),
+      centered(SPRITES.game3),
+    ],
+  },
+  dirty: {
+    interval: 1000,
+    boxes: [
+      centered(SPRITES.lift1),
+      centered(SPRITES.lift2),
+    ],
+  },
+  bathing: {
+    interval: 1000,
+    boxes: [
+      centered(SPRITES.dustbath1),
+      centered(SPRITES.dustbath2),
+      centered(SPRITES.dustbath3),
+    ],
+  },
   hungry: {
     interval: 1000,
     boxes: [

@@ -10,7 +10,12 @@ export const mapStateToSequence = (state: MakotoState): Sequence => {
     case Status.CLONE3: return SEQUENCES.clonePhase3;
     case Status.CLONE4: return SEQUENCES.clonePhase4;
     case Status.DEAD: return SEQUENCES.dead;
-    case Status.IDLE: return SEQUENCES.idle;
+    case Status.GAMING: return SEQUENCES.gaming;
+    case Status.IDLE: {
+      if (state.sick) return SEQUENCES.sick;
+      if (state.dirty) return SEQUENCES.dirty;
+      return SEQUENCES.idle;
+    }
     default: return SEQUENCES.idle;
   }
 };
