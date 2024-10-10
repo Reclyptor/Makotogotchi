@@ -1,5 +1,5 @@
-import { DetailedHTMLProps, HTMLAttributes } from "react";
+import { ButtonHTMLAttributes, DetailedHTMLProps, HTMLAttributes } from "react";
 
-export type StandardProps<E,T> = Omit<DetailedHTMLProps<HTMLAttributes<E>, E>, keyof T>;
+export type WithStandardProps<E,T> = T & Omit<DetailedHTMLProps<HTMLAttributes<E>, E>, keyof T>;
 
-export type WithStandardProps<E,T> = T & StandardProps<E,T>;
+export type WithStandardButtonProps<T> = T & Omit<DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>, keyof T>;

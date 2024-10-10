@@ -30,7 +30,7 @@ const reduce = (state: MakotoState, action: MakotoAction): MakotoState => {
     case MakotoAction.FEED:
       return {
         ...state,
-        energy: Math.max(state.energy - 10, 0)
+        energy: Math.min(Math.max(state.energy + 10, 0), 100)
       };
     case MakotoAction.SLEEP:
       return {
@@ -40,7 +40,7 @@ const reduce = (state: MakotoState, action: MakotoAction): MakotoState => {
     case MakotoAction.PLAY:
       return {
         ...state,
-        hp: Math.min(state.hp + 20, 100)
+        hp: Math.min(Math.max(state.hp + 10, 0), 100)
       };
     case MakotoAction.MEDICATE:
       return {
@@ -50,12 +50,12 @@ const reduce = (state: MakotoState, action: MakotoAction): MakotoState => {
     case MakotoAction.BATHE:
       return {
         ...state,
-        hp: Math.min(state.hp + 10, 100)
+        dirty: false
       };
     case MakotoAction.PET:
       return {
         ...state,
-        hp: Math.min(state.hp + 10, 100)
+        hp: Math.min(Math.max(state.hp + 10, 0), 100)
       };
     default:
       return state;
