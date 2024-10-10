@@ -186,6 +186,13 @@ export const SEQUENCES = {
       centered(SPRITES.lift2),
     ],
   },
+  angry: {
+    interval: 1000,
+    boxes: [
+      centered(SPRITES.angry1),
+      centered(SPRITES.angry2),
+    ],
+  },
   bathing: {
     interval: 1000,
     boxes: [

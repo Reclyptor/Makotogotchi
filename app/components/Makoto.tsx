@@ -1,5 +1,5 @@
 import React from "react";
-import { MakotoState, Status } from "~/hooks/useMakotoState";
+import { Effect, MakotoState, Status } from "~/hooks/useMakotoState";
 import Sprite, { Sequence } from "~/components/Sprite";
 import configuration, { SEQUENCES } from "~/resources/configuration";
 
@@ -11,14 +11,15 @@ export const mapStateToSequence = (state: MakotoState): Sequence => {
     case Status.CLONE4: return SEQUENCES.clonePhase4;
     case Status.DEAD: return SEQUENCES.dead;
     case Status.SLEEPING: {
-      if (state.sick) return SEQUENCES.sick;
+      if (state.effects.includes(Effect.SICK)) return SEQUENCES.sick;
       else return SEQUENCES.sleeping;
     }
     case Status.PLAYING: return SEQUENCES.gaming;
     case Status.IDLE: {
-      if (state.sick) return SEQUENCES.sick;
-      if (state.tired) return SEQUENCES.tired;
-      if (state.dirty) return SEQUENCES.dirty;
+      if (state.effects.includes(Effect.SICK)) return SEQUENCES.sick;
+      if (state.effects.includes(Effect.TIRED)) return SEQUENCES.tired;
+      if (state.effects.includes(Effect.DIRTY)) return SEQUENCES.dirty;
+      if (state.effects.includes(Effect.ANGRY)) return SEQUENCES.angry;
       return SEQUENCES.idle;
     }
     default: return SEQUENCES.idle;

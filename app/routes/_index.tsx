@@ -1,5 +1,5 @@
 import Makoto from "~/components/Makoto";
-import useMakotoState, { MakotoAction } from "~/hooks/useMakotoState";
+import useMakotoState, { Effect, MakotoAction } from "~/hooks/useMakotoState";
 import { range } from "~/util/array";
 import { useRef, useState } from "react";
 import {
@@ -42,7 +42,7 @@ export default function Index() {
             { range(10).map((idx) => <HeartIcon key={ idx } size={ 32 } stroke="#6F1200" fill={ Math.trunc(state.happiness / 10) > idx ? "#6F1200" : "transparent" } />) }
           </div>
 
-          { state.sick && <SickIcon size={ 28 } color="#000" fill="#64478D" className="absolute top-14 right-5" /> }
+          { state.effects.includes(Effect.SICK) && <SickIcon size={ 28 } color="#000" fill="#64478D" className="absolute top-14 right-5" /> }
 
           <Makoto state={ state }/>
 

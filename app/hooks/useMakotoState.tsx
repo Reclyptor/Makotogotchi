@@ -5,6 +5,13 @@ import { probability } from "~/util/probability";
 const TICK_INTERVAL = 1000 as const;
 const SAVE_INTERVAL = 60 as const;
 
+export enum Effect {
+  SICK = "SICK",
+  TIRED = "TIRED",
+  DIRTY = "DIRTY",
+  ANGRY = "ANGRY",
+}
+
 export enum Status {
   DEAD = "DEAD",
   CLONE1 = "CLONE1",
@@ -27,9 +34,7 @@ export type MakotoState = {
   neglect: number;
   happiness: number;
   energy: number;
-  sick: boolean;
-  tired: boolean;
-  dirty: boolean;
+  effects: readonly Effect[];
   status: Status;
 };
 
@@ -53,10 +58,9 @@ const reduce = (state: MakotoState, action: MakotoAction): MakotoState => {
         energy: Math.min(Math.max(state.energy + 10, 0), 100)
       };
     case MakotoAction.SLEEP:
-      return !state.tired ? state : {
+      return !hasEffect(state, Effect.TIRED) ? state : {
         ...state,
         neglect: 0,
-        awake: 0,
         status: Status.SLEEPING
       };
     case MakotoAction.PLAY:
@@ -70,19 +74,20 @@ const reduce = (state: MakotoState, action: MakotoAction): MakotoState => {
       return {
         ...state,
         neglect: 0,
-        sick: false
+        effects: state.effects.filter(effect => effect !== Effect.SICK)
       };
     case MakotoAction.BATHE:
       return {
         ...state,
         neglect: 0,
-        dirty: false
+        effects: state.effects.filter(effect => effect !== Effect.DIRTY)
       };
     case MakotoAction.PET:
       return {
         ...state,
         neglect: 0,
-        happiness: Math.min(Math.max(state.happiness + 10, 0), 100)
+        happiness: Math.min(Math.max(state.happiness + 10, 0), 100),
+        effects: state.effects.filter(effect => effect !== Effect.ANGRY)
       };
     default:
       return state;
@@ -104,19 +109,23 @@ const status = (state: MakotoState): Status => {
 
 const isBorn = (state: MakotoState): boolean => state.age >= 240;
 
+const hasEffect = (state: MakotoState, effect: Effect): boolean => state.effects.includes(effect);
+
 const tick = (state: MakotoState): MakotoState => {
   return {
     _id: state._id,
     born: state.born,
     age: state.status === Status.DEAD ? state.age : state.age + 1,
-    awake: (!isBorn(state) || state.status === Status.SLEEPING) ? state.awake : state.awake + 1,
-    asleep: (!isBorn(state) || state.status !== Status.SLEEPING) ? state.asleep : state.asleep + 1,
-    neglect: Math.min(Math.max(state.happiness <= 0 && state.energy <= 0 ? state.neglect + 1 : state.neglect, 0), 100),
-    happiness: Math.min(Math.max(state.age >= 240 ? state.happiness - (probability(5) ? 1 : 0) : state.happiness, 0), 100),
-    energy: Math.min(Math.max(state.age >= 240 ? state.energy - (probability(5) ? 1 : 0) : state.energy, 0), 100),
-    sick: state.sick || probability(isBorn(state) ? 2 : 0),
-    tired: state.tired || (probability(isBorn(state) ? 2 : 0) && state.energy <= 50),
-    dirty: state.dirty || probability(isBorn(state) ? 2 : 0),
+    awake: (!isBorn(state) || state.status === Status.SLEEPING) ? 0 : state.awake + 1,
+    asleep: (isBorn(state) && state.status !== Status.SLEEPING) ? 0 : state.asleep + 1,
+    neglect: (!isBorn(state) || state.status === Status.SLEEPING) ? state.neglect : Math.min(Math.max(state.happiness <= 0 && state.energy <= 0 ? state.neglect + 1 : state.neglect, 0), 100),
+    happiness: (!isBorn(state) || state.status === Status.SLEEPING) ? state.happiness : Math.min(Math.max(state.happiness - (probability(5) ? 1 : 0), 0), 100),
+    energy: (!isBorn(state) || state.status === Status.SLEEPING) ? state.energy : Math.min(Math.max(state.energy - (probability(5) ? 1 : 0), 0), 100),
+    effects: [
+      ...(hasEffect(state, Effect.SICK) || probability(isBorn(state) ? 2 : 0) ? [Effect.SICK] : []),
+      ...(hasEffect(state, Effect.TIRED) || probability(isBorn(state) ? 2 : 0) ? [Effect.TIRED] : []),
+      ...(hasEffect(state, Effect.DIRTY) || probability(isBorn(state) ? 2 : 0) ? [Effect.DIRTY] : []),
+    ],
     status: status(state)
   };
 };
@@ -130,9 +139,7 @@ const initializeState = (): MakotoState => ({
   neglect: 0,
   happiness: 100,
   energy: 100,
-  sick: false,
-  tired: false,
-  dirty: false,
+  effects: [],
   status: Status.CLONE1,
 }) as const;
 
@@ -176,7 +183,12 @@ const useMakotoState = (props?: Props) => {
     }
   }, [state]);
 
-  return { state, dispatch: (action: MakotoAction) => setState(reduce(state, action)), reset: () => setState({ ...initializeState(), _id: state._id }) };
+  return {
+    state,
+    dispatch: (action: MakotoAction) => setState(reduce(state, action)),
+    reset: () => setState({ ...initializeState(), _id: state._id })
+
+  };
 };
 
 export default useMakotoState;
