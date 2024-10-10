@@ -38,7 +38,7 @@ export default function Index() {
 
         <Card className="flex flex-col items-center justify-center w-fit h-fit overflow-hidden">
           <div className="flex items-center w-fit h-fit p-4">
-            { range(10).map((idx) => <HeartIcon key={ idx } size={ 32 } stroke="#6F1200" fill={ Math.trunc(state.hp / 10) > idx ? "#6F1200" : "transparent" } />) }
+            { range(10).map((idx) => <HeartIcon key={ idx } size={ 32 } stroke="#6F1200" fill={ Math.trunc(state.happiness / 10) > idx ? "#6F1200" : "transparent" } />) }
           </div>
 
           <Makoto state={ state }/>

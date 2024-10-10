@@ -9,9 +9,10 @@ export type MakotoState = {
   _id: string;
   born: Date;
   age: number;
-  hp: number;
+  happiness: number;
   energy: number;
   sick: boolean;
+  tired: boolean;
   dirty: boolean;
   sleeping: boolean;
 };
@@ -40,7 +41,7 @@ const reduce = (state: MakotoState, action: MakotoAction): MakotoState => {
     case MakotoAction.PLAY:
       return {
         ...state,
-        hp: Math.min(Math.max(state.hp + 10, 0), 100)
+        happiness: Math.min(Math.max(state.happiness + 10, 0), 100)
       };
     case MakotoAction.MEDICATE:
       return {
@@ -55,7 +56,7 @@ const reduce = (state: MakotoState, action: MakotoAction): MakotoState => {
     case MakotoAction.PET:
       return {
         ...state,
-        hp: Math.min(Math.max(state.hp + 10, 0), 100)
+        happiness: Math.min(Math.max(state.happiness + 10, 0), 100)
       };
     default:
       return state;
@@ -67,11 +68,12 @@ const tick = (state: MakotoState): MakotoState => {
     _id: state._id,
     born: state.born,
     age: state.age + 1,
-    hp: state.age >= 240 ? state.hp - (probability(10) ? 1 : 0) : state.hp,
-    energy: state.age >= 240 ? state.energy - (probability(10) ? 1 : 0) : state.energy,
-    sick: false,
-    dirty: false,
-    sleeping: false
+    happiness: state.age >= 240 ? state.happiness - (probability(5) ? 1 : 0) : state.happiness,
+    energy: state.age >= 240 ? state.energy - (probability(5) ? 1 : 0) : state.energy,
+    sick: state.sick || probability(2),
+    tired: state.tired || state.energy < 50,
+    dirty: state.dirty || probability(2),
+    sleeping: state.sleeping
   };
 };
 
@@ -79,9 +81,10 @@ const initializeState = (): MakotoState => ({
   _id: uuidv4(),
   born: new Date(Date.now()),
   age: 0,
-  hp: 100,
+  happiness: 100,
   energy: 100,
   sick: false,
+  tired: false,
   dirty: false,
   sleeping: false
 }) as const;
