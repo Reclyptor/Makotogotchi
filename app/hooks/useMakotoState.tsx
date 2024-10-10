@@ -12,24 +12,18 @@ export enum Status {
   CLONE3 = "CLONE3",
   CLONE4 = "CLONE4",
   IDLE = "IDLE",
-  ANGRY = "ANGRY",
-  BORED = "BORED",
-  TIRED = "TIRED",
   EATING = "EATING",
-  GAMING = "GAMING",
-  JOGGING = "JOGGING",
-  WALKING = "WALKING",
-  MEALTIME = "MEALTIME",
+  PLAYING = "PLAYING",
+  BATHING = "BATHING",
   SLEEPING = "SLEEPING",
-  STANDING = "STANDING",
-  ANGRY_DIRTY = "ANGRY_DIRTY",
-  SLEEPING_SICK = "SLEEPING_SICK",
 }
 
 export type MakotoState = {
   _id: string;
   born: Date;
   age: number;
+  awake: number;
+  asleep: number;
   neglect: number;
   happiness: number;
   energy: number;
@@ -50,6 +44,7 @@ export enum MakotoAction {
 
 const reduce = (state: MakotoState, action: MakotoAction): MakotoState => {
   if (state.status === Status.DEAD) return state;
+  if (!isBorn(state)) return state;
   switch (action) {
     case MakotoAction.FEED:
       return {
@@ -58,9 +53,10 @@ const reduce = (state: MakotoState, action: MakotoAction): MakotoState => {
         energy: Math.min(Math.max(state.energy + 10, 0), 100)
       };
     case MakotoAction.SLEEP:
-      return {
+      return !state.tired ? state : {
         ...state,
         neglect: 0,
+        awake: 0,
         status: Status.SLEEPING
       };
     case MakotoAction.PLAY:
@@ -68,7 +64,7 @@ const reduce = (state: MakotoState, action: MakotoAction): MakotoState => {
         ...state,
         neglect: 0,
         happiness: Math.min(Math.max(state.happiness + 10, 0), 100),
-        status: state.status === Status.GAMING ? Status.IDLE : Status.GAMING
+        status: state.status === Status.PLAYING ? Status.IDLE : Status.PLAYING
       };
     case MakotoAction.MEDICATE:
       return {
@@ -99,21 +95,28 @@ const status = (state: MakotoState): Status => {
   if (state.age < 180) return Status.CLONE3;
   if (state.age < 240) return Status.CLONE4;
   if (state.neglect >= 100) return Status.DEAD;
-  if (state.status === Status.GAMING) return Status.GAMING;
+  if (state.status === Status.SLEEPING) return state.asleep >= 60 ? Status.IDLE : Status.SLEEPING;
+  if (state.status === Status.PLAYING) return Status.PLAYING;
+  if (state.status === Status.BATHING) return Status.BATHING;
+  if (state.status === Status.EATING) return Status.EATING;
   return Status.IDLE;
 };
+
+const isBorn = (state: MakotoState): boolean => state.age >= 240;
 
 const tick = (state: MakotoState): MakotoState => {
   return {
     _id: state._id,
     born: state.born,
     age: state.status === Status.DEAD ? state.age : state.age + 1,
+    awake: (!isBorn(state) || state.status === Status.SLEEPING) ? state.awake : state.awake + 1,
+    asleep: (!isBorn(state) || state.status !== Status.SLEEPING) ? state.asleep : state.asleep + 1,
     neglect: Math.min(Math.max(state.happiness <= 0 && state.energy <= 0 ? state.neglect + 1 : state.neglect, 0), 100),
     happiness: Math.min(Math.max(state.age >= 240 ? state.happiness - (probability(5) ? 1 : 0) : state.happiness, 0), 100),
     energy: Math.min(Math.max(state.age >= 240 ? state.energy - (probability(5) ? 1 : 0) : state.energy, 0), 100),
-    sick: state.sick || probability(2),
-    tired: state.tired || (probability(5) && state.energy < 50),
-    dirty: state.dirty || probability(2),
+    sick: state.sick || probability(isBorn(state) ? 2 : 0),
+    tired: state.tired || (probability(isBorn(state) ? 2 : 0) && state.energy <= 50),
+    dirty: state.dirty || probability(isBorn(state) ? 2 : 0),
     status: status(state)
   };
 };
@@ -122,6 +125,8 @@ const initializeState = (): MakotoState => ({
   _id: uuidv4(),
   born: new Date(Date.now()),
   age: 0,
+  awake: 0,
+  asleep: 0,
   neglect: 0,
   happiness: 100,
   energy: 100,
