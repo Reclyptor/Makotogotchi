@@ -4,6 +4,7 @@ import { probability } from "~/util/probability";
 
 const TICK_INTERVAL = 1000 as const;
 const SAVE_INTERVAL = 60 as const;
+const VERSION = "2ee1e28e-4903-46ad-9e97-fc9391eec05d" as const;
 
 export enum Effect {
   SICK = "SICK",
@@ -27,6 +28,7 @@ export enum Status {
 
 export type MakotoState = {
   _id: string;
+  _version: typeof VERSION;
   born: Date;
   age: number;
   awake: number;
@@ -114,13 +116,14 @@ const hasEffect = (state: MakotoState, effect: Effect): boolean => state.effects
 const tick = (state: MakotoState): MakotoState => {
   return {
     _id: state._id,
+    _version: state._version,
     born: state.born,
     age: state.status === Status.DEAD ? state.age : state.age + 1,
-    awake: (!isBorn(state) || state.status === Status.SLEEPING) ? 0 : state.awake + 1,
-    asleep: (isBorn(state) && state.status !== Status.SLEEPING) ? 0 : state.asleep + 1,
-    neglect: (!isBorn(state) || state.status === Status.SLEEPING) ? state.neglect : Math.min(Math.max(state.happiness <= 0 && state.energy <= 0 ? state.neglect + 1 : state.neglect, 0), 100),
-    happiness: (!isBorn(state) || state.status === Status.SLEEPING) ? state.happiness : Math.min(Math.max(state.happiness - (probability(5) ? 1 : 0), 0), 100),
-    energy: (!isBorn(state) || state.status === Status.SLEEPING) ? state.energy : Math.min(Math.max(state.energy - (probability(5) ? 1 : 0), 0), 100),
+    awake: !(isBorn(state) && state.status !== Status.SLEEPING) ? 0 : state.awake + 1,
+    asleep: !(isBorn(state) && state.status === Status.SLEEPING) ? 0 : state.asleep + 1,
+    neglect: !(isBorn(state) && state.status !== Status.SLEEPING) ? state.neglect : Math.min(Math.max(state.happiness <= 0 && state.energy <= 0 ? state.neglect + 1 : state.neglect, 0), 100),
+    happiness: !(isBorn(state) && state.status !== Status.SLEEPING) ? state.happiness : Math.min(Math.max(state.happiness - (probability(5) ? 1 : 0), 0), 100),
+    energy: !(isBorn(state) && state.status !== Status.SLEEPING) ? state.energy : Math.min(Math.max(state.energy - (probability(5) ? 1 : 0), 0), 100),
     effects: [
       ...(hasEffect(state, Effect.SICK) || probability(isBorn(state) ? 2 : 0) ? [Effect.SICK] : []),
       ...(hasEffect(state, Effect.TIRED) || probability(isBorn(state) ? 2 : 0) ? [Effect.TIRED] : []),
@@ -132,6 +135,7 @@ const tick = (state: MakotoState): MakotoState => {
 
 const initializeState = (): MakotoState => ({
   _id: uuidv4(),
+  _version: VERSION,
   born: new Date(Date.now()),
   age: 0,
   awake: 0,
@@ -147,7 +151,8 @@ const load = (id?: string): MakotoState => {
   if (id && localStorage.getItem(id)) {
     return JSON.parse(localStorage.getItem(id)!);
   } else if (localStorage.getItem("_")) {
-    return JSON.parse(localStorage.getItem(localStorage.getItem("_")!)!);
+    const state = JSON.parse(localStorage.getItem(localStorage.getItem("_")!)!);
+    return state._version === VERSION ? state : initializeState();
   }
   return initializeState();
 };
