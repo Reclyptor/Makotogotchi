@@ -6,7 +6,7 @@ const CANVAS_HEIGHT = 139 as const;
 
 type Rectangle = { x: number, y: number, w: number, h: number };
 
-const SPRITES = {
+export const SPRITES = {
   // Makoto
   jog1: { x: 39, y: 33, w: 115, h: 138 },
   jog2: { x: 160, y: 33, w: 115, h: 138 },
@@ -74,7 +74,7 @@ const centered = (sprite: Rectangle): Box => ({
   dy: Math.trunc((CANVAS_HEIGHT - sprite.h) / 2),
 });
 
-const SEQUENCES = {
+export const SEQUENCES = {
   clonePhase1: {
     interval: 1000,
     boxes: [
@@ -166,10 +166,9 @@ const SEQUENCES = {
     ],
   },
   dead: {
-    interval: 1000,
+    interval: 0,
     boxes: [
       centered(SPRITES.dead1),
-      centered(SPRITES.dead2),
     ],
   },
   hungry: {
@@ -181,11 +180,10 @@ const SEQUENCES = {
   },
 } as const satisfies Record<string, Sequence>;
 
-const configuration: Omit<SpriteProps<keyof typeof SEQUENCES>, "sequence"> = {
+const configuration: Omit<SpriteProps, "sequence"> = {
   src: SPRITESHEET,
   width: CANVAS_WIDTH,
   height: CANVAS_HEIGHT,
-  sequences: SEQUENCES,
 };
 
 export default configuration;

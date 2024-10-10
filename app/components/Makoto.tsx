@@ -1,14 +1,18 @@
 import React from "react";
-import { MakotoState } from "~/hooks/useMakotoState";
-import Sprite from "~/components/Sprite";
-import configuration from "~/resources/configuration";
+import { MakotoState, Status } from "~/hooks/useMakotoState";
+import Sprite, { Sequence } from "~/components/Sprite";
+import configuration, { SEQUENCES } from "~/resources/configuration";
 
-export const sequenceOf = (state: MakotoState): keyof typeof configuration.sequences => {
-  if (state.age < 60) return "clonePhase1";
-  if (state.age < 120) return "clonePhase2";
-  if (state.age < 180) return "clonePhase3";
-  if (state.age < 240) return "clonePhase4";
-  return "idle";
+export const mapStateToSequence = (state: MakotoState): Sequence => {
+  switch (state.status) {
+    case Status.CLONE1: return SEQUENCES.clonePhase1;
+    case Status.CLONE2: return SEQUENCES.clonePhase2;
+    case Status.CLONE3: return SEQUENCES.clonePhase3;
+    case Status.CLONE4: return SEQUENCES.clonePhase4;
+    case Status.DEAD: return SEQUENCES.dead;
+    case Status.IDLE: return SEQUENCES.idle;
+    default: return SEQUENCES.idle;
+  }
 };
 
 export type MakotoProps = {
@@ -17,7 +21,7 @@ export type MakotoProps = {
 
 const Makoto = (props: MakotoProps) => {
   return (
-    <Sprite { ...configuration } sequence={ sequenceOf(props.state) } />
+    <Sprite { ...configuration } sequence={ mapStateToSequence(props.state) } />
   );
 };
 

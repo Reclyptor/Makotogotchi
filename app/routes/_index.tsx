@@ -10,8 +10,9 @@ import {
   Hand as PetIcon,
   Heart as HeartIcon,
   Lamp as SleepIcon,
-  Syringe as MedicateIcon
+  Syringe as MedicateIcon,
 } from "lucide-react";
+import { FaVirusCovid as SickIcon } from "react-icons/fa6";
 import sideIdle1 from "~/resources/SideIdle1.png";
 import sideIdle2 from "~/resources/SideIdle2.png";
 import Card from "~/components/Card";
@@ -40,6 +41,8 @@ export default function Index() {
           <div className="flex items-center w-fit h-fit p-4">
             { range(10).map((idx) => <HeartIcon key={ idx } size={ 32 } stroke="#6F1200" fill={ Math.trunc(state.happiness / 10) > idx ? "#6F1200" : "transparent" } />) }
           </div>
+
+          { state.sick && <SickIcon size={ 28 } color="#000" fill="#64478D" className="absolute top-14 right-5" /> }
 
           <Makoto state={ state }/>
 

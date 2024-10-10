@@ -1,21 +1,20 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type Box = { x: number; y: number, w: number, h: number, dx: number, dy: number, m?: 1 };
 export type Sequence = { interval: number; boxes: readonly Box[] };
-export type Sequences<Keys extends string> = { [K in Keys]: Sequence };
 
-export type SpriteProps<Keys extends string> = {
+export type SpriteProps = {
   src: string;
   width: number;
   height: number;
-  sequence: Keys;
-  sequences: Sequences<Keys>;
+  sequence: Sequence;
 };
 
-const Sprite = <Keys extends string>(props: SpriteProps<Keys extends string ? Keys : never>) => {
+const Sprite = (props: SpriteProps) => {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const sprites = useRef<HTMLImageElement | null>(null);
   const timeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [ready, setReady] = useState(false);
 
   const clear = useCallback(() => {
     const context = canvas.current?.getContext("2d");
@@ -35,18 +34,22 @@ const Sprite = <Keys extends string>(props: SpriteProps<Keys extends string ? Ke
   const loop = useCallback((frame: number, sequence: Sequence) => {
     clear();
     draw(frame, sequence);
-    timeout.current = setTimeout(() => loop((frame + 1) % sequence.boxes.length, sequence), sequence.interval);
+    if (sequence.interval) {
+      timeout.current = setTimeout(() => loop((frame + 1) % sequence.boxes.length, sequence), sequence.interval);
+    }
   }, [clear, draw]);
 
   useEffect(() => {
-    loop(0, props.sequences[props.sequence]);
-    return () => { timeout.current && clearTimeout(timeout.current); };
-  }, [loop, props.sequences, props.sequence]);
+    if (ready) {
+      loop(0, props.sequence);
+      return () => { timeout.current && clearTimeout(timeout.current); };
+    }
+  }, [loop, props.sequence, ready]);
 
   useEffect(() => {
-    if (window) {
-      sprites.current = Object.assign(new Image(), { src: props.src });
-    }
+    setReady(false);
+    sprites.current = Object.assign(new Image(), { src: props.src });
+    sprites.current.onload = () => setReady(true);
   }, [props.src]);
 
   return (
