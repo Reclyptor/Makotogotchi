@@ -58,7 +58,7 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
 
     const offCare = onCare((notice) => {
       const who = notice.caretakerId === caretakerRef.current ? "you" : `friend ${notice.caretakerId.slice(0, 4)}`;
-      const amount = notice.applied > 0 ? `+${(notice.applied / 10_000).toFixed(1)}% ` : "";
+      const amount = notice.applied >= 1000 ? `+${(notice.applied / 10_000).toFixed(1)}% ` : "";
       room.onCare(notice.action, `${amount}${ACTION_EMOJI[notice.action]} ${who}`, performance.now());
     });
     const offMilestone = onMilestone((notice) => {

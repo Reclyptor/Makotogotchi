@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { project } from "@/sim/project";
-import type { PetState, PhaseSchedule } from "@/sim/model";
+import type { PetState, PhaseSchedule, ProjectionContext } from "@/sim/model";
 import type { CareAction } from "@/sim/tuning";
 import type { SnapshotPayload } from "@/server/snapshot";
 import type { CareMessage, MilestoneMessage, PresenceMessage, SnapshotMessage } from "@/server/engine/messages";
@@ -34,6 +34,8 @@ export type PetStream = {
   presenceCount: number;
   /** Authoritative state projected to the corrected current tick. */
   projectNow: () => PetState | null;
+  /** The projection context (phase schedule) for validate/derive callers. */
+  context: () => ProjectionContext | null;
   onCare: (listener: (notice: CareNotice) => void) => () => void;
   onMilestone: (listener: (notice: MilestoneNotice) => void) => () => void;
 };
@@ -108,6 +110,11 @@ export const usePetStream = (): PetStream => {
     return project(auth.state, tickNow, { schedule: auth.schedule }).state;
   }, []);
 
+  const context = useCallback((): ProjectionContext | null => {
+    const auth = authRef.current;
+    return auth ? { schedule: auth.schedule } : null;
+  }, []);
+
   const onCare = useCallback((listener: (notice: CareNotice) => void) => {
     careListeners.current.add(listener);
     return () => careListeners.current.delete(listener);
@@ -118,5 +125,5 @@ export const usePetStream = (): PetStream => {
     return () => milestoneListeners.current.delete(listener);
   }, []);
 
-  return { connected, caretakerId, presenceCount, projectNow, onCare, onMilestone };
+  return { connected, caretakerId, presenceCount, projectNow, context, onCare, onMilestone };
 };
