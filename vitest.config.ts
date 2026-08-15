@@ -9,9 +9,6 @@ export default defineConfig({
   },
   test: {
     include: ["src/**/*.test.ts"],
-    // Phase 0 scaffold only — remove the moment Phase 1 lands its first test,
-    // so an include-glob mistake can never silently green-light CI.
-    passWithNoTests: true,
     coverage: {
       provider: "v8",
       include: ["src/sim/**", "src/server/**", "src/game/**"],

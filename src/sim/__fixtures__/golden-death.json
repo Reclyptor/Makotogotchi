@@ -1,0 +1,271 @@
+{
+  "generation": {
+    "id": "gen-test",
+    "ordinal": 1,
+    "seed": 1337,
+    "genesisEpochMs": 1755000000000,
+    "name": "Makoto"
+  },
+  "tick": 103680,
+  "bornAtTick": 180,
+  "diedAtTick": 66259,
+  "causeOfDeath": "hunger",
+  "form": "STEADY",
+  "needs": {
+    "hunger": 0,
+    "energy": 736000,
+    "hygiene": 0,
+    "joy": 0
+  },
+  "healthRaw": 0,
+  "asleep": true,
+  "sleepReason": "NIGHT",
+  "sick": false,
+  "sickSinceTick": null,
+  "careNum": 70224710735,
+  "careTicks": 34560,
+  "lastActionTick": {
+    "FEED": 57040,
+    "CLEAN": 55460,
+    "PLAY": 57060,
+    "MEDICATE": 57080,
+    "PET": 53880,
+    "LULLABY": 57100
+  },
+  "caretakers": [
+    {
+      "id": "ana",
+      "lastActionTick": {
+        "PLAY": 55480,
+        "MEDICATE": 52300,
+        "FEED": 57040,
+        "PET": 53880,
+        "CLEAN": 55460,
+        "LULLABY": 57100
+      },
+      "budget": {
+        "joy": [
+          {
+            "day": 0,
+            "applied": 36650
+          },
+          {
+            "day": 1,
+            "applied": 144697
+          },
+          {
+            "day": 2,
+            "applied": 230535
+          },
+          {
+            "day": 3,
+            "applied": 261037
+          },
+          {
+            "day": 4,
+            "applied": 271876
+          },
+          {
+            "day": 5,
+            "applied": 275726
+          },
+          {
+            "day": 6,
+            "applied": 277096
+          }
+        ],
+        "hunger": [
+          {
+            "day": 0,
+            "applied": 75031
+          },
+          {
+            "day": 1,
+            "applied": 196949
+          },
+          {
+            "day": 2,
+            "applied": 266980
+          },
+          {
+            "day": 3,
+            "applied": 289138
+          },
+          {
+            "day": 4,
+            "applied": 296149
+          },
+          {
+            "day": 5,
+            "applied": 298367
+          },
+          {
+            "day": 6,
+            "applied": 299069
+          }
+        ],
+        "hygiene": [
+          {
+            "day": 0,
+            "applied": 36374
+          },
+          {
+            "day": 1,
+            "applied": 117765
+          },
+          {
+            "day": 2,
+            "applied": 183849
+          },
+          {
+            "day": 3,
+            "applied": 216230
+          },
+          {
+            "day": 4,
+            "applied": 232097
+          },
+          {
+            "day": 5,
+            "applied": 239871
+          },
+          {
+            "day": 6,
+            "applied": 243681
+          }
+        ],
+        "energy": [
+          {
+            "day": 0,
+            "applied": 68004
+          },
+          {
+            "day": 1,
+            "applied": 90485
+          },
+          {
+            "day": 2,
+            "applied": 91241
+          },
+          {
+            "day": 3,
+            "applied": 91241
+          },
+          {
+            "day": 4,
+            "applied": 91241
+          },
+          {
+            "day": 5,
+            "applied": 91241
+          },
+          {
+            "day": 6,
+            "applied": 91241
+          }
+        ]
+      }
+    },
+    {
+      "id": "emilio",
+      "lastActionTick": {
+        "FEED": 55440,
+        "CLEAN": 52260,
+        "PLAY": 57060,
+        "MEDICATE": 57080
+      },
+      "budget": {
+        "hunger": [
+          {
+            "day": 0,
+            "applied": 42441
+          },
+          {
+            "day": 1,
+            "applied": 166599
+          },
+          {
+            "day": 2,
+            "applied": 259973
+          },
+          {
+            "day": 3,
+            "applied": 289517
+          },
+          {
+            "day": 4,
+            "applied": 298865
+          },
+          {
+            "day": 5,
+            "applied": 301823
+          },
+          {
+            "day": 6,
+            "applied": 302759
+          }
+        ],
+        "hygiene": [
+          {
+            "day": 0,
+            "applied": 2592
+          },
+          {
+            "day": 1,
+            "applied": 85949
+          },
+          {
+            "day": 2,
+            "applied": 180355
+          },
+          {
+            "day": 3,
+            "applied": 226614
+          },
+          {
+            "day": 4,
+            "applied": 249281
+          },
+          {
+            "day": 5,
+            "applied": 260387
+          },
+          {
+            "day": 6,
+            "applied": 265830
+          }
+        ],
+        "joy": [
+          {
+            "day": 0,
+            "applied": 59844
+          },
+          {
+            "day": 1,
+            "applied": 160702
+          },
+          {
+            "day": 2,
+            "applied": 223285
+          },
+          {
+            "day": 3,
+            "applied": 245524
+          },
+          {
+            "day": 4,
+            "applied": 253426
+          },
+          {
+            "day": 5,
+            "applied": 256234
+          },
+          {
+            "day": 6,
+            "applied": 257232
+          }
+        ]
+      }
+    }
+  ]
+}
