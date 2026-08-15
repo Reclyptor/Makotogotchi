@@ -116,21 +116,23 @@ then it starts actually dying.
 Health does not tick down on a timer. It drains **in proportion to how badly
 the other needs are neglected**.
 
-Health is stored in raw units, `healthRaw ∈ [0, NEED_MAX × CRITICAL_THRESHOLD]`
-(= 2×10⁹ at full), so the drain formula is pure integer arithmetic with no
-division anywhere:
+Health is stored in raw units, `healthRaw ∈ [0, HEALTH_MAX]` with
+`HEALTH_MAX = 10¹²` — a scale decoupled from the need scale so the drain
+formula is pure integer arithmetic with no division anywhere:
 
 ```
 drainPerTick = HEALTH_DRAIN_PER_NEED × Σ max(0, CRITICAL_THRESHOLD − value)   over hunger, energy, hygiene, joy
-             + HEALTH_DRAIN_SICK_RAW      if the SICK ailment is untreated
-             + HEALTH_DRAIN_AGE           if stage is ELDER (unconditional)
-regenPerTick = HEALTH_REGEN_RAW           if no need is below CRITICAL_THRESHOLD
-                                          (never for ELDER)
+             + HEALTH_DRAIN_SICK        if the SICK ailment is untreated
+             + HEALTH_DRAIN_AGE         if stage is ELDER (unconditional)
+regenPerTick = HEALTH_REGEN             if no need is below CRITICAL_THRESHOLD
+                                        (never for ELDER)
 ```
 
-Because needs decay linearly within a projection segment, the drain rate is
-(at most) linear in tick index within a segment, and every per-segment health
-delta is an exact integer arithmetic series — see §4.5.
+`causeOfDeath` is the largest drain source at the moment of death — the need
+with the deepest deficit, sickness, or age — with a deterministic tie order
+(needs, then sickness, then age). Instantaneous attribution at the death tick
+keeps the rule a pure function of state; a rolling "final hour" account would
+require per-tick history the state deliberately does not carry.
 
 Consequences that fall out of this for free, rather than being special-cased:
 
@@ -176,12 +178,15 @@ anyone a weapon.
 
 | Action | Restores | Global cooldown | Per-caretaker cooldown | Available when |
 | --- | --- | --- | --- | --- |
-| `FEED` | Hunger | 45s | 3 min | Awake |
+| `FEED` | Hunger | 50s | 3 min | Awake |
 | `PLAY` | Joy | 60s | 3 min | Awake, energy > 10% |
 | `CLEAN` | Hygiene | 90s | 5 min | Awake |
 | `MEDICATE` | Clears `SICK`, small health | 5 min | 10 min | `SICK` present |
 | `LULLABY` | Energy; induces sleep | 2 min | 5 min | Night, or energy < 25% |
 | `PET` | Small Joy | 10s | 30s | Always (even asleep) |
+
+(Cooldowns are whole ticks — 10-second quanta — which is why `FEED` is 50s
+rather than a rounder 45s.)
 
 **Global cooldown** is a property of *the pet*, not of the player: the pet is
 busy eating; wait for it to finish. The UI says so in those words. This
@@ -208,8 +213,8 @@ unreachable states. With it, a heavy play day genuinely tires the pet and
 restoration over any rolling window of 7 pet-days may not exceed
 `CARETAKER_WEEKLY_BUDGET_DAYS × dailyDecay(need)`. Actions beyond the budget
 still validate but apply 0, and the UI explains why ("Makoto wants someone
-else's attention"). `MEDICATE` and `PET`'s health effects are exempt — an
-emergency responder is never turned away.
+else's attention"). `MEDICATE` is exempt — an emergency responder is never
+turned away.
 
 This is the structural encoding of §1.2's "a lone caretaker cannot sustain
 it", and it exists because cooldowns alone *cannot* encode it: a burst rescue
@@ -274,12 +279,12 @@ sleeping.
 
 | Stage | Begins at | Behaviour |
 | --- | --- | --- |
-| `EGG` | Generation start | Incubating. Cannot be interacted with beyond watching. 30 minutes. The spritesheet's eight-frame incubator sequence plays through. |
-| `HATCHLING` | +30 min | Needs decay at 60% rate. A grace period for a newborn. |
-| `PUP` | +1 day | Full decay rate begins. |
-| `JUVENILE` | +3 days | Care quality is sampled here — this window determines the adult form. |
-| `ADULT` | +7 days | Branches on care quality (below). |
-| `ELDER` | +21 days | Faster decay, no health regeneration, and an unconditional per-tick health drain (§2.3). Mortality is now arithmetically certain; only the date is open. |
+| `EGG` | Generation start | Incubating. Cannot be interacted with beyond watching. 30 minutes minimum — ends at the `HATCHED` event, whose timing depends on the naming vote (§2.10), which is why every later boundary counts from hatch. The spritesheet's eight-frame incubator sequence plays through. |
+| `HATCHLING` | Hatch | Needs decay at 60% rate. A grace period for a newborn. |
+| `PUP` | Hatch +1 day | Full decay rate begins. |
+| `JUVENILE` | Hatch +3 days | Care quality is sampled here — this window determines the adult form. |
+| `ADULT` | Hatch +7 days | Branches on care quality (below). |
+| `ELDER` | Hatch +21 days | Faster decay, no health regeneration, and an unconditional per-tick health drain (§2.3). Mortality is now arithmetically certain; only the date is open. |
 
 A newly hatched pet starts with every need at `NEED_MAX` and full health.
 
@@ -305,16 +310,20 @@ so the juvenile window is a real, high-stakes, community-wide test.
 
 Transient conditions layered on top of needs.
 
-| Ailment | Onset | Cleared by | Effect |
-| --- | --- | --- | --- |
-| `SICK` | Random chance per tick, weighted by low hygiene and low health | `MEDICATE` | Drains health directly. The strongest push-alert trigger. |
-| `FILTHY` | Hygiene < 25% | Hygiene ≥ 50% | Raises `SICK` onset chance. |
-| `STARVING` | Hunger < 15% | Hunger ≥ 30% | Cosmetic + alert trigger. |
-| `EXHAUSTED` | Energy < 15% | Energy ≥ 40% | Pet naps involuntarily. |
-| `SAD` | Joy < 20% | Joy ≥ 40% | Cosmetic + alert trigger. |
+| Ailment | Onset | Effect |
+| --- | --- | --- |
+| `SICK` | Random chance per tick, weighted by low hygiene and low health; cleared only by `MEDICATE` | Drains health directly. The strongest push-alert trigger. |
+| `FILTHY` | Hygiene < 25% | Raises `SICK` onset chance (continuously, via the onset formula). |
+| `STARVING` | Hunger < 15% | Cosmetic + alert trigger. |
+| `EXHAUSTED` | Energy < 15% | Pet naps involuntarily until energy ≥ 40%. |
+| `SAD` | Joy < 20% | Cosmetic + alert trigger. |
 
-Only `SICK` is stochastic. Every other ailment is a pure threshold function of
-state, so it is derived rather than stored (§4.3).
+Only `SICK` is stochastic. Every other ailment is a pure threshold function
+of instantaneous state, derived rather than stored (§4.3) — deliberately
+*without* display hysteresis, which would require stored history for a purely
+cosmetic flag. The two places on/off asymmetry genuinely matters carry their
+own state already: the nap machine (sleep state persists until the 40% wake
+threshold) and push-alert re-arming (server-side, §12).
 
 ### 2.10 Death, Memorial, Rebirth
 
@@ -475,10 +484,16 @@ codebase.
 
 ### 4.2 Integers, Not Floats
 
-All need values are integers in `[0, 100000]`. Health is an integer in
-`[0, NEED_MAX × CRITICAL_THRESHOLD]` (raw units, §2.3 — scaled so its drain
-formula never divides). All rates are integers. Nothing in `src/sim` performs
-floating-point arithmetic on state.
+All need values are integers in `[0, NEED_MAX]` with `NEED_MAX = 1,000,000`
+(display divides by 10,000 for a percentage). Health is an integer in
+`[0, HEALTH_MAX]` with `HEALTH_MAX = 10¹²` (raw units, §2.3 — scaled so its
+drain formula never divides). All rates are integers: the need scale is
+chosen so per-tick rates land at ~60–90, where the stage/phase/form
+multipliers round to integers with negligible error. The multiplied-out
+rates live in a precomputed integer table in `tuning.ts` — the table is the
+single source of truth the simulation reads; the multipliers are its
+documentation. Nothing in `src/sim` performs floating-point arithmetic on
+state, and every quantity stays far inside 2⁵³.
 
 Floating point would make replay determinism depend on JS engine rounding,
 make test assertions approximate, and let values drift by epsilon over
@@ -535,30 +550,28 @@ in `hello` and `snapshot`. `src/sim` contains no timezone logic, no `Intl`,
 and no locale data — a DST transition is just two odd boundary ticks a year,
 handled for free.
 
-**Projection is piecewise-linear, computed closed-form per segment.** Within
-a segment, need decay rates are constant, so each need is linear in tick
-index — and therefore the health-drain rate (a sum of clamped linear terms,
-§2.3) is at most linear in tick index. Every per-segment delta — needs,
-health, the careScore accumulator — is an exact integer arithmetic series.
-No per-tick rounding exists anywhere; that is what makes the path-independence
-property below hold exactly rather than approximately.
+**The reference semantics is an exact per-tick integer fold** with a pinned
+step order (stage evolution → schedule sleep/wake sync → decay/recovery →
+nap transitions → CRITICAL crossings → careScore accumulation → sickness
+draw → health drain and death check). Each tick is a pure function of the
+previous tick's state and the absolute tick index, so path independence
+holds by construction and every replay is bit-identical. No per-tick
+rounding exists anywhere — all rates are integers (§4.2).
 
-Segment boundaries: sleep/wake, stage transitions, adult-form assignment, any
-need crossing `CRITICAL_THRESHOLD`, any need saturating at `0` or `NEED_MAX`,
-sickness onset or cure, health crossing the SICK-multiplier threshold, and
-health reaching `0` (death). A boundary interior to a candidate segment —
-death above all — is located by integer binary search on the exact cumulative
-function, O(log n) and exact.
+The reference is also the implementation. The cost is O(elapsed ticks) at
+~20 integer operations per tick, and every real workload is far below the
+threshold of caring: the client projects a few ticks per frame; the server
+projects seconds of gap; a cold restart after three hours is ~1,080 ticks;
+replaying an entire 30-day generation is ~260k ticks — milliseconds. The
+worst possible live gap is bounded by death itself (an untended pet's state
+freezes within ~2 days). Because need decay is piecewise-linear between
+state-change boundaries, closed-form per-segment arithmetic series exist as
+an optimization path — but any such optimization must property-test equal to
+the per-tick reference, and none is warranted at these scales.
 
-**Cost honesty:** projection is O(segments) for needs and health, but
-O(elapsed ticks) for the SICK Bernoulli stream while the pet is susceptible —
-each onset draw is keyed by absolute tick index (§4.4) and must be evaluated.
-This is accepted: a draw is a handful of integer ops, a three-day gap is
-~26k draws, and the client projects at most a few ticks per frame. Any faster
-onset-sampling scheme is an optimization behind the same interface and must
-be property-tested equal to naive per-tick iteration. Because every draw is a
-pure function of absolute tick index, the stream is path-independent by
-construction — segmentation cannot break it.
+The SICK onset draw is keyed by absolute tick index (§4.4), so the stream is
+path-independent by construction — projection granularity cannot change
+which tick gets sick.
 
 The property test in §16 asserts all of this at once:
 
@@ -573,54 +586,47 @@ test in the codebase.
 
 ## 5. Tuning
 
-All values live in `src/sim/tuning.ts`. These are the **starting** values; §16
-describes the tests that hold the *design intent* invariant while these are
-tuned.
+All values live in `src/sim/tuning.ts`, which is the authority; this block
+is its summary. §16 describes the tests that hold the *design intent*
+invariant while these are tuned.
 
 ```
 TICK_SECONDS            = 10          ; 8640 ticks per day
-NEED_MAX                = 100000      ; 100.000%
-CRITICAL_THRESHOLD      = 20000       ; 20%
+NEED_MAX                = 1_000_000   ; display /10_000 → percent
+CRITICAL_THRESHOLD      = 200_000     ; 20%
 
-decay per tick, awake, PUP..ADULT (units of NEED_MAX):
-  hunger                = 9           ; 100% → 20% in ~24.7h   ← the pacesetter
-  joy                   = 8           ; ~27.8h
-  energy                = 7           ; ~31.7h
-  hygiene               = 6           ; ~37.0h
+decay per tick, awake, PUP..ADULT (need units):
+  hunger                = 90          ; 100% → 20% in ~24.7h nominal ← the pacesetter
+  joy                   = 80          ; ~27.8h
+  energy                = 70          ; ~31.7h
+  hygiene               = 60          ; ~37.0h
 
-asleep multipliers:
-  hunger, joy           = ×0.4
-  hygiene               = ×1.0
-  energy                = +30/tick recovery (0 → ~97% over a 9h night)
+multipliers (inputs to the precomputed integer rate table, §4.2):
+  asleep: hunger, joy   = ×0.4 ; hygiene ×1.0 ; energy decays 0
+  energy asleep         = +300/tick recovery (0 → ~97% over a 9h night)
+  stage: HATCHLING ×0.6 ; PUP/JUVENILE/ADULT ×1.0 ; ELDER ×1.4
+  form:  THRIVING ×0.9  ; STEADY ×1.0 ; FRAIL ×1.15
 
-stage decay multipliers:
-  HATCHLING             = ×0.6
-  PUP, JUVENILE, ADULT  = ×1.0
-  ELDER                 = ×1.4
-
-adult form decay multipliers:
-  THRIVING              = ×0.9
-  STEADY                = ×1.0
-  FRAIL                 = ×1.15
-
-health (raw units; HEALTH_MAX = NEED_MAX × CRITICAL_THRESHOLD = 2×10⁹):
-  HEALTH_DRAIN_PER_NEED = 25          ; × Σ max(0, CRITICAL_THRESHOLD − need), per tick
-                                      ; worst case 2,000,000/tick → ≥1,000 ticks (~2.8h)
-                                      ; from full even under total deprivation
-  HEALTH_DRAIN_SICK_RAW = 400000      ; per tick while untreated (~14h to kill from full)
-  HEALTH_DRAIN_AGE      = 24000       ; per tick, ELDER only, unconditional
+health (raw units; HEALTH_MAX = 10¹²):
+  HEALTH_DRAIN_PER_NEED = 550         ; × Σ max(0, CRITICAL_THRESHOLD − need), per tick
+                                      ; worst case 4.4×10⁸/tick → ~6.3h from full
+                                      ; under total deprivation
+  HEALTH_DRAIN_SICK     = 120_000_000 ; per tick untreated (~23h to kill from full —
+                                      ; an overnight onset leaves the day shift a
+                                      ; real chance to answer the push alert)
+  HEALTH_DRAIN_AGE      = 12_000_000  ; per tick, ELDER only, unconditional
                                       ; (~9.6 elder days from full under perfect care)
-  HEALTH_REGEN_RAW      = 240000      ; per tick, only when nothing is critical
+  HEALTH_REGEN          = 120_000_000 ; per tick, only when nothing is critical
                                       ; (~23h from zero to full); disabled for ELDER
 
-action base magnitudes:
-  FEED                  = 25000       ; 25%
-  PLAY                  = 22000       ; joy
-  PLAY_ENERGY_COST      =  6000       ; energy cost paid by the pet (§2.5)
-  CLEAN                 = 30000
-  LULLABY               = 15000       ; energy
-  PET                   =  4000
-  MEDICATE              = clears SICK, +5000 × CRITICAL_THRESHOLD healthRaw
+action base magnitudes (need units):
+  FEED                  = 250_000     ; 25%
+  PLAY                  = 220_000     ; joy
+  PLAY_ENERGY_COST      =  60_000     ; energy cost paid by the pet (§2.5)
+  CLEAN                 = 300_000
+  LULLABY               = 150_000     ; energy
+  PET                   =  40_000
+  MEDICATE              = clears SICK, +5% healthRaw flat
                           (not subject to diminishing returns)
 
 caretaker budget (§2.5):
@@ -630,27 +636,30 @@ caretaker budget (§2.5):
 contribution weights (§2.11): per-action multipliers on applied magnitude;
   MEDICATE and LULLABY score flat amounts. Values live in tuning.ts.
 
-SICK onset per tick:
+SICK onset per tick (exact integer threshold vs a uint32 draw):
   base                  = 1 / 30000   ; ≈ once per 3.5 days at full hygiene
   × (1 + 4 × filthiness) where filthiness = (1 − hygiene/NEED_MAX)
-  × 3 if health < 40%
+  × 3 if healthRaw < 40% of HEALTH_MAX
+
+sleep/nap thresholds:
+  EXHAUSTED (nap onset) = 150_000 ; nap/lullaby sleep ends at 400_000
+  LULLABY daytime gate  = 250_000 ; PLAY energy gate 100_000
 
 SLEEP_HOUR = 22, WAKE_HOUR = 7, TZ = America/Chicago
 MOURNING_DURATION = 2h
-INCUBATION_DURATION = 30 min
+INCUBATION_TICKS = 180 (30 min minimum; extends until the first name proposal)
 ```
 
-**`HEALTH_DRAIN_PER_NEED = 25` is a first estimate, not a derivation.** The
-survival window is defined by a test (§16.2), and this constant is tuned until
-that test passes. Encoding the difficulty dial as an executable assertion —
-rather than as a number someone once computed by hand — means retuning can
-never silently violate the design intent.
+**The health constants were tuned against the §16.2 dial tests, not derived
+by hand** — measured on the committed seeds: pure-neglect death at 45.6h,
+sickness-accelerated death at 41.1h. Encoding the difficulty dial as an
+executable assertion means retuning can never silently violate the design
+intent.
 
 Note that the headline "~24h to critical" is the *nominal always-awake*
-number (hunger: 80,000 / 9 per tick ≈ 24.7h). With the ×0.4 sleep multiplier
-in effect, the lived window depends on the start phase: a full pet untouched
-from `WAKE_HOUR` goes hunger-critical at ~30h. The §16.2 test pins the start
-phase for exactly this reason.
+number. With the sleep multipliers in effect, the lived window depends on
+the start phase: a full PUP untouched from `WAKE_HOUR` goes hunger-critical
+at ~30h. The §16.2 tests pin the start phase for exactly this reason.
 
 ---
 
@@ -1118,9 +1127,11 @@ needs are bounded:
     ∀ state reachable by any event sequence: 0 ≤ need ≤ NEED_MAX
 diminishing returns are monotone:
     higher current value ⇒ smaller applied magnitude
-the difficulty dial holds:
-    a full pet, untouched from WAKE_HOUR, reaches CRITICAL hunger in
-    28–32h and dies in 42–52h
+the difficulty dial holds (both paths, on pinned seeds):
+    pure neglect — a full PUP untouched from WAKE_HOUR on a sickness-quiet
+    seed reaches CRITICAL hunger in 28–32h and starves in 42–52h
+    with illness — on a seed that onsets sickness mid-abandonment, death
+    accelerates into the 36–44h band, never faster
 a lone caretaker can rescue:
     a greedy-optimal bot (acts the moment cooldowns and budget permit,
     choosing the action with max marginal health benefit) brings a starving
@@ -1133,8 +1144,8 @@ a lone caretaker cannot sustain:
 The last three encode §1.2's design goals as executable assertions — with the
 caretaker strategy pinned to a defined optimal bot, so the properties are
 decidable rather than aspirational. They are the reason the tuning constants
-can be changed safely. The death bound in the difficulty dial is recomputed
-against the exact health arithmetic during Phase 1 tuning and pinned then.
+can be changed safely. Measured values on the committed seeds: critical at
+30.1h, pure-neglect death at 45.6h, sickness-path death at 41.1h.
 
 ### 16.3 Golden Files
 
