@@ -17,7 +17,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "verify": "npm run typecheck && npm run lint && npm run test",
-    "atlas": "node scripts/atlas.ts"
+    "atlas": "node scripts/atlas.ts",
+    "test:e2e": "PLAYWRIGHT_CHROME=\"$(readlink -f /run/current-system/sw/bin/google-chrome 2>/dev/null || true)\" playwright test"
   },
   "dependencies": {
     "ioredis": "^6.0.0",
@@ -28,6 +29,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "26.2.0",
     "@types/pngjs": "^6.0.5",

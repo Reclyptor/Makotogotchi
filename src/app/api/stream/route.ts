@@ -86,7 +86,10 @@ export async function GET(request: NextRequest): Promise<Response> {
 
       pingTimer = setInterval(() => {
         comment("ping");
-        void touchPresence(redis(), key("presence"), identity.caretakerId);
+        // Touch, then re-attempt a broadcast: a join or leave whose
+        // broadcast lost the 2s guard race would otherwise never be
+        // reflected anywhere. This bounds presence staleness at one ping.
+        void touchPresence(redis(), key("presence"), identity.caretakerId).then(() => broadcastPresence());
       }, PING_INTERVAL_MS);
 
       snapshotTimer = setInterval(() => {
