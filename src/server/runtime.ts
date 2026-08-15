@@ -16,6 +16,8 @@ import { Lifecycle } from "./engine/lifecycle";
 import { Lease } from "./redis/lock";
 import { latestGeneration } from "./db/repository";
 import { anonymousName, nicknameMap } from "./social";
+import { PushDispatcher } from "./push/dispatcher";
+import { pushConfigured, webPushSender } from "./push/sender";
 import { TICK_SECONDS } from "@/sim/tuning";
 import type { Generation } from "@/sim/model";
 
@@ -67,6 +69,10 @@ const boot = async (): Promise<Runtime> => {
     return cached.generation;
   };
 
+  // Push alerts observe the authoritative state on the same cadence
+  // (SPEC §12) — disabled cleanly when no VAPID keys are configured.
+  const dispatcher = pushConfigured() ? new PushDispatcher(database, redis(), key, webPushSender) : null;
+
   // The tick loop: advance under the leader lease, then let the lifecycle
   // inspect the result for hatches, seals, and rebirths.
   const lease = new Lease(redis(), key("tick-leader"), 15_000);
@@ -77,6 +83,7 @@ const boot = async (): Promise<Runtime> => {
       const state = await engine.tick(current);
       const successor = await lifecycle.check(current, state);
       if (successor) cached = { generation: successor, at: Date.now() };
+      await dispatcher?.observe(state);
       await lease.renew();
     })().catch((error: unknown) => {
       // Failed ticks retry next interval; projection catches up losslessly.

@@ -17,6 +17,7 @@ import ActionBar from "@/app/components/ActionBar";
 import FeedLog, { type FeedEntry } from "@/app/components/FeedLog";
 import VotePanel from "@/app/components/VotePanel";
 import NicknameEditor from "@/app/components/NicknameEditor";
+import PushToggle from "@/app/components/PushToggle";
 import { usePetStream } from "@/app/hooks/usePetStream";
 
 const STAGE_LABELS: Record<string, string> = {
@@ -209,6 +210,7 @@ export default function GameView() {
 
       <footer className="flex w-full flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3 text-sm">
         <NicknameEditor key={profile?.nickname ?? ""} current={profile?.nickname ?? null} />
+        <PushToggle />
         <nav className="flex gap-4 text-muted">
           <a href="/leaderboard" className="underline underline-offset-2 hover:text-foreground">
             leaderboard
