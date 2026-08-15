@@ -9,6 +9,7 @@
 
 import { z } from "zod";
 import { CARE_ACTIONS } from "./tuning";
+import { PERFORMANCE_MAX, PERFORMANCE_MIN } from "./economy";
 
 export const NICKNAME_PATTERN = /^[\p{L}\p{N} _-]{2,16}$/u;
 
@@ -24,6 +25,17 @@ export const careEventSchema = z.object({
   type: z.literal("CARE"),
   action: z.enum(CARE_ACTIONS),
   caretakerId: z.string().min(1),
+  /** A purchased item applied with the action (SPEC §13.2). */
+  itemId: z.string().min(1).optional(),
+  /** Minigame result scaling PLAY's magnitude, percent (SPEC §13.3). */
+  performance: z.number().int().min(PERFORMANCE_MIN).max(PERFORMANCE_MAX).optional(),
+});
+
+/** Installs a communal toy for the rest of the generation (SPEC §13.2). */
+export const toyAddedEventSchema = z.object({
+  ...eventBase,
+  type: z.literal("TOY_ADDED"),
+  itemId: z.string().min(1),
 });
 
 export const hatchedEventSchema = z.object({
@@ -53,11 +65,13 @@ export const milestoneEventSchema = z.object({
 export const petEventSchema = z.discriminatedUnion("type", [
   careEventSchema,
   hatchedEventSchema,
+  toyAddedEventSchema,
   milestoneEventSchema,
 ]);
 
 export type CareEvent = z.infer<typeof careEventSchema>;
 export type HatchedEvent = z.infer<typeof hatchedEventSchema>;
+export type ToyAddedEvent = z.infer<typeof toyAddedEventSchema>;
 export type MilestoneEvent = z.infer<typeof milestoneEventSchema>;
 export type PetEvent = z.infer<typeof petEventSchema>;
 

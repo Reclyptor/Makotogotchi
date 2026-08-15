@@ -19,6 +19,8 @@ export type CaretakerDoc = {
   lastActiveDay: number | null;
   generationsSurvived: number;
   coins: number;
+  /** Consumable shop items owned, itemId → count (SPEC §13.2). */
+  inventory: Partial<Record<string, number>>;
   createdAt: Date;
 };
 
@@ -103,6 +105,7 @@ const emptyProfileFields = (): Omit<CaretakerDoc, "_id" | "nickname" | "nickname
   lastActiveDay: null,
   generationsSurvived: 0,
   coins: 0,
+  inventory: {},
   createdAt: new Date(),
 });
 
@@ -134,7 +137,7 @@ export const recordContribution = async (
     {
       $set: { streakDays, lastActiveDay: day },
       $inc: { score, coins, [`actionCounts.${input.action}`]: 1 },
-      $setOnInsert: { nickname: null, nicknameLower: null, nicknameChangedAt: null, generationsSurvived: 0, createdAt: new Date() },
+      $setOnInsert: { nickname: null, nicknameLower: null, nicknameChangedAt: null, generationsSurvived: 0, inventory: {}, createdAt: new Date() },
     },
     { upsert: true },
   );
@@ -202,6 +205,11 @@ export const nicknameMap = async (db: Db, ids: string[]): Promise<Map<string, st
 
 export const caretakerProfile = async (db: Db, caretakerId: string): Promise<CaretakerDoc | null> =>
   caretakers(db).findOne({ _id: caretakerId });
+
+/** Bonus coins outside the per-action formula (minigame score, SPEC §13.1). */
+export const creditCoins = async (db: Db, caretakerId: string, amount: number): Promise<void> => {
+  if (amount > 0) await caretakers(db).updateOne({ _id: caretakerId }, { $inc: { coins: amount } });
+};
 
 /** Everyone who contributed to a generation gets survival tenure (SPEC §2.10). */
 export const incrementGenerationsSurvived = async (db: Db, generationId: string): Promise<void> => {

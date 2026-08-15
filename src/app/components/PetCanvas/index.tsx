@@ -35,7 +35,11 @@ export type PetCanvasProps = {
 
 export default function PetCanvas({ stream }: PetCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const { projectNow, onCare, onMilestone, caretakerId } = stream;
+  const { projectNow, onCare, onMilestone, onMinigame, caretakerId, room: roomView } = stream;
+  const roomViewRef = useRef(roomView);
+  useEffect(() => {
+    roomViewRef.current = roomView;
+  }, [roomView]);
   const caretakerRef = useRef<string | null>(null);
   useEffect(() => {
     caretakerRef.current = caretakerId;
@@ -68,12 +72,24 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
       const label = MILESTONE_LABELS[notice.kind];
       if (label) room.onMilestone(label, performance.now());
     });
+    // Spectators watch the run live (SPEC §13.3): the pet plays on every
+    // screen while the minigame is on.
+    const offMinigame = onMinigame((notice) => {
+      if (notice.phase === "start" || notice.phase === "score") {
+        room.machine.trigger("playing", performance.now());
+      }
+      if (notice.phase === "finish" && notice.score !== undefined) {
+        room.onMilestone(`🎮 scored ${notice.score}!`, performance.now());
+      }
+    });
 
     const stop = startLoop({
       update: (dt) => room.update(dt),
       render: (now) => {
         const state = projectNow();
         if (state) room.syncDerived(derive(state), state.asleep, now);
+        const view = roomViewRef.current;
+        if (view) room.decor = { decor: view.decor, activeCosmetic: view.activeCosmetic };
         room.render(ctx, now);
       },
     });
@@ -82,9 +98,10 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
       stop();
       offCare();
       offMilestone();
+      offMinigame();
       media.removeEventListener("change", onMotionChange);
     };
-  }, [onCare, onMilestone, projectNow]);
+  }, [onCare, onMilestone, onMinigame, projectNow]);
 
   // Integer upscaling only (SPEC §10.3): the canvas grows in whole multiples
   // of the logical resolution so pixels stay square and even.

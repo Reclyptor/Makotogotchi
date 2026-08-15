@@ -230,9 +230,14 @@ export class PetEngine {
   }
 
   /** Perform a care action. Validation happens inside the lock (SPEC §3.4). */
-  async care(generation: Generation, action: CareAction, caretakerId: string): Promise<CareOutcome> {
+  async care(
+    generation: Generation,
+    action: CareAction,
+    caretakerId: string,
+    options: { itemId?: string; performance?: number } = {},
+  ): Promise<CareOutcome> {
     const result = await this.advance(generation, (state, ctx) => {
-      const verdict = canPerform(state, action, caretakerId, ctx);
+      const verdict = canPerform(state, action, caretakerId, ctx, options.itemId);
       if (!verdict.ok) return { kind: "reject", rejection: verdict };
       return {
         kind: "event",
@@ -243,11 +248,31 @@ export class PetEngine {
           tick: current.tick,
           action,
           caretakerId,
+          ...(options.itemId !== undefined ? { itemId: options.itemId } : {}),
+          ...(options.performance !== undefined ? { performance: options.performance } : {}),
         }),
       };
     });
     if (result.rejected) return { ok: false, rejection: result.rejected };
     return { ok: true, applied: result.applied, state: result.state };
+  }
+
+  /** Install a communal toy for this generation (SPEC §13.2). */
+  async addToy(generation: Generation, itemId: string): Promise<PetState> {
+    const result = await this.advance(generation, (state) => {
+      if (state.toys.includes(itemId)) return { kind: "skip" };
+      return {
+        kind: "event",
+        event: (seq, current): PetEvent => ({
+          type: "TOY_ADDED",
+          generationId: generation.id,
+          seq,
+          tick: current.tick,
+          itemId,
+        }),
+      };
+    });
+    return result.state;
   }
 
   /** Hatch the egg — driven by the naming vote (SPEC §2.10). */

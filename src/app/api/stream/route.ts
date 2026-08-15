@@ -81,7 +81,7 @@ export async function GET(request: NextRequest): Promise<Response> {
       };
 
       const state = await engine.view(current);
-      const payload = snapshotPayload(state, current);
+      const payload = await snapshotPayload(state, current);
       send("hello", {
         caretakerId: identity.caretakerId,
         nickname: profile?.nickname ?? null,
@@ -113,7 +113,7 @@ export async function GET(request: NextRequest): Promise<Response> {
           // the same stream starts carrying the successor egg.
           const liveGeneration = await generation();
           const liveState = await engine.view(liveGeneration);
-          send("snapshot", snapshotPayload(liveState, liveGeneration));
+          send("snapshot", await snapshotPayload(liveState, liveGeneration));
         })().catch(() => {
           // A transient store error skips one reconciliation cycle; the
           // next cycle or the live event flow catches the client up.

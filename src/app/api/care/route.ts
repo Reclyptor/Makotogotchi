@@ -14,9 +14,13 @@ import { db } from "@/server/db/client";
 import { key, redis } from "@/server/redis/client";
 import { LIMITS, takeToken } from "@/server/ratelimit";
 import { recordContribution } from "@/server/social";
+import { consumeItem, refundItem } from "@/server/shop";
 import { caretakerCookieHeader, clientIp, resolveCaretaker } from "@/server/http";
 
-const bodySchema = z.object({ action: z.enum(CARE_ACTIONS) });
+const bodySchema = z.object({
+  action: z.enum(CARE_ACTIONS),
+  itemId: z.string().min(1).max(64).optional(),
+});
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const identity = resolveCaretaker(request);
@@ -53,9 +57,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const { engine, generation } = await runtime();
   const current = await generation();
-  const outcome = await engine.care(current, parsed.data.action, identity.caretakerId);
+
+  // A consumable must be owned and is consumed up front; a rejected action
+  // refunds it (SPEC §13.2).
+  const { itemId } = parsed.data;
+  if (itemId !== undefined && !(await consumeItem(await db(), identity.caretakerId, itemId))) {
+    return withCookie(NextResponse.json({ error: "not_now", reason: "NO_ITEM" }, { status: 409 }));
+  }
+
+  const outcome = await engine.care(current, parsed.data.action, identity.caretakerId, {
+    ...(itemId !== undefined ? { itemId } : {}),
+  });
 
   if (!outcome.ok) {
+    if (itemId !== undefined) await refundItem(await db(), identity.caretakerId, itemId);
     return withCookie(
       NextResponse.json(
         {

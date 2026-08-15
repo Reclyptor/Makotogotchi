@@ -34,9 +34,11 @@ export type ActionBarProps = {
   ctx: ProjectionContext;
   caretakerId: string;
   petName: string;
+  /** PLAY launches the minigame (SPEC §13.3) instead of posting directly. */
+  onPlay: () => void;
 };
 
-export default function ActionBar({ state, ctx, caretakerId, petName }: ActionBarProps) {
+export default function ActionBar({ state, ctx, caretakerId, petName, onPlay }: ActionBarProps) {
   const [notice, setNotice] = useState<string | null>(null);
 
   const act = useCallback(
@@ -92,7 +94,9 @@ export default function ActionBar({ state, ctx, caretakerId, petName }: ActionBa
               key={action}
               type="button"
               onClick={() => {
-                if (verdict.ok) void act(action);
+                if (!verdict.ok) return;
+                if (action === "PLAY") onPlay();
+                else void act(action);
               }}
               aria-disabled={!verdict.ok}
               aria-label={hint ? `${meta.label} — ${hint}` : meta.label}

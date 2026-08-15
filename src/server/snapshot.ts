@@ -8,6 +8,8 @@ import type { Generation, PetState, PhaseSchedule } from "@/sim/model";
 import { TICKS_PER_DAY, TICK_SECONDS } from "@/sim/tuning";
 import { scheduleFor } from "./schedule";
 import { env } from "./env";
+import { db } from "./db/client";
+import { roomState, type RoomView } from "./shop";
 
 export type SnapshotPayload = {
   state: PetState;
@@ -17,9 +19,22 @@ export type SnapshotPayload = {
   genesisEpochMs: number;
   generation: { id: string; ordinal: number; name: string | null };
   phaseSchedule: PhaseSchedule;
+  room: RoomView;
 };
 
-export const snapshotPayload = (state: PetState, generation: Generation): SnapshotPayload => ({
+// The communal room changes rarely; a short cache keeps snapshot assembly
+// free of a Mongo read per SSE cycle per client.
+let roomCache: { room: RoomView; at: number } | null = null;
+const ROOM_TTL_MS = 10_000;
+
+const cachedRoom = async (): Promise<RoomView> => {
+  if (roomCache && Date.now() - roomCache.at < ROOM_TTL_MS) return roomCache.room;
+  const room = await roomState(await db());
+  roomCache = { room, at: Date.now() };
+  return room;
+};
+
+export const snapshotPayload = async (state: PetState, generation: Generation): Promise<SnapshotPayload> => ({
   state,
   derived: derive(state),
   serverTick: state.tick,
@@ -27,4 +42,5 @@ export const snapshotPayload = (state: PetState, generation: Generation): Snapsh
   genesisEpochMs: generation.genesisEpochMs,
   generation: { id: generation.id, ordinal: generation.ordinal, name: state.generation.name },
   phaseSchedule: scheduleFor(generation.genesisEpochMs, state.tick, state.tick + 2 * TICKS_PER_DAY, env().PET_TIMEZONE),
+  room: await cachedRoom(),
 });

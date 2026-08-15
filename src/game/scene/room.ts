@@ -33,6 +33,8 @@ const CARE_PARTICLES: Record<CareAction, { kind: "heart" | "sparkle" | "zzz" | "
   MEDICATE: { kind: "sparkle", count: 8 },
 };
 
+export type RoomDecor = { decor: string[]; activeCosmetic: string | null };
+
 export class Room {
   readonly atlas = new Atlas();
   readonly machine = new AnimationMachine();
@@ -40,6 +42,7 @@ export class Room {
   private readonly toasts = new Toasts();
   private asleep = false;
   private ambientMs = 0;
+  decor: RoomDecor = { decor: [], activeCosmetic: null };
 
   set reducedMotion(value: boolean) {
     this.machine.reducedMotion = value;
@@ -94,8 +97,11 @@ export class Room {
     ctx.fillStyle = "#5b4b71";
     ctx.fillRect(PET_X - 58, PET_Y - 8, 116, 10);
 
+    this.renderDecor(ctx);
+
     if (this.atlas.ready) {
       this.atlas.draw(ctx, this.machine.frameAt(nowMs), PET_X, PET_Y);
+      this.renderCosmetic(ctx);
     }
 
     this.particles.render(ctx);
@@ -107,5 +113,57 @@ export class Room {
     }
 
     this.toasts.render(ctx, nowMs, PET_X, PET_Y - 110);
+  }
+
+  /** Communal decor (SPEC §13.2), drawn procedurally in the room palette. */
+  private renderDecor(ctx: CanvasRenderingContext2D): void {
+    const px = (x: number, y: number, w: number, h: number, color: string): void => {
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, w, h);
+    };
+    if (this.decor.decor.includes("plant")) {
+      px(20, 148, 16, 14, "#7a4a2b"); // pot
+      px(24, 130, 8, 18, "#3c7a3c");
+      px(18, 136, 8, 8, "#4f9a4f");
+      px(30, 132, 8, 8, "#4f9a4f");
+    }
+    if (this.decor.decor.includes("picture")) {
+      px(96, 40, 30, 24, "#6a5a3b"); // frame
+      px(99, 43, 24, 18, "#8fb3d9"); // sky
+      px(99, 55, 24, 6, "#5b7a4a"); // hills
+    }
+    if (this.decor.decor.includes("lamp")) {
+      px(226, 96, 4, 66, "#57492f"); // pole
+      px(216, 84, 24, 14, "#e8c76a"); // shade
+      ctx.globalAlpha = 0.12;
+      px(206, 98, 44, 64, "#ffe9a3"); // glow
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  /** The worn cosmetic, anchored to the pet's head. */
+  private renderCosmetic(ctx: CanvasRenderingContext2D): void {
+    const hat = this.decor.activeCosmetic;
+    if (!hat) return;
+    const x = PET_X - 2;
+    const y = PET_Y - 128;
+    const px = (dx: number, dy: number, w: number, h: number, color: string): void => {
+      ctx.fillStyle = color;
+      ctx.fillRect(x + dx, y + dy, w, h);
+    };
+    if (hat === "bow") {
+      px(-10, 2, 8, 8, "#d9538a");
+      px(2, 2, 8, 8, "#d9538a");
+      px(-2, 4, 4, 4, "#a83766");
+    } else if (hat === "cap") {
+      px(-12, 0, 24, 6, "#3b6ea5");
+      px(-12, 6, 30, 3, "#2c5480");
+    } else if (hat === "crown") {
+      px(-12, 0, 24, 7, "#e8c76a");
+      px(-12, -6, 5, 6, "#e8c76a");
+      px(-2, -6, 5, 6, "#e8c76a");
+      px(7, -6, 5, 6, "#e8c76a");
+      px(-4, 2, 3, 3, "#d9538a");
+    }
   }
 }

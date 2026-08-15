@@ -6,6 +6,7 @@
 // validates and applies zero (SPEC §2.5) — the UI explains separately.
 
 import { isAlive, phaseAt, type PetState, type ProjectionContext } from "./model";
+import { medicineItem } from "./economy";
 import { COOLDOWNS, LULLABY_ENERGY_GATE, PLAY_ENERGY_GATE, type CareAction } from "./tuning";
 
 export type RejectionReason =
@@ -28,19 +29,24 @@ export const canPerform = (
   action: CareAction,
   caretakerId: string,
   ctx: ProjectionContext,
+  itemId?: string,
 ): ValidationResult => {
   if (state.bornAtTick === null) return reject("NOT_BORN");
   if (!isAlive(state)) return reject("DEAD");
 
-  const cooldown = COOLDOWNS[action];
-  const lastGlobal = state.lastActionTick[action];
-  if (lastGlobal !== undefined && state.tick - lastGlobal < cooldown.global) {
-    return reject("COOLDOWN_GLOBAL", lastGlobal + cooldown.global);
-  }
-  const record = state.caretakers.find((entry) => entry.id === caretakerId);
-  const lastOwn = record?.lastActionTick[action];
-  if (lastOwn !== undefined && state.tick - lastOwn < cooldown.caretaker) {
-    return reject("COOLDOWN_CARETAKER", lastOwn + cooldown.caretaker);
+  // Emergency medicine cures instantly — cooldowns are bypassed (SPEC §13.2).
+  const bypassCooldowns = action === "MEDICATE" && medicineItem(itemId) !== null;
+  if (!bypassCooldowns) {
+    const cooldown = COOLDOWNS[action];
+    const lastGlobal = state.lastActionTick[action];
+    if (lastGlobal !== undefined && state.tick - lastGlobal < cooldown.global) {
+      return reject("COOLDOWN_GLOBAL", lastGlobal + cooldown.global);
+    }
+    const record = state.caretakers.find((entry) => entry.id === caretakerId);
+    const lastOwn = record?.lastActionTick[action];
+    if (lastOwn !== undefined && state.tick - lastOwn < cooldown.caretaker) {
+      return reject("COOLDOWN_CARETAKER", lastOwn + cooldown.caretaker);
+    }
   }
 
   switch (action) {

@@ -5,6 +5,7 @@
 
 import { phaseAt, type PetState, type ProjectionContext } from "./model";
 import { project } from "./project";
+import { foodItem, toysPlayBonusPercent } from "./economy";
 import { caretakerRecord, pruneCaretakers, recordApplied } from "./score";
 import {
   ACTION_MAGNITUDE,
@@ -53,6 +54,14 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       // A record of what projection already determined — no state effect.
       return { state, milestones, applied: 0 };
 
+    case "TOY_ADDED": {
+      if (!state.toys.includes(event.itemId)) {
+        state.toys.push(event.itemId);
+        state.toys.sort(); // canonical order for replay determinism
+      }
+      return { state, milestones, applied: 0 };
+    }
+
     case "HATCHED": {
       state.bornAtTick = event.tick;
       state.generation = { ...state.generation, name: event.name };
@@ -81,10 +90,25 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       } else {
         const magnitude = MAGNITUDE_ACTIONS[event.action];
         if (magnitude) {
-          const curved = diminishedMagnitude(magnitude.base, state.needs[magnitude.need]);
+          // Item and minigame modifiers scale the base BEFORE the curve, so
+          // diminishing returns still govern (SPEC §13.2–13.3). Integer
+          // percent arithmetic keeps the fold exact.
+          let base = magnitude.base;
+          const food = event.action === "FEED" ? foodItem(event.itemId) : null;
+          if (food) base = Math.floor((base * food.scalePercent) / 100);
+          if (event.action === "PLAY") {
+            base = Math.floor((base * (100 + toysPlayBonusPercent(state.toys))) / 100);
+            if (event.performance !== undefined) base = Math.floor((base * event.performance) / 100);
+          }
+          const curved = diminishedMagnitude(base, state.needs[magnitude.need]);
           applied = Math.min(curved, budgetRemaining(record, magnitude.need, event.tick));
           state.needs[magnitude.need] = clamp(state.needs[magnitude.need] + applied, NEED_MAX);
           recordApplied(record, magnitude.need, event.tick, applied);
+          if (food) {
+            // The joy side-bonus is bounded by purchases, so it bypasses the
+            // caretaker budget but never the clamp.
+            state.needs.joy = clamp(state.needs.joy + food.joyBonus, NEED_MAX);
+          }
         }
         if (event.action === "PLAY") {
           state.needs.energy = clamp(state.needs.energy - PLAY_ENERGY_COST, NEED_MAX);

@@ -35,4 +35,14 @@ export type PresenceMessage = {
   caretakers: { id: string; name: string }[];
 };
 
-export type EngineMessage = CareMessage | MilestoneMessage | SnapshotMessage | PresenceMessage;
+/** Live minigame spectacle (SPEC §13.3): everyone watches the run. */
+export type MinigameMessage = {
+  type: "minigame";
+  phase: "start" | "score" | "finish";
+  caretakerId: string;
+  caretakerName?: string;
+  score?: number;
+  applied?: number;
+};
+
+export type EngineMessage = CareMessage | MilestoneMessage | SnapshotMessage | PresenceMessage | MinigameMessage;

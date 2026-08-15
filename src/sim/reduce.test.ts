@@ -206,3 +206,54 @@ describe("canPerform", () => {
     expect(canPerform(night, "LULLABY", "a", ctx)).toMatchObject({ ok: true });
   });
 });
+
+describe("economy items (SPEC §13)", () => {
+  const bornState = () => project(hatchedState(ctx), 1000, ctx).state;
+
+  it("food items scale FEED through the curve and add the joy bonus", () => {
+    const state = { ...bornState(), needs: { hunger: 0, energy: 500_000, hygiene: 500_000, joy: 100_000 } };
+    const log = new EventLog();
+    const plain = reduce(state, log.care(1000, "FEED", "a"), ctx);
+    const boosted = reduce(state, { ...log.care(1001, "FEED", "b"), tick: 1000, itemId: "fish_feast" }, ctx);
+    // 145% base through the same curve: strictly more hunger restored.
+    expect(boosted.applied).toBeGreaterThan(plain.applied);
+    expect(boosted.state.needs.joy).toBe(state.needs.joy + 35_000);
+    expect(plain.state.needs.joy).toBe(state.needs.joy);
+  });
+
+  it("TOY_ADDED installs once and raises PLAY magnitude for the generation", () => {
+    const state = { ...bornState(), needs: { hunger: 500_000, energy: 500_000, hygiene: 500_000, joy: 0 } };
+    const log = new EventLog();
+    const withToy = reduce(state, { type: "TOY_ADDED", generationId: TEST_GENERATION.id, seq: 90, tick: 1000, itemId: "wheel" }, ctx).state;
+    expect(withToy.toys).toEqual(["wheel"]);
+    const again = reduce(withToy, { type: "TOY_ADDED", generationId: TEST_GENERATION.id, seq: 91, tick: 1000, itemId: "wheel" }, ctx).state;
+    expect(again.toys).toEqual(["wheel"]);
+
+    const plain = reduce(state, log.care(1000, "PLAY", "a"), ctx);
+    const withBonus = reduce({ ...again, tick: 1000 }, log.care(1000, "PLAY", "b"), ctx);
+    expect(withBonus.applied).toBeGreaterThan(plain.applied);
+  });
+
+  it("minigame performance scales PLAY in both directions", () => {
+    const state = { ...bornState(), needs: { hunger: 500_000, energy: 500_000, hygiene: 500_000, joy: 0 } };
+    const log = new EventLog();
+    const base = reduce(state, log.care(1000, "PLAY", "a"), ctx).applied;
+    const great = reduce(state, { ...log.care(1001, "PLAY", "b"), tick: 1000, performance: 150 }, ctx).applied;
+    const poor = reduce(state, { ...log.care(1002, "PLAY", "c"), tick: 1000, performance: 50 }, ctx).applied;
+    expect(great).toBeGreaterThan(base);
+    expect(poor).toBeLessThan(base);
+  });
+
+  it("super medicine bypasses cooldowns but never the sickness gate", () => {
+    const base = bornState();
+    const sick = { ...base, sick: true, sickSinceTick: 900 };
+    const log = new EventLog();
+    const { state: cured } = reduce(sick, log.care(1000, "MEDICATE", "a"), ctx);
+    // Ordinary medicine is now cooling down globally; super medicine is not.
+    const resick = { ...cured, sick: true, sickSinceTick: 1001, tick: 1001 };
+    expect(canPerform(resick, "MEDICATE", "b", ctx)).toMatchObject({ ok: false, reason: "COOLDOWN_GLOBAL" });
+    expect(canPerform(resick, "MEDICATE", "b", ctx, "super_medicine")).toMatchObject({ ok: true });
+    // But a healthy pet still rejects it.
+    expect(canPerform({ ...cured, tick: 1001 }, "MEDICATE", "b", ctx, "super_medicine")).toMatchObject({ ok: false, reason: "NOT_SICK" });
+  });
+});

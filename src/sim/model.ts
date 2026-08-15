@@ -61,6 +61,8 @@ export type PetState = {
   /** Per-action last-performed tick — the global cooldowns (SPEC §2.5). */
   lastActionTick: Partial<Record<CareAction, number>>;
   caretakers: CaretakerRecord[];
+  /** Communal toys installed this generation, sorted (SPEC §13.2). */
+  toys: string[];
 };
 
 /** Pure function of hatch time — never stored (SPEC §4.3). */

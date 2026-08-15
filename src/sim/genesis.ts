@@ -22,4 +22,5 @@ export const genesis = (generation: Generation): PetState => ({
   careTicks: 0,
   lastActionTick: {},
   caretakers: [],
+  toys: [],
 });

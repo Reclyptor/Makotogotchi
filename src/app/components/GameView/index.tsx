@@ -18,6 +18,8 @@ import FeedLog, { type FeedEntry } from "@/app/components/FeedLog";
 import VotePanel from "@/app/components/VotePanel";
 import NicknameEditor from "@/app/components/NicknameEditor";
 import PushToggle from "@/app/components/PushToggle";
+import ShopPanel from "@/app/components/ShopPanel";
+import DustDash from "@/app/components/DustDash";
 import { usePetStream } from "@/app/hooks/usePetStream";
 
 const STAGE_LABELS: Record<string, string> = {
@@ -59,10 +61,13 @@ const age = (state: PetState): string => {
 
 export default function GameView() {
   const stream = usePetStream();
-  const { projectNow, context, onCare, onMilestone, caretakerId, profile } = stream;
+  const { projectNow, context, onCare, onMilestone, onMinigame, caretakerId, profile } = stream;
   const [ui, setUi] = useState<{ state: PetState; derived: DerivedState } | null>(null);
   const [feed, setFeed] = useState<FeedEntry[]>([]);
   const [muted, setMuted] = useState(true);
+  const [shopOpen, setShopOpen] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [spectating, setSpectating] = useState<{ name: string; score: number } | null>(null);
   const audioRef = useRef<GameAudio | null>(null);
   const feedId = useRef(0);
   const caretakerRef = useRef<string | null>(null);
@@ -130,11 +135,26 @@ export default function GameView() {
         audioRef.current?.playAlert();
       }
     });
+    // The minigame spectacle (SPEC §13.3): a banner with the live score for
+    // everyone who isn't the one playing.
+    const offMinigame = onMinigame((notice) => {
+      const name = notice.caretakerId === caretakerRef.current ? "You" : (notice.caretakerName ?? "A friend");
+      if (notice.phase === "start") {
+        setSpectating({ name, score: 0 });
+        pushFeed(`${name} started a game of Dust Dash! 🎮`);
+      } else if (notice.phase === "score" && notice.score !== undefined) {
+        setSpectating((current) => (current ? { ...current, score: notice.score! } : { name, score: notice.score! }));
+      } else if (notice.phase === "finish") {
+        setSpectating(null);
+        if (notice.score !== undefined) pushFeed(`${name} scored ${notice.score} at Dust Dash!`);
+      }
+    });
     return () => {
       offCare();
       offMilestone();
+      offMinigame();
     };
-  }, [onCare, onMilestone]);
+  }, [onCare, onMilestone, onMinigame]);
 
   const toggleAudio = (): void => {
     const audio = audioRef.current;
@@ -201,11 +221,36 @@ export default function GameView() {
           : "Connecting…"}
       </p>
 
+      {spectating && (
+        <p aria-live="polite" className="w-full rounded-md bg-accent/20 px-3 py-1.5 text-center text-sm">
+          🎮 {spectating.name === "You" ? "You are" : `${spectating.name} is`} playing Dust Dash — score{" "}
+          <strong className="tabular-nums">{spectating.score}</strong>
+        </p>
+      )}
+
       {ui && !isEgg && <Meters percentages={ui.derived.percentages} />}
       {isEgg && <VotePanel />}
       {ui && !isEgg && !isDead && ctx && caretakerId && (
-        <ActionBar state={ui.state} ctx={ctx} caretakerId={caretakerId} petName={petName} />
+        <ActionBar
+          state={ui.state}
+          ctx={ctx}
+          caretakerId={caretakerId}
+          petName={petName}
+          onPlay={() => setPlaying(true)}
+        />
       )}
+      {ui && !isEgg && !isDead && (
+        <button
+          type="button"
+          onClick={() => setShopOpen((open) => !open)}
+          aria-expanded={shopOpen}
+          className="self-start text-sm text-muted underline underline-offset-2 hover:text-foreground"
+        >
+          {shopOpen ? "hide shop" : "🛒 open shop"}
+        </button>
+      )}
+      {shopOpen && <ShopPanel onClose={() => setShopOpen(false)} />}
+      {playing && <DustDash onClose={() => setPlaying(false)} />}
       <FeedLog entries={feed} />
 
       <footer className="flex w-full flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3 text-sm">
