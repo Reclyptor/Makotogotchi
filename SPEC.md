@@ -1,0 +1,1362 @@
+# Makotogotchi — Specification
+
+> **Version:** 1.1 (approved; revised after adversarial plan review)
+> **Last Updated:** 2026-08-15
+> **Status:** Source of truth for the entire project. No code lands that
+> contradicts this document. When reality and this document disagree, one of
+> the two is a bug — decide which, then fix it.
+
+---
+
+## Table of Contents
+
+1. [Product](#1-product)
+2. [Game Design](#2-game-design)
+3. [Architecture](#3-architecture)
+4. [Simulation Core](#4-simulation-core)
+5. [Tuning](#5-tuning)
+6. [Persistence](#6-persistence)
+7. [Realtime Protocol](#7-realtime-protocol)
+8. [Identity, Rate Limiting, and Abuse](#8-identity-rate-limiting-and-abuse)
+9. [HTTP API](#9-http-api)
+10. [Render Engine](#10-render-engine)
+11. [User Interface](#11-user-interface)
+12. [Web Push](#12-web-push)
+13. [Economy and Minigame](#13-economy-and-minigame)
+14. [Repository Layout](#14-repository-layout)
+15. [Configuration](#15-configuration)
+16. [Testing Strategy](#16-testing-strategy)
+17. [Build and CI](#17-build-and-ci)
+18. [Deployment](#18-deployment)
+19. [Cloudflare](#19-cloudflare)
+20. [Build Phases](#20-build-phases)
+21. [Appendix: What the Original Got Wrong](#21-appendix-what-the-original-got-wrong)
+
+---
+
+## 1. Product
+
+### 1.1 The Pitch
+
+Makotogotchi is **one chinchilla, on the internet, that everybody shares.**
+
+There is exactly one pet. It is always alive and always simulating, whether or
+not anyone is watching. Anyone who opens the URL becomes a caretaker
+immediately — no account, no login, no friction. They can feed it, clean it,
+play with it, treat it when it's sick, and sing it to sleep. Everyone
+connected sees every action as it happens, attributed by name.
+
+If the community stops caring for it, it dies. Permanently. Its grave joins a
+memorial wall recording its name, its lifespan, how it died, and who kept it
+alive the longest. Then a new egg begins to hatch, and the community names it.
+
+### 1.2 Design Goals
+
+| Goal | Why it matters |
+| --- | --- |
+| **Presence must be felt** | The single thing that makes this different from a solo tamagotchi is seeing other people. Presence and attribution are not decoration; they are the product. |
+| **Stakes must be real** | Permanent death is what makes the daily check-in matter. A pet that cannot die is a screensaver. |
+| **A lone caretaker can rescue it** | At 3am with one person online, that person must be able to pull the pet back from the brink through sustained effort. Otherwise the game punishes people for being loyal. |
+| **A lone caretaker cannot sustain it** | Over weeks, keeping the pet thriving must require the group. Otherwise there is no reason for the group. |
+| **Griefing must be structurally impossible** | Not "hard", not "rate-limited enough" — impossible. See §2.4. |
+| **The simulation must be honest** | The pet's state is a pure function of its event history and elapsed time. No fudging, no client authority, no drift. |
+
+### 1.3 Non-Goals
+
+- Multiple pets, private pets, or per-user pets.
+- User accounts, passwords, or SSO. (The caretaker cookie is designed so that
+  linking an Authentik identity later is additive, not a rewrite.)
+- Real-money purchases of any kind.
+- Free-text chat. Emoji reactions only — moderating text chat is a project of
+  its own and this is a toy for friends.
+
+---
+
+## 2. Game Design
+
+### 2.1 The Core Loop
+
+```
+        ┌─────────────────────────────────────────────┐
+        │                                             │
+   needs decay in real time                           │
+        │                                             │
+        ▼                                             │
+   pet visibly suffers ──► push alert fires ──► caretakers arrive
+        │                                             │
+        ▼                                             │
+   caretakers act (attributed, live, cooperative) ────┘
+        │
+        ▼
+   needs recover ──► pet thrives ──► ages ──► evolves
+        │
+        └──► or doesn't ──► health drains ──► death ──► memorial ──► new egg
+```
+
+### 2.2 Needs
+
+Five needs, each an integer in `[0, 100000]` (rendered as a percentage with
+three decimal places of internal precision; see §4.2 for why integers).
+
+| Need | Decays because | Restored by | Notes |
+| --- | --- | --- | --- |
+| **Hunger** | Always (slower asleep) | `FEED` | The pacesetter — the fastest-decaying need, so it is what drives most check-ins. |
+| **Energy** | Awake hours | Sleeping; `LULLABY` helps it fall asleep | *Recovers* while asleep. Effectively self-solving unless the pet is kept awake. |
+| **Hygiene** | Always | `CLEAN` (a dust bath — chinchillas bathe in volcanic dust, not water) | Slowest decay. |
+| **Joy** | Always | `PLAY`, `PET` | Second-fastest. Drives the social actions. |
+| **Health** | **Never on its own** | `MEDICATE` (only while `SICK`); regenerates slowly when no need is critical | The death clock. See §2.3. |
+
+**Health is the only need that kills.** The other four are warning lights.
+This is deliberate: it produces a long, legible, two-stage failure — first the
+pet is visibly unhappy for many hours (recoverable, alarming, motivating),
+then it starts actually dying.
+
+### 2.3 Health and Death
+
+Health does not tick down on a timer. It drains **in proportion to how badly
+the other needs are neglected**.
+
+Health is stored in raw units, `healthRaw ∈ [0, NEED_MAX × CRITICAL_THRESHOLD]`
+(= 2×10⁹ at full), so the drain formula is pure integer arithmetic with no
+division anywhere:
+
+```
+drainPerTick = HEALTH_DRAIN_PER_NEED × Σ max(0, CRITICAL_THRESHOLD − value)   over hunger, energy, hygiene, joy
+             + HEALTH_DRAIN_SICK_RAW      if the SICK ailment is untreated
+             + HEALTH_DRAIN_AGE           if stage is ELDER (unconditional)
+regenPerTick = HEALTH_REGEN_RAW           if no need is below CRITICAL_THRESHOLD
+                                          (never for ELDER)
+```
+
+Because needs decay linearly within a projection segment, the drain rate is
+(at most) linear in tick index within a segment, and every per-segment health
+delta is an exact integer arithmetic series — see §4.5.
+
+Consequences that fall out of this for free, rather than being special-cased:
+
+- A pet with one need slightly below critical loses health *slowly*. There is
+  a long, forgiving ramp.
+- A pet with every need at zero dies fast. Total abandonment is fatal.
+- Restoring **any** need immediately slows the bleeding. Partial help helps,
+  which means a single caretaker who can only manage a few actions still
+  meaningfully extends the pet's life. This is the "a lone caretaker can
+  rescue it" goal, satisfied by the shape of the rule rather than by a
+  special case.
+- Untreated illness is dangerous on its own, independent of needs.
+
+When `health` reaches `0`, the pet dies. `causeOfDeath` records whichever
+need contributed the largest share of the health drained over the final hour —
+so the memorial can read "starved", "died of illness", "died of loneliness".
+
+**Old age.** An `ELDER` pet's needs decay faster, its health regeneration is
+disabled, and `HEALTH_DRAIN_AGE` drains its health unconditionally every tick
+— so its death is arithmetically certain, not merely likely: roughly 9–10
+elder days from full health under perfect care. (Disabling regeneration alone
+would *not* accomplish this — a well-tended elder would take zero drain and
+live forever; the unconditional term is what makes mortality a theorem.)
+`causeOfDeath` reads as old age when the age term dominates the final hour's
+drain. A pet that dies of old age under devoted care is a *win*, and the
+memorial records it as such.
+
+### 2.4 Why Griefing Is Impossible
+
+There is no action in the game that reduces a need or damages the pet. The
+worst thing a malicious visitor can do is help.
+
+This is a structural guarantee, not a mitigation. Rate limits (§8) exist to
+protect the *server* and to pace the *game*, not to protect the pet from
+players. A determined attacker with a thousand IPs achieves: a well-fed pet.
+
+The consequence to accept: the classic tamagotchi overfeeding-makes-you-sick
+mechanic is gone. It is replaced by **diminishing returns** (§2.6), which
+provides the same "you cannot just spam the button" pressure without handing
+anyone a weapon.
+
+### 2.5 Actions
+
+| Action | Restores | Global cooldown | Per-caretaker cooldown | Available when |
+| --- | --- | --- | --- | --- |
+| `FEED` | Hunger | 45s | 3 min | Awake |
+| `PLAY` | Joy | 60s | 3 min | Awake, energy > 10% |
+| `CLEAN` | Hygiene | 90s | 5 min | Awake |
+| `MEDICATE` | Clears `SICK`, small health | 5 min | 10 min | `SICK` present |
+| `LULLABY` | Energy; induces sleep | 2 min | 5 min | Night, or energy < 25% |
+| `PET` | Small Joy | 10s | 30s | Always (even asleep) |
+
+**Global cooldown** is a property of *the pet*, not of the player: the pet is
+busy eating; wait for it to finish. The UI says so in those words. This
+reframes throttling as game logic instead of punishment, and it is what makes
+a crowd of fifty people no more effective than a crowd of five — which is
+exactly the pressure that makes sustained, spread-out care the winning
+strategy.
+
+**Per-caretaker cooldown** is what prevents one person from soloing the pet
+indefinitely.
+
+`PET` exists as the always-available, low-value action so that a caretaker who
+arrives during a global cooldown still has something to do, and so that a
+sleeping pet is still interactive.
+
+`PLAY` costs the pet `PLAY_ENERGY_COST` energy (the minigame pro-rates this by
+duration). This is what makes energy a live mechanic: without it, the nightly
+recovery outpaces awake decay so thoroughly that `EXHAUSTED`, involuntary
+naps, `LULLABY`'s daytime gate, and `PLAY`'s own energy gate would all be
+unreachable states. With it, a heavy play day genuinely tires the pet and
+`PLAY` acquires a real tradeoff.
+
+**Caretaker budget.** For each `(caretaker, need)`, the total *applied*
+restoration over any rolling window of 7 pet-days may not exceed
+`CARETAKER_WEEKLY_BUDGET_DAYS × dailyDecay(need)`. Actions beyond the budget
+still validate but apply 0, and the UI explains why ("Makoto wants someone
+else's attention"). `MEDICATE` and `PET`'s health effects are exempt — an
+emergency responder is never turned away.
+
+This is the structural encoding of §1.2's "a lone caretaker cannot sustain
+it", and it exists because cooldowns alone *cannot* encode it: a burst rescue
+needs more than a day's decay applied within 30 minutes, while solo
+sustainment needs less than a day's decay per day — no per-action cooldown
+satisfies both. The budget does: one person can supply ~4 days of decay per
+week (rescues cost about one day's worth, so bursts fit), but sustaining the
+pet requires 7 — arithmetically impossible alone, barely possible for two,
+comfortable for three. The constant *is* the minimum viable community size,
+in the same spirit as §2.4's structurally-impossible griefing.
+
+The budget is folded from the event log like all other state: a 7-slot ring
+of per-pet-day applied totals per active `(caretaker, need)`, pruned when
+stale.
+
+### 2.6 Diminishing Returns
+
+```
+applied = floor((base × (NEED_MAX − current) + NEED_MAX / 2) / NEED_MAX)
+```
+
+(Integer round-half-up — never floating-point division; §4.2.)
+
+Feeding a starving pet gives the full amount. Feeding a full pet gives
+nothing. The curve makes topping off the last 20% cost as many actions as the
+first 60%, which naturally spreads care over time and over people.
+
+Worked example with `FEED_BASE = 25000` (25%), from empty:
+
+| Feed | Applied | Hunger after |
+| --- | --- | --- |
+| 1 | 25.0% | 25.0% |
+| 2 | 18.8% | 43.8% |
+| 3 | 14.1% | 57.8% |
+| 4 | 10.6% | 68.4% |
+| 5 | 7.9% | 76.3% |
+| 6 | 5.9% | 82.2% |
+| 7 | 4.4% | 86.7% |
+
+Seven feeds to get comfortably fed. At a 3-minute per-caretaker cooldown a
+lone caretaker needs ~21 minutes of attention to rescue a starving pet — hard
+but achievable, which is the intended feel. With four people it takes about
+five minutes, bounded by the 45s global cooldown.
+
+### 2.7 Day and Night
+
+The pet keeps a home timezone (`America/Chicago`). Between `SLEEP_HOUR` and
+`WAKE_HOUR` it sleeps:
+
+- Energy recovers; hunger and joy decay at a reduced rate; hygiene is
+  unchanged.
+- `FEED`, `PLAY`, `CLEAN` are unavailable — the pet is asleep. `PET` and
+  `MEDICATE` still work.
+- A pet with critically low energy during the day will also nap, and
+  `LULLABY` will put it down early.
+
+This gives the game a daily rhythm and — importantly — means the overnight
+window is the *least* dangerous time, not the most. Nobody is punished for
+sleeping.
+
+### 2.8 Life Stages
+
+| Stage | Begins at | Behaviour |
+| --- | --- | --- |
+| `EGG` | Generation start | Incubating. Cannot be interacted with beyond watching. 30 minutes. The spritesheet's eight-frame incubator sequence plays through. |
+| `HATCHLING` | +30 min | Needs decay at 60% rate. A grace period for a newborn. |
+| `PUP` | +1 day | Full decay rate begins. |
+| `JUVENILE` | +3 days | Care quality is sampled here — this window determines the adult form. |
+| `ADULT` | +7 days | Branches on care quality (below). |
+| `ELDER` | +21 days | Faster decay, no health regeneration, and an unconditional per-tick health drain (§2.3). Mortality is now arithmetically certain; only the date is open. |
+
+A newly hatched pet starts with every need at `NEED_MAX` and full health.
+
+**Adult branching.** `careScore` is the time-weighted mean of the needs mean
+across the `JUVENILE` window, accumulated as an exact integer
+`(numerator, tickCount)` pair per projection segment via the same arithmetic
+series as everything else in §4.5, and evaluated once at the `ADULT`
+transition. (Not an EMA — a per-tick EMA has no exact integer closed form and
+would force tick-by-tick iteration through the entire four-day window.)
+At the transition:
+
+| `careScore` | Form | Visual |
+| --- | --- | --- |
+| ≥ 75% | `THRIVING` | Bright, sparkles on idle, fastest animations |
+| 40–75% | `STEADY` | The default look |
+| < 40% | `FRAIL` | Duller palette, slower idle, tires visibly sooner |
+
+The form is cosmetic *plus* a small modifier to decay rates, so a well-raised
+pet is genuinely easier to keep alive. It is decided once and never revisited —
+so the juvenile window is a real, high-stakes, community-wide test.
+
+### 2.9 Ailments
+
+Transient conditions layered on top of needs.
+
+| Ailment | Onset | Cleared by | Effect |
+| --- | --- | --- | --- |
+| `SICK` | Random chance per tick, weighted by low hygiene and low health | `MEDICATE` | Drains health directly. The strongest push-alert trigger. |
+| `FILTHY` | Hygiene < 25% | Hygiene ≥ 50% | Raises `SICK` onset chance. |
+| `STARVING` | Hunger < 15% | Hunger ≥ 30% | Cosmetic + alert trigger. |
+| `EXHAUSTED` | Energy < 15% | Energy ≥ 40% | Pet naps involuntarily. |
+| `SAD` | Joy < 20% | Joy ≥ 40% | Cosmetic + alert trigger. |
+
+Only `SICK` is stochastic. Every other ailment is a pure threshold function of
+state, so it is derived rather than stored (§4.3).
+
+### 2.10 Death, Memorial, Rebirth
+
+On death:
+
+1. The generation is sealed with `diedAt`, `causeOfDeath`, final age, and the
+   ranked list of that generation's caretakers by contribution.
+2. A `DIED` milestone broadcasts to every connected client. The scene shows
+   the gravestone sprite. This state persists for `MOURNING_DURATION`
+   (2 hours) — long enough that people who were asleep still see it happened.
+3. The memorial wall (`/memorial`) gains a permanent entry.
+4. When mourning ends, a new egg appears and begins its 30-minute
+   incubation; a naming vote opens with it. Any caretaker may propose a name
+   (validated per §8.5) or vote for one. The winner at the end of incubation
+   becomes the new pet's name. Ties break toward the earliest proposal; if
+   nothing is proposed, the egg waits — incubation extends until the first
+   proposal arrives, and that lone proposal wins.
+5. Caretakers who were active in the previous generation get
+   `generationsSurvived` incremented — a persistent badge of tenure that
+   carries across deaths.
+
+Death is a **feature**, and it is the single best re-engagement event the
+game has. It should feel like an occasion.
+
+### 2.11 Social Systems
+
+- **Presence.** A live count of who is watching, and their nicknames.
+- **Action feed.** Every action produces an attributed, animated toast in the
+  scene: `+18.8% 🍖 — fed by Emilio`. This is the heartbeat of the shared
+  experience.
+- **Reactions.** Emoji reactions broadcast to everyone. Zero moderation
+  surface, high expressiveness.
+- **Leaderboards.** Today / this week / all time / this generation, ranked by
+  a weighted contribution score (not raw action count, so `PET` spam does not
+  top the board). The score for an action is its *applied* magnitude times a
+  per-action weight defined in `tuning.ts` (`MEDICATE` and `LULLABY` carry
+  flat scores since they are not magnitude-shaped). The current leader wears
+  a crown in the presence list.
+- **Streaks.** Consecutive days with at least one action, measured in the
+  pet's timezone. The pet greets returning caretakers by name.
+
+---
+
+## 3. Architecture
+
+### 3.1 The One Idea
+
+**The pet's state is a pure, deterministic function of its event log and the
+current time.** Everything else in this document follows from that.
+
+```
+state(t) = project( fold(reduce, snapshot, eventsSince(snapshot)), t )
+```
+
+`reduce` and `project` are pure functions in `src/sim/`. They perform no I/O,
+call no clock, and consume no global randomness. They are the only place game
+rules exist, and they are shared verbatim by the server and the browser.
+
+This yields, without further effort:
+
+| Property | Why it holds |
+| --- | --- |
+| **Restart-safe** | A pod down for three hours restarts and projects forward to now. Exactly correct, no catch-up code. |
+| **Testable** | The entire game is unit-testable with no database, no network, and no fake timers. |
+| **Replayable** | Any event log replays to a bit-identical state on any machine. |
+| **Client prediction** | The browser runs the same `project()` between server pushes, so meters drain smoothly at 60fps while the server pushes rarely. |
+| **Auditable** | "Why did it die?" is answerable by replaying the log. |
+
+### 3.2 Layers
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  src/app       Next.js App Router — routes, RSC, handlers    │
+├──────────────────────────────────────────────────────────────┤
+│  src/game      Canvas render engine + scene (browser only)   │
+├──────────────────────────────────────────────────────────────┤
+│  src/server    Mongo repos · Redis · tick engine · identity  │
+│                · rate limiting · push       (server only)    │
+├──────────────────────────────────────────────────────────────┤
+│  src/sim       PURE. No I/O, no clock, no RNG, no React.     │
+│                Imported by every layer above. Imports none.  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Dependency rule, enforced by lint:** `src/sim` imports nothing from the
+other three. `src/game` imports only `src/sim`. `src/server` imports only
+`src/sim`. Violations fail CI.
+
+### 3.3 The Tick Authority
+
+Exactly one process may advance simulated time and emit system events
+(`EVOLVED`, `FELL_ASLEEP`, `BECAME_SICK`, `DIED`).
+
+Leadership is a Redis lease: `SET mgc:tick-leader <podId> NX PX 15000`,
+renewed every 5s by the holder. The leader runs the tick loop on a
+`TICK_INTERVAL` timer. On loss of leadership the loop stops immediately.
+
+Production runs **one replica** — a single global pet needs no horizontal
+scale, and one replica removes an entire class of problems. The lease exists
+anyway because it makes rolling deploys and any future replica bump correct
+*by construction*: because projection is deterministic and keyed to absolute
+tick index, a gap in leadership of any duration causes zero drift. The new
+leader simply projects forward and emits whatever system events the interval
+implies.
+
+### 3.4 Write Path
+
+```
+POST /api/care
+  → verify caretaker cookie (HMAC)
+  → Redis token bucket: per caretaker, per IP        → 429 if exhausted
+  → acquire mgc:write (Redis lock, ~ms hold) ────────┐
+  → load current state (Redis-cached, Mongo fallback)│
+  → project() to now                                 │  serialized
+  → sim validates the action                         │  critical
+      (awake? cooldowns? budget? ailment?) → 409     │  section
+  → append CareEvent to Mongo, assigning seq         │
+  → reduce() into Redis snapshot                     │
+  → PUBLISH to Redis channel ────────────────────────┘
+  → every pod fans out over SSE to its connected clients
+```
+
+The Mongo append is the durability point. Everything after it is derived and
+can be rebuilt.
+
+The `mgc:write` lock serializes the read→validate→append→reduce→publish
+section; the tick leader emits its system events under the same lock. Without
+it, two concurrent care requests (Next handlers run concurrently even in one
+pod, and two pods coexist during a rolling deploy) would both project from the
+same base state, double-apply past the diminishing-returns curve, and race
+each other writing `mgc:state`. An in-process queue is not sufficient
+precisely because of the rolling-deploy overlap.
+
+Each event carries a per-generation monotonic `seq`, assigned inside the
+lock. `seq` — not `tick` — is the canonical fold order: multiple events can
+share a tick, and replay determinism requires a total order.
+
+---
+
+## 4. Simulation Core
+
+`src/sim/` — the heart of the project. Held to the highest standard in the
+codebase.
+
+### 4.1 Modules
+
+| File | Contents |
+| --- | --- |
+| `model.ts` | `PetState`, `Needs`, `LifeStage`, `AdultForm`, `Phase`, `Ailment`, `Generation`. Types only. |
+| `tuning.ts` | Every constant in the game. One file. No magic number lives anywhere else. |
+| `events.ts` | The discriminated union of all events, `CareEvent | SystemEvent`, plus zod schemas for wire validation. |
+| `reduce.ts` | `reduce(state, event): PetState` — pure, total, exhaustive over the union. |
+| `project.ts` | `project(state, toTick): PetState` — advances simulated time. |
+| `validate.ts` | `canPerform(state, action, ctx): Result` — the single authority on whether an action is legal. Used by the server to reject and by the client to grey out buttons. |
+| `derive.ts` | `derive(state): DerivedState` — ailments, mood, animation key, alert level. Everything presentational. |
+| `rng.ts` | Seeded `mulberry32`, keyed by `(generationSeed, tickIndex, purpose)`. |
+| `score.ts` | Contribution scoring, the `careScore` accumulator, and the caretaker budget rings. |
+
+### 4.2 Integers, Not Floats
+
+All need values are integers in `[0, 100000]`. Health is an integer in
+`[0, NEED_MAX × CRITICAL_THRESHOLD]` (raw units, §2.3 — scaled so its drain
+formula never divides). All rates are integers. Nothing in `src/sim` performs
+floating-point arithmetic on state.
+
+Floating point would make replay determinism depend on JS engine rounding,
+make test assertions approximate, and let values drift by epsilon over
+millions of ticks. Integers make every test an exact equality and make
+"the client and server agree" a provable property rather than a hope.
+
+Display divides by 1000 for a percentage.
+
+### 4.3 Stored vs. Derived
+
+**Stored** (the minimum that cannot be recomputed): needs, `healthRaw`,
+phase, stage, adult form, `bornAtTick`, `lastEventTick`, `sleepState`,
+`sick`, the `careScore` accumulator pair (§2.8), the caretaker budget rings
+(§2.5), generation identity and seed.
+
+**Derived** (never stored, computed by `derive.ts`): every ailment except
+`SICK`, mood, animation key, alert level, "is the pet busy", cooldown
+remainders.
+
+The original project stored animation frames as game state
+(`Status.CLONE1..4`). That class of bug is structurally impossible here: the
+renderer receives an animation key from `derive.ts` and the state type has no
+field capable of holding one.
+
+### 4.4 Determinism Rules
+
+Enforced by lint rules and by review:
+
+1. No `Date.now()`, no `new Date()`, no `performance.now()` in `src/sim`.
+   Time enters only as an explicit `tick` parameter.
+2. No `Math.random()`. Randomness comes from `rng(seed, tick, purpose)`,
+   which is a pure function of its arguments.
+3. No mutation of inputs. `reduce` and `project` return new objects.
+4. Exhaustive switches with a `never` check on the default branch, so adding
+   an event variant is a compile error until it is handled.
+
+### 4.5 Projection
+
+Time is quantised into ticks of `TICK_SECONDS` (10s):
+
+```
+tickIndex = floor((unixMs − GENESIS_EPOCH_MS) / (TICK_SECONDS × 1000))
+```
+
+`GENESIS_EPOCH_MS` is a fixed constant recorded on the generation document —
+it anchors the RNG keys, the day/night boundaries, and cross-restart
+consistency. Nothing else in the system defines time.
+
+`project(state, toTick, ctx)` advances from `state.lastEventTick` to
+`toTick`. `ctx` carries the **phase schedule** — the precomputed list of
+sleep/wake boundary ticks. The only timezone-aware code in the project lives
+in one `src/server` module that generates this schedule; it ships to clients
+in `hello` and `snapshot`. `src/sim` contains no timezone logic, no `Intl`,
+and no locale data — a DST transition is just two odd boundary ticks a year,
+handled for free.
+
+**Projection is piecewise-linear, computed closed-form per segment.** Within
+a segment, need decay rates are constant, so each need is linear in tick
+index — and therefore the health-drain rate (a sum of clamped linear terms,
+§2.3) is at most linear in tick index. Every per-segment delta — needs,
+health, the careScore accumulator — is an exact integer arithmetic series.
+No per-tick rounding exists anywhere; that is what makes the path-independence
+property below hold exactly rather than approximately.
+
+Segment boundaries: sleep/wake, stage transitions, adult-form assignment, any
+need crossing `CRITICAL_THRESHOLD`, any need saturating at `0` or `NEED_MAX`,
+sickness onset or cure, health crossing the SICK-multiplier threshold, and
+health reaching `0` (death). A boundary interior to a candidate segment —
+death above all — is located by integer binary search on the exact cumulative
+function, O(log n) and exact.
+
+**Cost honesty:** projection is O(segments) for needs and health, but
+O(elapsed ticks) for the SICK Bernoulli stream while the pet is susceptible —
+each onset draw is keyed by absolute tick index (§4.4) and must be evaluated.
+This is accepted: a draw is a handful of integer ops, a three-day gap is
+~26k draws, and the client projects at most a few ticks per frame. Any faster
+onset-sampling scheme is an optimization behind the same interface and must
+be property-tested equal to naive per-tick iteration. Because every draw is a
+pure function of absolute tick index, the stream is path-independent by
+construction — segmentation cannot break it.
+
+The property test in §16 asserts all of this at once:
+
+```
+project(project(s, a, ctx), b, ctx) === project(s, b, ctx)      for all a ≤ b
+```
+
+If that ever fails, the segmentation is wrong. It is the single most important
+test in the codebase.
+
+---
+
+## 5. Tuning
+
+All values live in `src/sim/tuning.ts`. These are the **starting** values; §16
+describes the tests that hold the *design intent* invariant while these are
+tuned.
+
+```
+TICK_SECONDS            = 10          ; 8640 ticks per day
+NEED_MAX                = 100000      ; 100.000%
+CRITICAL_THRESHOLD      = 20000       ; 20%
+
+decay per tick, awake, PUP..ADULT (units of NEED_MAX):
+  hunger                = 9           ; 100% → 20% in ~24.7h   ← the pacesetter
+  joy                   = 8           ; ~27.8h
+  energy                = 7           ; ~31.7h
+  hygiene               = 6           ; ~37.0h
+
+asleep multipliers:
+  hunger, joy           = ×0.4
+  hygiene               = ×1.0
+  energy                = +30/tick recovery (0 → ~97% over a 9h night)
+
+stage decay multipliers:
+  HATCHLING             = ×0.6
+  PUP, JUVENILE, ADULT  = ×1.0
+  ELDER                 = ×1.4
+
+adult form decay multipliers:
+  THRIVING              = ×0.9
+  STEADY                = ×1.0
+  FRAIL                 = ×1.15
+
+health (raw units; HEALTH_MAX = NEED_MAX × CRITICAL_THRESHOLD = 2×10⁹):
+  HEALTH_DRAIN_PER_NEED = 25          ; × Σ max(0, CRITICAL_THRESHOLD − need), per tick
+                                      ; worst case 2,000,000/tick → ≥1,000 ticks (~2.8h)
+                                      ; from full even under total deprivation
+  HEALTH_DRAIN_SICK_RAW = 400000      ; per tick while untreated (~14h to kill from full)
+  HEALTH_DRAIN_AGE      = 24000       ; per tick, ELDER only, unconditional
+                                      ; (~9.6 elder days from full under perfect care)
+  HEALTH_REGEN_RAW      = 240000      ; per tick, only when nothing is critical
+                                      ; (~23h from zero to full); disabled for ELDER
+
+action base magnitudes:
+  FEED                  = 25000       ; 25%
+  PLAY                  = 22000       ; joy
+  PLAY_ENERGY_COST      =  6000       ; energy cost paid by the pet (§2.5)
+  CLEAN                 = 30000
+  LULLABY               = 15000       ; energy
+  PET                   =  4000
+  MEDICATE              = clears SICK, +5000 × CRITICAL_THRESHOLD healthRaw
+                          (not subject to diminishing returns)
+
+caretaker budget (§2.5):
+  CARETAKER_WEEKLY_BUDGET_DAYS = 4    ; applied restoration per (caretaker, need)
+                                      ; per rolling 7 pet-days ≤ 4 × dailyDecay(need)
+
+contribution weights (§2.11): per-action multipliers on applied magnitude;
+  MEDICATE and LULLABY score flat amounts. Values live in tuning.ts.
+
+SICK onset per tick:
+  base                  = 1 / 30000   ; ≈ once per 3.5 days at full hygiene
+  × (1 + 4 × filthiness) where filthiness = (1 − hygiene/NEED_MAX)
+  × 3 if health < 40%
+
+SLEEP_HOUR = 22, WAKE_HOUR = 7, TZ = America/Chicago
+MOURNING_DURATION = 2h
+INCUBATION_DURATION = 30 min
+```
+
+**`HEALTH_DRAIN_PER_NEED = 25` is a first estimate, not a derivation.** The
+survival window is defined by a test (§16.2), and this constant is tuned until
+that test passes. Encoding the difficulty dial as an executable assertion —
+rather than as a number someone once computed by hand — means retuning can
+never silently violate the design intent.
+
+Note that the headline "~24h to critical" is the *nominal always-awake*
+number (hunger: 80,000 / 9 per tick ≈ 24.7h). With the ×0.4 sleep multiplier
+in effect, the lived window depends on the start phase: a full pet untouched
+from `WAKE_HOUR` goes hunger-critical at ~30h. The §16.2 test pins the start
+phase for exactly this reason.
+
+---
+
+## 6. Persistence
+
+MongoDB is the durable source of truth. Redis is the realtime layer and cache.
+Neither is optional; each has a distinct job and neither substitutes for the
+other.
+
+### 6.1 MongoDB — database `makotogotchi`
+
+| Collection | Purpose | Key indexes |
+| --- | --- | --- |
+| `generations` | One document per pet lifetime. Identity, seed, birth, death, cause, final stats, ranked caretakers. | `{ ordinal: -1 }`, `{ diedAt: 1 }` |
+| `events` | **Append-only.** Every care and system event, with `generationId`, `seq`, `tick`, `caretakerId`, `action`. `seq` is per-generation monotonic (assigned under the write lock, §3.4) and is the canonical fold order. `applied` and `needsAfter` are stored too, but as **denormalized display fields** for feeds and audit only — `reduce()` recomputes the authoritative applied value from in-order state. Never updated, never deleted. | `{ generationId: 1, seq: 1 }` **unique**, `{ caretakerId: 1, at: -1 }`, `{ at: -1 }` |
+| `snapshots` | Periodic materialised `PetState` per generation, written every `SNAPSHOT_INTERVAL` (5 min) and on every system event. Bounds replay cost. | `{ generationId: 1, tick: -1 }` |
+| `caretakers` | Identity, nickname, totals, per-action counts, streak, `generationsSurvived`, coins. | `{ _id }`, `{ nickname: 1 }` unique sparse, `{ score: -1 }` |
+| `contributions` | Pre-aggregated per `(caretakerId, generationId, day)` rollups backing the leaderboards. | `{ generationId: 1, score: -1 }`, `{ day: 1, score: -1 }` |
+| `pushSubscriptions` | Web Push endpoints and keys, per caretaker. | `{ caretakerId: 1 }`, `{ endpoint: 1 }` unique |
+| `nameVotes` | Proposals and votes for the incubating generation. | `{ generationId: 1 }` |
+
+Recovery is `latest snapshot → fold events after it → project to now`. With a
+5-minute snapshot interval, the global cooldowns bound worst-case replay at
+roughly 50–60 events.
+
+### 6.2 Redis
+
+Shared cluster instance. **Every key and every pub/sub channel is prefixed
+`mgc:`.** The app also uses a dedicated logical DB index, but note that DB
+indexes do *not* partition pub/sub — channels are global to the instance —
+so the prefix is what actually prevents collision and must never be relaxed.
+
+| Key | Type | Purpose |
+| --- | --- | --- |
+| `mgc:state` | string (JSON) | Hot snapshot of current `PetState`. Read path for SSE connects. |
+| `mgc:events` | pub/sub channel | Cross-pod fanout. |
+| `mgc:tick-leader` | string w/ PX | Leader lease (§3.3). |
+| `mgc:presence` | sorted set | `caretakerId → lastSeen`. Pruned by score on read. |
+| `mgc:rl:{scope}:{id}` | string w/ TTL | Token buckets. |
+| `mgc:cd:{action}` | string w/ TTL | Global action cooldowns. |
+| `mgc:cd:{caretaker}:{action}` | string w/ TTL | Per-caretaker cooldowns. |
+| `mgc:lb:{window}` | sorted set, TTL | Cached leaderboards. |
+
+Redis holding no unique durable state is a deliberate invariant: **flushing
+Redis must cost nothing but a cold cache.** Anything that would be lost
+permanently belongs in Mongo.
+
+---
+
+## 7. Realtime Protocol
+
+### 7.1 Transport
+
+Server-sent events, one endpoint, `GET /api/stream`. Actions travel up as
+ordinary `POST` requests. This keeps the app a pure Next.js App Router
+deployment with `output: "standalone"` and no custom server, and gives
+automatic reconnection with backoff for free.
+
+Server → client only needs to be a stream; client → server only needs to be
+discrete commands. SSE fits the shape exactly, and WebSockets would buy
+nothing for the cost of a custom server.
+
+### 7.2 Events
+
+| Event | Payload | When |
+| --- | --- | --- |
+| `hello` | `{ caretakerId, nickname, serverTick, tickSeconds, genesisEpochMs, phaseSchedule }` | On connect. Lets the client align its clock and project locally (§4.5). |
+| `snapshot` | Full `PetState` + generation metadata + `phaseSchedule` refresh | On connect, and every 30s as reconciliation. |
+| `care` | `{ action, caretaker, applied, needsAfter, tick }` | Every care action, by anyone. Drives the attributed toast. |
+| `milestone` | `{ kind, detail }` — `HATCHED`, `EVOLVED`, `BECAME_SICK`, `RECOVERED`, `CRITICAL`, `SLEPT`, `WOKE`, `DIED`, `NAMED` | System events. |
+| `presence` | `{ count, caretakers[] }` | Throttled to at most once per 2s. |
+| `react` | `{ emoji, caretaker }` | Emoji reactions. |
+| `:ping` | comment frame | Every 15s. Keeps intermediaries from reaping an idle stream. |
+
+### 7.3 Cloudflare Considerations
+
+The stream sets `Content-Type: text/event-stream`, `Cache-Control: no-cache,
+no-transform`, `Connection: keep-alive`, and `X-Accel-Buffering: no`. A
+Cloudflare cache rule bypasses `/api/*` entirely (§19). The 15s heartbeat
+keeps the connection under Cloudflare's idle timeout. Compression is disabled
+on this route — a buffering compressor would defeat streaming.
+
+### 7.4 Client Reconciliation
+
+The client keeps the last authoritative state and its tick, and runs
+`project()` locally each frame to animate needs draining.
+
+Every state-bearing message carries its tick, and ordering is enforced by the
+client: a `snapshot` or `care` event older than the client's current
+authoritative tick is discarded (SSE delivery and the 30s snapshot cadence
+can interleave — a stale snapshot must never rewind the meters). Remote
+`care` events — everyone's, not just the local actor's — are applied through
+the same `reduce()`, so other people's actions move the meters immediately
+rather than at the next snapshot. The local actor's own actions apply
+optimistically and are corrected by the next non-stale snapshot if the server
+disagreed. Hard resets happen only on non-stale snapshots.
+
+Clock skew is handled by tracking the offset between the local clock and the
+`serverTick` in `hello`, refreshed on every snapshot. The client never trusts
+its own wall clock in absolute terms.
+
+---
+
+## 8. Identity, Rate Limiting, and Abuse
+
+### 8.1 The Caretaker Cookie
+
+First request without a valid cookie mints a caretaker:
+
+```
+mgc_ct = <caretakerId>.<HMAC-SHA256(caretakerId, CARETAKER_SECRET)>
+HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=1 year
+```
+
+No login, no email, no PII. The HMAC makes the ID unforgeable, so contribution
+totals, cooldowns, and streaks cannot be spoofed by editing a cookie.
+
+The `caretakers` document is designed so an Authentik `sub` can be attached
+later as an optional field, with a verified badge — additive, not a rewrite.
+
+### 8.2 Rate Limiting
+
+Redis token buckets, checked in order, cheapest first:
+
+| Scope | Limit | Catches |
+| --- | --- | --- |
+| Per IP (`CF-Connecting-IP`) | 60 requests / min | Cookie-clearing loops, crude floods |
+| Per caretaker | 30 actions / min | Ordinary abuse |
+| Per caretaker per action | The cooldowns in §2.5 | Game pacing |
+| Global per action | The cooldowns in §2.5 | Crowd pacing |
+
+Exceeding a limit returns `429` with `Retry-After`. Exceeding a *cooldown*
+returns `409` with the remaining time — a different thing, and the UI says so
+differently ("Makoto is still eating", not "slow down").
+
+### 8.3 Connection Limits
+
+Max concurrent SSE streams per IP (default 5), so one client cannot pin
+resources by opening hundreds of streams. Exceeding it returns `429`.
+
+### 8.4 Trusting Client Input
+
+Nothing from the client is trusted beyond the action name. Magnitudes,
+timestamps, and resulting state are computed server-side by `src/sim` and
+never read from the request. Every request body is parsed by a zod schema at
+the boundary; a parse failure is a `400`, never a coercion.
+
+### 8.5 Nicknames
+
+Optional, 2–16 characters, `[\p{L}\p{N} _-]` only, NFKC-normalised, uniqueness
+enforced case-insensitively, screened against a blocklist. Rendered as text
+nodes — never as HTML, never via `dangerouslySetInnerHTML`. Changeable once
+per 24h.
+
+---
+
+## 9. HTTP API
+
+All handlers are Next.js App Router route handlers under `src/app/api/`.
+All request bodies are zod-validated. All responses are typed.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/stream` | SSE. §7. |
+| `GET` | `/api/state` | One-shot current state. For first paint and for clients without `EventSource`. |
+| `POST` | `/api/care` | `{ action }` → performs a care action. `200` / `409` (illegal or cooling down) / `429` (rate limited). |
+| `POST` | `/api/react` | `{ emoji }` → broadcasts a reaction. |
+| `GET` | `/api/leaderboard` | `?window=today|week|all|generation` |
+| `GET` | `/api/memorial` | Paginated past generations. |
+| `POST` | `/api/nickname` | `{ nickname }` → sets or changes it. |
+| `POST` | `/api/name-vote` | `{ propose? , voteFor? }` → naming vote during incubation. |
+| `POST` | `/api/push/subscribe` | Stores a Web Push subscription. |
+| `DELETE` | `/api/push/subscribe` | Removes it. |
+| `GET` | `/health` | `{ status: "ok" }` — liveness/readiness. Never touches the database. |
+| `GET` | `/ready` | Verifies Mongo and Redis reachability. Readiness probe. |
+
+`/health` deliberately does not check dependencies: a liveness probe that
+fails on a transient database blip causes a restart loop that makes the outage
+worse. `/ready` is where dependency checks belong.
+
+---
+
+## 10. Render Engine
+
+`src/game/` — a small, dependency-free Canvas2D engine. No Pixi, no Phaser.
+The scene is one room with one pet, some particles, and floating toasts; a
+purpose-built ~500-line engine is less code than the glue a framework would
+need, and it is fully unit-testable.
+
+### 10.1 Modules
+
+| File | Purpose |
+| --- | --- |
+| `engine/loop.ts` | Fixed-timestep accumulator driving `update(dt)` at a constant rate, decoupled from `render(alpha)` on `requestAnimationFrame`. Pauses on `visibilitychange`. |
+| `engine/atlas.ts` | Sprite atlas: loads the sheet, exposes named frames. |
+| `engine/sprite.ts` | Frame blitting with integer-snapped positions. |
+| `engine/layer.ts` | Ordered draw layers: background, furniture, pet, foreground, particles, overlay. |
+| `engine/particles.ts` | Pooled particle system — dust puffs, sparkles, hearts, Zs, crumbs. |
+| `anim/machine.ts` | Declarative animation state machine: `animKey → clip`, with transition rules, one-shot clips that return to idle, and interruption priorities. Pure and unit-tested. |
+| `anim/clips.ts` | Clip definitions: frame list, frame duration, loop mode. |
+| `scene/room.ts` | Composes the scene from state. |
+| `scene/toasts.ts` | Floating attributed action toasts. |
+
+### 10.2 The Atlas
+
+The original `configuration.ts` contains hand-typed sprite rectangles that do
+not match the actual sheet layout — a maintenance trap and a source of visual
+bugs.
+
+Instead, `scripts/atlas.ts` derives the frame rectangles **programmatically**:
+it scans the PNG's alpha channel, finds connected non-transparent regions,
+groups them into rows and columns, and emits a typed `atlas.generated.ts`
+alongside a contact-sheet PNG for visual verification. The generated file is
+committed (so the build needs no image processing) and the script is
+re-runnable whenever the art changes.
+
+The 6.5MB source PNG is compressed as part of this step; a 1485×1100 indexed
+pixel-art PNG should land well under 200KB.
+
+### 10.3 Pixel Fidelity
+
+`imageSmoothingEnabled = false`, integer scale factors only (the canvas picks
+the largest integer scale that fits the viewport), and all draw positions
+snapped to whole device pixels. Backing store sized to
+`devicePixelRatio` so the art is crisp on phones.
+
+### 10.4 Motion and Accessibility
+
+`prefers-reduced-motion` disables particles, reduces the animation to a static
+pose per state, and removes toast motion. The canvas carries
+`aria-hidden="true"` — it is decorative, and every piece of information it
+conveys is also present as semantic HTML (§11.3).
+
+---
+
+## 11. User Interface
+
+### 11.1 Routes
+
+| Route | Contents |
+| --- | --- |
+| `/` | The pet. The whole game. |
+| `/memorial` | The wall of past generations. |
+| `/leaderboard` | Full rankings. |
+| `/about` | What this is, how it works, how to help. |
+
+### 11.2 The Main Screen
+
+```
+┌───────────────────────────────────────────────┐
+│  Makoto · 4d 6h · JUVENILE      👥 7 watching │
+├───────────────────────────────────────────────┤
+│                                               │
+│              [ the room, canvas ]             │
+│                                               │
+│              +18.8% 🍖 fed by Emilio  ↑fading │
+├───────────────────────────────────────────────┤
+│  🍖 Hunger  ████████░░  82%                   │
+│  ⚡ Energy  ██████████  97%                   │
+│  ✨ Hygiene ████░░░░░░  41%                   │
+│  💛 Joy     ███████░░░  68%                   │
+│  ❤️ Health  ██████████ 100%                   │
+├───────────────────────────────────────────────┤
+│  [Feed] [Play] [Clean] [Medicate] [Pet]  😊💛 │
+│   45s      ✓      ✓      n/a       ✓          │
+└───────────────────────────────────────────────┘
+```
+
+- Action buttons show live cooldowns and disable with a *reason* on hover and
+  in an accessible label: "Makoto is still eating (23s)", "Makoto is asleep",
+  "Makoto isn't sick".
+- Meters animate continuously via client-side projection, not in server-push
+  jumps.
+- The action feed is both a visual toast in the canvas and an entry in an
+  `aria-live="polite"` log.
+
+### 11.3 Accessibility
+
+The canvas is decorative. Everything it shows exists in the DOM:
+
+- Meters as `role="meter"` with `aria-valuenow` / `aria-valuetext`.
+- The pet's current state as text (`Makoto is asleep`, `Makoto is sick`).
+- The action feed as an `aria-live` region.
+- All controls keyboard-operable with visible focus rings.
+- Colour is never the only carrier of meaning — critical needs get an icon and
+  text, not just red.
+
+### 11.4 Mobile
+
+This will mostly be opened on phones. The layout is designed mobile-first:
+single column, canvas sized to the viewport at an integer scale, action
+buttons in a thumb-reachable row, no hover-only affordances.
+
+### 11.5 Audio
+
+Short chiptune SFX per action, an ambient room loop, and a distinct alert
+sound for `CRITICAL` and `DIED`. Muted by default with a persistent toggle —
+autoplay is hostile and browsers block it anyway. Implemented on the Web Audio
+API directly; no audio library.
+
+### 11.6 Styling
+
+Tailwind CSS v4 with a small token layer in `globals.css`. A pixel-art
+typeface for headings, a legible system stack for body text. Dark by default,
+with a light theme honouring `prefers-color-scheme`.
+
+---
+
+## 12. Web Push
+
+The highest-leverage retention mechanic: the pet gets sick at 2pm on a
+Tuesday and the people who care get told.
+
+- Standard Web Push with VAPID keys. No third-party service.
+- Opt-in only, behind an explicit button — never an on-load permission prompt.
+- Service worker at `public/sw.js`, registered lazily after first interaction.
+- Subscriptions stored per caretaker; a `410 Gone` from the push service
+  prunes the subscription.
+- **Triggers:** `BECAME_SICK`, any need crossing `CRITICAL_THRESHOLD`
+  downward, `health < 25%`, `DIED`, `HATCHED`, `EVOLVED`.
+- **Throttling:** at most one push per caretaker per 30 minutes, and each
+  trigger uses hysteresis: after firing, it re-arms only once the underlying
+  value has recovered past `CRITICAL_THRESHOLD + 5000` and stayed there for
+  30 minutes. A genuine relapse re-notifies; oscillation around the boundary
+  cannot. Notification fatigue kills opt-in rates faster than anything else.
+
+---
+
+## 13. Economy and Minigame
+
+In scope for v1, built last (Phase 8) once the core loop is proven.
+
+### 13.1 Coins
+
+Caretakers earn coins for care actions, weighted by how *needed* the action
+was — feeding a starving pet pays more than feeding a full one. This is the
+same diminishing-returns curve as §2.6, so the incentive points at the pet's
+actual need rather than at button-mashing.
+
+Bonuses: daily streak, being present at a hatch or an evolution, and being a
+top-3 caretaker at a generation's end.
+
+### 13.2 Shop
+
+| Category | Items |
+| --- | --- |
+| Food | Better food restores more hunger and adds a small joy bonus. Consumed on use. |
+| Medicine | Cures `SICK` instantly with no cooldown. Consumed. |
+| Toys | Raise the `PLAY` base magnitude. Permanent for the generation. |
+| Cosmetics | Hats and accessories for the pet. Permanent, cross-generation. |
+| Room decor | Community-funded upgrades to the room, visible to everyone. Permanent. |
+
+Cosmetics and decor are the interesting sink: they are **visible to everybody**,
+which turns spending into a form of contribution rather than a private
+inventory.
+
+### 13.3 Minigame
+
+A short skill game (the spritesheet has dedicated "playing" frames) launched
+from `PLAY`. The player's score determines the joy restored and the coins
+earned. While it runs, every other connected client sees the pet playing and
+sees the live score — spectating is the point, and it is the reason this is a
+realtime feature rather than a solo one.
+
+The minigame is scored client-side but validated server-side against a
+plausibility envelope (max score per second, input count), because a fully
+authoritative implementation is disproportionate for a friends' toy while an
+unbounded client score is not acceptable either.
+
+---
+
+## 14. Repository Layout
+
+```
+Makotogotchi/
+├── SPEC.md                     # this document — source of truth
+├── README.md
+├── Dockerfile
+├── .dockerignore
+├── next.config.ts              # output: "standalone"
+├── tsconfig.json               # strict, "@/*" → "src/*"
+├── eslint.config.mjs           # flat config + layer-boundary rules
+├── vitest.config.ts
+├── playwright.config.ts
+├── postcss.config.mjs
+├── package.json
+├── .github/workflows/
+│   ├── ci.yml                  # typecheck · lint · unit · e2e
+│   └── docker-publish.yml      # ghcr.io/reclyptor/makotogotchi
+├── scripts/
+│   └── atlas.ts                # regenerates the sprite atlas from the PNG
+├── public/
+│   ├── sprites.png             # optimised atlas
+│   ├── sw.js                   # push service worker
+│   └── audio/
+└── src/
+    ├── sim/                    # PURE simulation core
+    ├── server/
+    │   ├── db/                 # mongo client + repositories
+    │   ├── redis/              # client, pubsub, locks, buckets
+    │   ├── engine/             # tick loop, leader lease, state manager
+    │   ├── identity.ts
+    │   ├── ratelimit.ts
+    │   └── push.ts
+    ├── game/                   # canvas engine + scene
+    └── app/                    # Next.js App Router
+        ├── layout.tsx
+        ├── page.tsx
+        ├── globals.css
+        ├── memorial/ leaderboard/ about/
+        ├── health/ ready/
+        ├── api/
+        └── components/
+```
+
+---
+
+## 15. Configuration
+
+Every value is read once at startup through a zod-validated config module that
+**fails fast** — a missing or malformed variable crashes the process on boot
+rather than producing an undefined at 3am.
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `MONGODB_URI` | yes | Includes credentials and `authSource`. |
+| `MONGODB_DB` | no (`makotogotchi`) | Database name. |
+| `REDIS_URL` | yes | Includes password. |
+| `REDIS_DB` | no (`0`) | Logical DB index. |
+| `REDIS_PREFIX` | no (`mgc:`) | Key namespace. |
+| `CARETAKER_SECRET` | yes | HMAC key for the caretaker cookie. |
+| `VAPID_PUBLIC_KEY` | for push | Web Push. |
+| `VAPID_PRIVATE_KEY` | for push | Web Push. |
+| `VAPID_SUBJECT` | for push | `mailto:` contact. |
+| `PET_TIMEZONE` | no (`America/Chicago`) | Day/night boundary. |
+| `PORT` | no (`3000`) | |
+| `NODE_ENV` | yes | |
+
+No secret is ever read directly from `process.env` outside that module, and no
+secret is ever exposed to the client. Only `NEXT_PUBLIC_`-prefixed values
+reach the browser bundle, and there are none that are sensitive.
+
+---
+
+## 16. Testing Strategy
+
+### 16.1 Unit — `src/sim` (the bulk of the coverage)
+
+No database, no network, no fake timers, no mocks. Pure functions in, exact
+values out.
+
+- Every event variant through `reduce`.
+- Every action through `validate` in every legal and illegal state.
+- Bounds: no need ever leaves `[0, NEED_MAX]`, under any sequence.
+- Exhaustiveness: adding an event variant fails to compile until handled.
+
+### 16.2 Property — the invariants that protect the design
+
+```
+projection is path-independent:
+    project(project(s, a, ctx), b, ctx) === project(s, b, ctx)  ∀ a ≤ b
+replay is deterministic:
+    fold(reduce, genesis, log in seq order) is identical across processes
+needs are bounded:
+    ∀ state reachable by any event sequence: 0 ≤ need ≤ NEED_MAX
+diminishing returns are monotone:
+    higher current value ⇒ smaller applied magnitude
+the difficulty dial holds:
+    a full pet, untouched from WAKE_HOUR, reaches CRITICAL hunger in
+    28–32h and dies in 42–52h
+a lone caretaker can rescue:
+    a greedy-optimal bot (acts the moment cooldowns and budget permit,
+    choosing the action with max marginal health benefit) brings a starving
+    pet to "all needs ≥ CRITICAL and health rising" in under 30 min
+a lone caretaker cannot sustain:
+    the same bot, alone, cannot keep the mean of needs ≥ 50% across
+    pet-days 2–8 of a generation
+```
+
+The last three encode §1.2's design goals as executable assertions — with the
+caretaker strategy pinned to a defined optimal bot, so the properties are
+decidable rather than aspirational. They are the reason the tuning constants
+can be changed safely. The death bound in the difficulty dial is recomputed
+against the exact health arithmetic during Phase 1 tuning and pinned then.
+
+### 16.3 Golden Files
+
+A fixed event log with a fixed seed replays to a byte-identical serialised
+state, checked against a committed fixture. Any unintended change to game
+rules breaks this test loudly.
+
+### 16.4 Integration — `src/server`
+
+`mongodb-memory-server` and a real Redis (testcontainers, or the cluster's
+Redis against a scratch DB index in local dev):
+
+- Snapshot + event-log recovery reproduces exact state after a simulated
+  crash.
+- Leader lease: two engines, one leader, clean handover on expiry, zero drift
+  across the gap.
+- Rate limiter behaviour at the boundaries.
+
+### 16.5 End-to-End — Playwright
+
+- Cold load → pet renders → feed → meter moves.
+- Two browser contexts: A feeds, B sees the attributed toast without
+  reloading.
+- Cooldown UI reflects server state.
+- Reconnect after a dropped stream.
+- Keyboard-only traversal of every control.
+
+### 16.6 The Bar
+
+CI runs typecheck (strict), lint, unit, integration, and E2E. **A task is not
+complete until all of them pass**, and nothing is committed in a broken state.
+
+---
+
+## 17. Build and CI
+
+- **Next.js 16** App Router, **React 19**, **TypeScript strict**,
+  **Tailwind CSS v4**, **vitest**, **Playwright**, flat ESLint config.
+- `output: "standalone"` for a self-contained Docker server.
+- Multi-stage `Dockerfile` on `node:24-alpine` (the project requires Node
+  ≥24; SERAUI's *structure* is the convention being mirrored, not its Node
+  version): deps → builder → production, non-root user, `HEALTHCHECK`
+  against `/health`.
+- `ci.yml`: typecheck · lint · unit · integration · E2E, on PR and on push to
+  `master`.
+- `docker-publish.yml`: builds and pushes `ghcr.io/reclyptor/makotogotchi`
+  tagged `latest` and by SHA, multi-arch (`linux/amd64,linux/arm64`), with
+  GitHub Actions layer caching and build-provenance attestation. Mirrors the
+  SERAUI workflow, which is the established convention for this cluster.
+
+---
+
+## 18. Deployment
+
+Target: the k3s cluster at `~/Projects/kubernetes`, reconciled by Flux from
+`master` (`core → infra → apps`).
+
+### 18.1 New Manifests — `apps/makotogotchi/`
+
+| File | Contents |
+| --- | --- |
+| `namespace.yaml` | Namespace `makotogotchi`, Pod Security `baseline`. |
+| `deployment.yaml` | 1 replica, pinned to `fluxeon` (matching `seraui`), `ghcr-secret` image pull, non-root, `envFrom` the SOPS secret, liveness on `/health`, readiness on `/ready`. |
+| `service.yaml` | `ClusterIP` on port 3000. |
+| `secrets/` | SOPS-encrypted `makotogotchi-secret.yaml` + the `ghcr-secret` patch, following the `seraui` pattern exactly. |
+| `ciliumnetworkpolicy.yaml` | Ingress only from the `cloudflare` namespace on 3000. Egress to `mongodb`:27017, `redis`:6379, DNS, and the Web Push endpoints by FQDN — the push endpoints need `matchPattern` wildcards: `fcm.googleapis.com`, `*.push.services.mozilla.com`, `web.push.apple.com`, `*.notify.windows.com`. |
+| `kustomization.yaml` | Ties them together. |
+
+Plus one line added to `apps/kustomization.yaml`, **and amendments to
+`infra/mongodb/ciliumnetworkpolicy.yaml` and
+`infra/redis/ciliumnetworkpolicy.yaml`**: both whitelist ingress by explicit
+`fromEndpoints` (plus `world`/`remote-node` entities, which in-cluster pod
+traffic does *not* match — pods carry their own security identity), so
+without adding `app: makotogotchi` from namespace `makotogotchi` on
+27017/6379 respectively, every connection from the app is silently dropped.
+
+### 18.2 Datastore Provisioning
+
+- **Mongo:** create the `makotogotchi` database and a dedicated user with
+  `readWrite` on it only — not a shared root credential.
+- **Redis:** shared instance, dedicated logical DB index, all keys prefixed
+  `mgc:` (§6.2).
+
+Both credentials land in the SOPS-encrypted secret.
+
+### 18.3 Rollout
+
+Single replica means a brief gap during a rolling deploy. That is acceptable
+and, importantly, *harmless*: the simulation is time-derived, so the pet
+resumes exactly where it should be. Connected clients reconnect automatically
+via `EventSource` backoff.
+
+---
+
+## 19. Cloudflare
+
+Both `makotogotchi.com` and `makoto.reclyptor.com` serve the same app through
+the existing `cloudflared` tunnel (`414c90a2-c38a-46b2-9d6b-53670c4dfc3f`).
+
+### 19.1 Prerequisite — API Token
+
+Tunnel routes are currently managed by hand in the Cloudflare dashboard. To
+automate this and keep it reproducible, a scoped API token is provisioned into
+the existing SOPS/nix secret pipeline exactly like `github-token`:
+
+1. **You** create the token at
+   *Cloudflare → My Profile → API Tokens → Create Custom Token* with:
+   - `Account → Cloudflare Tunnel → Edit`
+   - `Zone → DNS → Edit` on both zones
+   - `Zone → Zone Settings → Edit` on both zones
+   - `Zone → Cache Rules → Edit` on both zones
+   - `Zone → Zone WAF → Edit` on both zones (for the rate-limit rule)
+2. **I** add it to `~/Projects/nixos`:
+   - `secrets/secrets.yaml` → `bash.cloudflare-api-token` (via `sops`)
+   - `modules/home/secrets.nix` → add `"bash/cloudflare-api-token"`
+   - `modules/home/bash/00-init.nix` → export `CLOUDFLARE_API_TOKEN`
+   - rebuild, verify the export appears in a fresh shell
+
+This is the only step in the whole project that requires your browser.
+
+### 19.2 Configuration to Apply
+
+| Item | Value |
+| --- | --- |
+| Tunnel public hostnames | `makotogotchi.com`, `www.makotogotchi.com`, `makoto.reclyptor.com` → `http://makotogotchi.makotogotchi.svc.cluster.local:3000` |
+| DNS | Proxied `CNAME`s to the tunnel for each hostname |
+| Cache rule | **Bypass cache** for `/api/*` — non-negotiable; a cached SSE stream is a broken SSE stream |
+| Compression | Disabled on `/api/stream` (`no-transform` is set, and the rule enforces it) |
+| Rate limiting | `/api/care` — 60 requests per minute per IP, matching the server-side bucket as a first line of defence |
+| Bot Fight Mode | **Off** for these zones. Every visitor is anonymous by design; a bot challenge on the action endpoint would break the product. |
+| Always Use HTTPS | On |
+| Browser Integrity Check | Off on `/api/*` |
+
+### 19.3 Automation
+
+Once the token exists, the configuration is applied by a checked-in script
+that is idempotent and re-runnable, so the Cloudflare state is reviewable in
+git rather than living only in a dashboard.
+
+---
+
+## 20. Build Phases
+
+Each phase ends with a green typecheck, lint, and test run, and a commit.
+Nothing broken is ever committed. Phases 0–5 are the shippable core; 6–9
+complete v1.
+
+| # | Phase | Deliverable | Done when |
+| --- | --- | --- | --- |
+| **0** | Foundation | Repo scaffold, Next 16 / React 19 / TS strict / Tailwind 4 / vitest / Playwright / ESLint with layer rules, Dockerfile, both workflows, `/health`, `/ready`, SPEC.md | `typecheck`, `lint`, `test`, and `docker build` all pass |
+| **0b** | Cloudflare token | Token minted by you, wired into `~/Projects/nixos` | `CLOUDFLARE_API_TOKEN` present in a fresh shell |
+| **1** | Simulation core | All of `src/sim`, fully tested, zero I/O | §16.1–16.3 pass, including the difficulty-dial and caretaker-bot tests |
+| **2** | Persistence + engine | Mongo repos, Redis, leader lease, write lock, `seq`, tick loop, snapshots, recovery | §16.4 passes; a killed and restarted engine reproduces exact state; parallel care writes produce a totally ordered, replay-identical log |
+| **3** | API surface | Identity, rate limiting, `/api/care`, `/api/stream`, presence | Two `curl` clients see each other's actions live |
+| **3b** | Thin-slice deploy | Image from Phase 0's Dockerfile, minimal manifests + infra CNP amendments, one tunnel hostname, SSE soak test through Cloudflare | A `curl` SSE stream through the real edge stays alive ≥ 30 min with heartbeats intact |
+| **4** | Render engine | Atlas generation script, canvas engine, animation machine, room scene | The pet visibly lives on screen; animation machine unit-tested |
+| **5** | Game UI | Meters, actions with cooldowns, live feed, presence, mobile, a11y, audio | Playwright E2E green; QA pass on a real phone |
+| **6** | Social | Leaderboards, streaks, nicknames, memorial wall, naming vote | E2E covers each |
+| **7** | Web push | VAPID, service worker, subscriptions, triggers, throttling | A real notification arrives on a real phone |
+| **8** | Economy + minigame | Coins, shop, cosmetics, room decor, spectated minigame | E2E covers earn → spend → visible-to-others |
+| **9** | Productionize | Full manifests, Mongo/Redis provisioning, SOPS secrets, Cloudflare automation, both domains | Live on both domains, verified end to end |
+
+Phase 0b runs in parallel with Phase 1 since it is gated on you, not on code.
+
+Phase 3b exists because the riskiest external integration — SSE behaviour
+through cloudflared and the Cloudflare edge (buffering, idle timeouts, the
+cache rule) — must be validated *before* the entire client pacing model is
+built on top of it, not at the end when changing course is expensive.
+
+---
+
+## 21. Appendix: What the Original Got Wrong
+
+Recorded so the rebuild is measured against real defects rather than vague
+dissatisfaction. Source: `~/Projects/makotogotchi_old` at `master`.
+
+### 21.1 Architectural
+
+1. **No server.** State lived in `localStorage`. Every visitor had a private
+   pet. The premise of a shared global pet was unimplementable on that
+   foundation. The git history shows MongoDB and SSE were built and then
+   removed in favour of SPA/S3 hosting — the project moved *away* from the
+   goal.
+2. **Wall-clock coupling.** A 1s `setInterval` was the only clock. Close the
+   tab and time stopped; reopen and the pet resumed frozen. No catch-up, no
+   drift correction, no notion of absolute time.
+3. **Non-deterministic and untestable.** `Math.random()` inside the tick made
+   the simulation unreproducible. There were no tests, and none could have
+   been written without heavy mocking.
+
+### 21.2 Simulation Bugs
+
+4. **`status()` read pre-tick state**, so every derived status lagged one tick
+   behind the values it was derived from.
+5. **`EATING` and `BATHING` were unreachable** — nothing in the reducer ever
+   set them, despite both having animation sequences.
+6. **`PLAY` toggled into `PLAYING`**, but `status()` returned `PLAYING`
+   unconditionally once there, so the only exit was another `PLAY`.
+7. **`Effect.ANGRY` was never applied** by any code path, though `PET` cleared
+   it and the renderer had an animation for it.
+8. **`neglect` only accumulated when happiness *and* energy were both zero**,
+   so a pet at 1 energy and 0 happiness was immortal.
+9. **`age` was overloaded** as both seconds-alive and hatching progress,
+   making `isBorn` a magic comparison against `240`.
+10. **Effects were rebuilt from scratch each tick** by re-testing probability,
+    and the reconstruction silently dropped `ANGRY` from the array — so any
+    angry state that had been set would vanish on the next tick.
+
+### 21.3 Structural
+
+11. **Presentation stored as game state.** `Status.CLONE1..4` were animation
+    frames living in the state enum.
+12. **Versioning by UUID.** `_version` was a hardcoded UUID and a mismatch
+    silently discarded the save with no migration path.
+13. **`_index.tsx` was a wall of inline Tailwind**, including six near-
+    identical 300-character button class strings differing only by an angle.
+14. **Sprite coordinates were hand-typed** in `configuration.ts` and do not
+    match the actual sheet layout.
+15. **A 6.5MB PNG** shipped to every visitor.
+16. **CI deployed to S3 and ECS** — infrastructure unrelated to the target
+    cluster.
+
+Every one of these is addressed by a specific decision above: §3.1 (1, 2, 3),
+§4.4 (3), §4.3 (4, 11), §4.1 `validate.ts` (5, 6, 7), §2.3 (8), §4.3 (9),
+§4.1 `reduce.ts` (10), §6.1 (12), §11 (13), §10.2 (14, 15), §17 (16).
