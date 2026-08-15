@@ -28,4 +28,10 @@ export type SnapshotMessage = {
   state: PetState;
 };
 
-export type EngineMessage = CareMessage | MilestoneMessage | SnapshotMessage;
+export type PresenceMessage = {
+  type: "presence";
+  count: number;
+  caretakers: string[];
+};
+
+export type EngineMessage = CareMessage | MilestoneMessage | SnapshotMessage | PresenceMessage;

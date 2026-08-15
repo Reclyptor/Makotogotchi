@@ -1,0 +1,122 @@
+// GET /api/stream — the realtime channel (SPEC §7). One EventSource per
+// client; one Redis subscription per pod (the hub); heartbeats keep
+// intermediaries from reaping idle streams; a 30s snapshot cadence
+// reconciles client prediction drift.
+
+import type { NextRequest } from "next/server";
+import { runtime } from "@/server/runtime";
+import { key, redis } from "@/server/redis/client";
+import { subscribeToEvents } from "@/server/stream/hub";
+import { dropPresence, listPresence, shouldBroadcastPresence, touchPresence } from "@/server/presence";
+import { snapshotPayload } from "@/server/snapshot";
+import { caretakerCookieHeader, clientIp, resolveCaretaker } from "@/server/http";
+import type { EngineMessage } from "@/server/engine/messages";
+
+export const dynamic = "force-dynamic";
+
+const PING_INTERVAL_MS = 15_000;
+const SNAPSHOT_INTERVAL_MS = 30_000;
+const MAX_STREAMS_PER_IP = 5;
+
+// Per-process connection accounting (SPEC §8.3). One replica in production
+// makes this globally correct; more replicas would only loosen the cap.
+const GLOBAL_KEY = Symbol.for("makotogotchi.streamcounts");
+type GlobalWithCounts = typeof globalThis & { [GLOBAL_KEY]?: Map<string, number> };
+const streamCounts = (): Map<string, number> => {
+  const holder = globalThis as GlobalWithCounts;
+  holder[GLOBAL_KEY] ??= new Map();
+  return holder[GLOBAL_KEY];
+};
+
+const broadcastPresence = async (): Promise<void> => {
+  if (!(await shouldBroadcastPresence(redis(), key("presence-guard")))) return;
+  const caretakers = await listPresence(redis(), key("presence"));
+  const message: EngineMessage = { type: "presence", count: caretakers.length, caretakers };
+  await redis().publish(key("events"), JSON.stringify(message));
+};
+
+export async function GET(request: NextRequest): Promise<Response> {
+  const identity = resolveCaretaker(request);
+  const ip = clientIp(request);
+  const counts = streamCounts();
+
+  if ((counts.get(ip) ?? 0) >= MAX_STREAMS_PER_IP) {
+    return new Response("too many streams", { status: 429 });
+  }
+  counts.set(ip, (counts.get(ip) ?? 0) + 1);
+
+  const { engine, generation } = await runtime();
+  const encoder = new TextEncoder();
+  let closed = false;
+  let unsubscribe: (() => void) | null = null;
+  let pingTimer: ReturnType<typeof setInterval> | null = null;
+  let snapshotTimer: ReturnType<typeof setInterval> | null = null;
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: string, data: unknown): void => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        } catch {
+          closed = true;
+        }
+      };
+      const comment = (text: string): void => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`: ${text}\n\n`));
+        } catch {
+          closed = true;
+        }
+      };
+
+      const state = await engine.view(generation);
+      const payload = snapshotPayload(state, generation);
+      send("hello", { caretakerId: identity.caretakerId, ...payload });
+      send("snapshot", payload);
+
+      unsubscribe = await subscribeToEvents((raw) => {
+        const message = JSON.parse(raw) as EngineMessage;
+        send(message.type, message);
+      });
+
+      await touchPresence(redis(), key("presence"), identity.caretakerId);
+      await broadcastPresence();
+
+      pingTimer = setInterval(() => {
+        comment("ping");
+        void touchPresence(redis(), key("presence"), identity.caretakerId);
+      }, PING_INTERVAL_MS);
+
+      snapshotTimer = setInterval(() => {
+        void engine
+          .view(generation)
+          .then((current) => send("snapshot", snapshotPayload(current, generation)))
+          .catch(() => {
+            // A transient store error skips one reconciliation cycle; the
+            // next cycle or the live event flow catches the client up.
+          });
+      }, SNAPSHOT_INTERVAL_MS);
+    },
+    cancel() {
+      closed = true;
+      unsubscribe?.();
+      if (pingTimer) clearInterval(pingTimer);
+      if (snapshotTimer) clearInterval(snapshotTimer);
+      const remaining = (streamCounts().get(ip) ?? 1) - 1;
+      if (remaining <= 0) streamCounts().delete(ip);
+      else streamCounts().set(ip, remaining);
+      void dropPresence(redis(), key("presence"), identity.caretakerId).then(() => broadcastPresence());
+    },
+  });
+
+  const headers = new Headers({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  if (identity.setCookie) headers.set("Set-Cookie", caretakerCookieHeader(identity.setCookie));
+  return new Response(stream, { headers });
+}
