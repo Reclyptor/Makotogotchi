@@ -5,9 +5,11 @@
 
 import type { NextRequest } from "next/server";
 import { runtime } from "@/server/runtime";
+import { db } from "@/server/db/client";
 import { key, redis } from "@/server/redis/client";
 import { subscribeToEvents } from "@/server/stream/hub";
 import { dropPresence, listPresence, shouldBroadcastPresence, touchPresence } from "@/server/presence";
+import { anonymousName, caretakerProfile, nicknameMap } from "@/server/social";
 import { snapshotPayload } from "@/server/snapshot";
 import { caretakerCookieHeader, clientIp, resolveCaretaker } from "@/server/http";
 import type { EngineMessage } from "@/server/engine/messages";
@@ -30,8 +32,13 @@ const streamCounts = (): Map<string, number> => {
 
 const broadcastPresence = async (): Promise<void> => {
   if (!(await shouldBroadcastPresence(redis(), key("presence-guard")))) return;
-  const caretakers = await listPresence(redis(), key("presence"));
-  const message: EngineMessage = { type: "presence", count: caretakers.length, caretakers };
+  const ids = await listPresence(redis(), key("presence"));
+  const names = await nicknameMap(await db(), ids);
+  const message: EngineMessage = {
+    type: "presence",
+    count: ids.length,
+    caretakers: ids.map((id) => ({ id, name: names.get(id) ?? anonymousName(id) })),
+  };
   await redis().publish(key("events"), JSON.stringify(message));
 };
 
@@ -46,6 +53,8 @@ export async function GET(request: NextRequest): Promise<Response> {
   counts.set(ip, (counts.get(ip) ?? 0) + 1);
 
   const { engine, generation } = await runtime();
+  const current = await generation();
+  const profile = await caretakerProfile(await db(), identity.caretakerId);
   const encoder = new TextEncoder();
   let closed = false;
   let unsubscribe: (() => void) | null = null;
@@ -71,9 +80,15 @@ export async function GET(request: NextRequest): Promise<Response> {
         }
       };
 
-      const state = await engine.view(generation);
-      const payload = snapshotPayload(state, generation);
-      send("hello", { caretakerId: identity.caretakerId, ...payload });
+      const state = await engine.view(current);
+      const payload = snapshotPayload(state, current);
+      send("hello", {
+        caretakerId: identity.caretakerId,
+        nickname: profile?.nickname ?? null,
+        streakDays: profile?.streakDays ?? 0,
+        generationsSurvived: profile?.generationsSurvived ?? 0,
+        ...payload,
+      });
       send("snapshot", payload);
 
       unsubscribe = await subscribeToEvents((raw) => {
@@ -93,13 +108,16 @@ export async function GET(request: NextRequest): Promise<Response> {
       }, PING_INTERVAL_MS);
 
       snapshotTimer = setInterval(() => {
-        void engine
-          .view(generation)
-          .then((current) => send("snapshot", snapshotPayload(current, generation)))
-          .catch(() => {
-            // A transient store error skips one reconciliation cycle; the
-            // next cycle or the live event flow catches the client up.
-          });
+        void (async () => {
+          // Re-resolve the generation each cycle: after a death-and-rebirth
+          // the same stream starts carrying the successor egg.
+          const liveGeneration = await generation();
+          const liveState = await engine.view(liveGeneration);
+          send("snapshot", snapshotPayload(liveState, liveGeneration));
+        })().catch(() => {
+          // A transient store error skips one reconciliation cycle; the
+          // next cycle or the live event flow catches the client up.
+        });
       }, SNAPSHOT_INTERVAL_MS);
     },
     cancel() {

@@ -11,8 +11,9 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const identity = resolveCaretaker(request);
   const { engine, generation } = await runtime();
-  const state = await engine.view(generation);
-  const response = NextResponse.json({ caretakerId: identity.caretakerId, ...snapshotPayload(state, generation) });
+  const current = await generation();
+  const state = await engine.view(current);
+  const response = NextResponse.json({ caretakerId: identity.caretakerId, ...snapshotPayload(state, current) });
   if (identity.setCookie) response.headers.set("Set-Cookie", caretakerCookieHeader(identity.setCookie));
   response.headers.set("Cache-Control", "no-store");
   return response;

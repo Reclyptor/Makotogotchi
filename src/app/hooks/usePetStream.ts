@@ -25,13 +25,17 @@ type Authoritative = {
   clockOffsetMs: number;
 };
 
-export type CareNotice = { action: CareAction; caretakerId: string; applied: number };
+export type CareNotice = { action: CareAction; caretakerId: string; caretakerName?: string; applied: number };
 export type MilestoneNotice = { kind: string; detail?: string };
+export type CaretakerProfile = { nickname: string | null; streakDays: number; generationsSurvived: number };
 
 export type PetStream = {
   connected: boolean;
   caretakerId: string | null;
+  /** From hello — the caller's own social profile. */
+  profile: CaretakerProfile | null;
   presenceCount: number;
+  presenceNames: string[];
   /** Authoritative state projected to the corrected current tick. */
   projectNow: () => PetState | null;
   /** The projection context (phase schedule) for validate/derive callers. */
@@ -46,14 +50,20 @@ export const usePetStream = (): PetStream => {
   const milestoneListeners = useRef(new Set<(notice: MilestoneNotice) => void>());
   const [connected, setConnected] = useState(false);
   const [caretakerId, setCaretakerId] = useState<string | null>(null);
+  const [profile, setProfile] = useState<CaretakerProfile | null>(null);
   const [presenceCount, setPresenceCount] = useState(0);
+  const [presenceNames, setPresenceNames] = useState<string[]>([]);
 
   useEffect(() => {
     const source = new EventSource("/api/stream");
 
     const acceptSnapshot = (payload: SnapshotPayload): void => {
       const current = authRef.current;
-      if (current && payload.state.tick < current.state.tick) return; // stale (SPEC §7.4)
+      const sameGeneration = current?.state.generation.id === payload.state.generation.id;
+      // Stale deliveries are discarded (SPEC §7.4) — but a different
+      // generation is a new life, not an out-of-order message: its ticks
+      // restart from zero and must always be accepted.
+      if (current && sameGeneration && payload.state.tick < current.state.tick) return;
       authRef.current = {
         state: payload.state,
         schedule: payload.phaseSchedule,
@@ -65,7 +75,12 @@ export const usePetStream = (): PetStream => {
 
     const acceptState = (state: PetState): void => {
       const current = authRef.current;
-      if (!current || state.tick < current.state.tick) return;
+      if (!current) return;
+      // A state from a different generation needs its genesis and schedule
+      // too — only a snapshot carries those, so skip and let the next
+      // snapshot perform the changeover.
+      if (current.state.generation.id !== state.generation.id) return;
+      if (state.tick < current.state.tick) return;
       authRef.current = { ...current, state };
     };
 
@@ -73,8 +88,18 @@ export const usePetStream = (): PetStream => {
     source.addEventListener("error", () => setConnected(false));
 
     source.addEventListener("hello", (event) => {
-      const payload = JSON.parse((event as MessageEvent<string>).data) as SnapshotPayload & { caretakerId: string };
+      const payload = JSON.parse((event as MessageEvent<string>).data) as SnapshotPayload & {
+        caretakerId: string;
+        nickname: string | null;
+        streakDays: number;
+        generationsSurvived: number;
+      };
       setCaretakerId(payload.caretakerId);
+      setProfile({
+        nickname: payload.nickname,
+        streakDays: payload.streakDays,
+        generationsSurvived: payload.generationsSurvived,
+      });
       acceptSnapshot(payload);
     });
     source.addEventListener("snapshot", (event) => {
@@ -84,7 +109,12 @@ export const usePetStream = (): PetStream => {
       const message = JSON.parse((event as MessageEvent<string>).data) as CareMessage;
       acceptState(message.state);
       for (const listener of careListeners.current) {
-        listener({ action: message.action, caretakerId: message.caretakerId, applied: message.applied });
+        listener({
+          action: message.action,
+          caretakerId: message.caretakerId,
+          ...(message.caretakerName !== undefined ? { caretakerName: message.caretakerName } : {}),
+          applied: message.applied,
+        });
       }
     });
     source.addEventListener("milestone", (event) => {
@@ -97,6 +127,7 @@ export const usePetStream = (): PetStream => {
     source.addEventListener("presence", (event) => {
       const message = JSON.parse((event as MessageEvent<string>).data) as PresenceMessage;
       setPresenceCount(message.count);
+      setPresenceNames(message.caretakers.map((caretaker) => caretaker.name));
     });
 
     return () => source.close();
@@ -125,5 +156,5 @@ export const usePetStream = (): PetStream => {
     return () => milestoneListeners.current.delete(listener);
   }, []);
 
-  return { connected, caretakerId, presenceCount, projectNow, context, onCare, onMilestone };
+  return { connected, caretakerId, profile, presenceCount, presenceNames, projectNow, context, onCare, onMilestone };
 };

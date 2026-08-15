@@ -14,6 +14,11 @@ export type GenerationDoc = {
   name: string | null;
   hatchedAtTick: number | null;
   died: { tick: number; at: Date; cause: CauseOfDeath } | null;
+  /** Written once at seal time — the permanent record the memorial reads. */
+  memorial: {
+    sealedAt: Date;
+    ranking: { caretakerId: string; name: string; score: number }[];
+  } | null;
 };
 
 /** PetEvent plus denormalized display fields (SPEC §6.1) and a wall clock. */
@@ -40,7 +45,9 @@ let ensured = false;
 export const ensureIndexes = async (database: Db): Promise<void> => {
   if (ensured) return;
   await Promise.all([
-    generations(database).createIndex({ ordinal: -1 }),
+    // Unique: the lifecycle's rotation guard — two leaders racing a rebirth
+    // collapse into one successor generation.
+    generations(database).createIndex({ ordinal: -1 }, { unique: true }),
     // seq is the canonical fold order and MUST be unique per generation —
     // this index is the last line of defense if the write lock ever fails.
     events(database).createIndex({ generationId: 1, seq: 1 }, { unique: true }),

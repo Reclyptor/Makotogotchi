@@ -36,7 +36,7 @@ import {
   recordHatch,
   writeSnapshot,
 } from "../db/repository";
-import { Lease, withLock } from "../redis/lock";
+import { withLock } from "../redis/lock";
 import { scheduleFor } from "../schedule";
 import type { EngineMessage } from "./messages";
 
@@ -49,6 +49,8 @@ export type EngineDeps = {
   key: (name: string) => string;
   timeZone: string;
   now?: () => number; // test seam; defaults to Date.now
+  /** Resolves a caretaker's display name for published care messages. */
+  caretakerName?: (caretakerId: string) => Promise<string>;
 };
 
 export type CareOutcome =
@@ -67,12 +69,9 @@ type AdvanceResult = { state: PetState; applied: number; rejected: Exclude<Valid
 
 export class PetEngine {
   private readonly now: () => number;
-  private tickTimer: ReturnType<typeof setInterval> | null = null;
-  private readonly lease: Lease;
 
   constructor(private readonly deps: EngineDeps) {
     this.now = deps.now ?? Date.now;
-    this.lease = new Lease(deps.redis, deps.key("tick-leader"), 15_000);
   }
 
   private ctxFor(generation: Generation, fromTick: number, toTick: number): ProjectionContext {
@@ -190,7 +189,16 @@ export class PetEngine {
         }
       }
       if (inputEvent?.type === "CARE") {
-        toPublish.push({ type: "care", tick: state.tick, action: inputEvent.action, caretakerId: inputEvent.caretakerId, applied, state });
+        const caretakerName = (await this.deps.caretakerName?.(inputEvent.caretakerId)) ?? undefined;
+        toPublish.push({
+          type: "care",
+          tick: state.tick,
+          action: inputEvent.action,
+          caretakerId: inputEvent.caretakerId,
+          ...(caretakerName !== undefined ? { caretakerName } : {}),
+          applied,
+          state,
+        });
       }
       if (inputEvent?.type === "HATCHED") {
         await recordHatch(this.deps.db, generation.id, inputEvent.tick, inputEvent.name);
@@ -268,27 +276,4 @@ export class PetEngine {
     return project(hot.state, nowTick, ctx).state;
   }
 
-  /** Start the leader-gated tick loop. Idempotent. */
-  startTicking(generation: Generation): void {
-    if (this.tickTimer) return;
-    this.tickTimer = setInterval(() => {
-      void (async () => {
-        if (await this.lease.acquire()) {
-          await this.tick(generation);
-          await this.lease.renew();
-        }
-      })().catch((error: unknown) => {
-        // Failed ticks are retried next interval; projection catches up.
-        console.error("tick failed", error);
-      });
-    }, TICK_SECONDS * 1000);
-  }
-
-  async stopTicking(): Promise<void> {
-    if (this.tickTimer) {
-      clearInterval(this.tickTimer);
-      this.tickTimer = null;
-    }
-    await this.lease.release();
-  }
 }

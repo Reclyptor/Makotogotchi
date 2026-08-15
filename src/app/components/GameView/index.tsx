@@ -3,7 +3,8 @@
 // The game screen (SPEC §11.2): header, room canvas, meters, actions, and
 // the live feed — mobile-first single column. Owns the stream connection,
 // a 4 Hz UI projection tick (the canvas runs its own rAF loop), the feed
-// log, and the audio toggle.
+// log, and the audio toggle. During incubation the naming vote takes the
+// action bar's place; after death, the memorial link does.
 
 import { useEffect, useRef, useState } from "react";
 import { derive, type DerivedState } from "@/sim/derive";
@@ -14,6 +15,8 @@ import PetCanvas from "@/app/components/PetCanvas";
 import Meters from "@/app/components/Meters";
 import ActionBar from "@/app/components/ActionBar";
 import FeedLog, { type FeedEntry } from "@/app/components/FeedLog";
+import VotePanel from "@/app/components/VotePanel";
+import NicknameEditor from "@/app/components/NicknameEditor";
 import { usePetStream } from "@/app/hooks/usePetStream";
 
 const STAGE_LABELS: Record<string, string> = {
@@ -25,24 +28,25 @@ const STAGE_LABELS: Record<string, string> = {
   ELDER: "Elder",
 };
 
-const ACTION_FEED_TEXT: Record<CareAction, string> = {
-  FEED: "fed Makoto",
-  PLAY: "played with Makoto",
-  CLEAN: "gave Makoto a dust bath",
-  PET: "petted Makoto",
-  LULLABY: "sang Makoto a lullaby",
-  MEDICATE: "gave Makoto medicine",
-};
+const actionFeedText = (petName: string): Record<CareAction, string> => ({
+  FEED: `fed ${petName}`,
+  PLAY: `played with ${petName}`,
+  CLEAN: `gave ${petName} a dust bath`,
+  PET: `petted ${petName}`,
+  LULLABY: `sang ${petName} a lullaby`,
+  MEDICATE: `gave ${petName} medicine`,
+});
 
-const MILESTONE_FEED_TEXT: Record<string, string> = {
-  BECAME_SICK: "Makoto got sick! 🌡️",
-  RECOVERED: "Makoto recovered!",
-  SLEPT: "Makoto fell asleep 💤",
-  WOKE: "Makoto woke up ☀️",
-  DIED: "Makoto has died. 🪦",
-  EVOLVED: "Makoto evolved! ✨",
+const milestoneFeedText = (petName: string): Record<string, string> => ({
+  HATCHED: `🎉 ${petName} hatched!`,
+  BECAME_SICK: `${petName} got sick! 🌡️`,
+  RECOVERED: `${petName} recovered!`,
+  SLEPT: `${petName} fell asleep 💤`,
+  WOKE: `${petName} woke up ☀️`,
+  DIED: `${petName} has died. 🪦`,
+  EVOLVED: `${petName} evolved! ✨`,
   CRITICAL: "A need is critically low! ⚠️",
-};
+});
 
 const age = (state: PetState): string => {
   if (state.bornAtTick === null) return "incubating";
@@ -54,13 +58,15 @@ const age = (state: PetState): string => {
 
 export default function GameView() {
   const stream = usePetStream();
-  const { projectNow, context, onCare, onMilestone, caretakerId } = stream;
+  const { projectNow, context, onCare, onMilestone, caretakerId, profile } = stream;
   const [ui, setUi] = useState<{ state: PetState; derived: DerivedState } | null>(null);
   const [feed, setFeed] = useState<FeedEntry[]>([]);
   const [muted, setMuted] = useState(true);
   const audioRef = useRef<GameAudio | null>(null);
   const feedId = useRef(0);
   const caretakerRef = useRef<string | null>(null);
+  const petNameRef = useRef("Makoto");
+  const greetedRef = useRef(false);
 
   useEffect(() => {
     caretakerRef.current = caretakerId;
@@ -76,32 +82,48 @@ export default function GameView() {
   useEffect(() => {
     const tick = (): void => {
       const state = projectNow();
-      if (state) setUi({ state, derived: derive(state) });
+      if (state) {
+        petNameRef.current = state.generation.name ?? "Makoto";
+        setUi({ state, derived: derive(state) });
+      }
     };
     tick();
     const timer = setInterval(tick, 250);
     return () => clearInterval(timer);
   }, [projectNow]);
 
-  useEffect(() => {
-    const pushFeed = (text: string): void => {
-      feedId.current += 1;
-      const entry: FeedEntry = {
-        id: feedId.current,
-        text,
-        at: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      };
-      setFeed((current) => [...current.slice(-49), entry]);
+  const pushFeed = (text: string): void => {
+    feedId.current += 1;
+    const entry: FeedEntry = {
+      id: feedId.current,
+      text,
+      at: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
+    setFeed((current) => [...current.slice(-49), entry]);
+  };
 
+  // Returning caretakers get greeted by name (SPEC §2.11).
+  useEffect(() => {
+    if (profile?.nickname && !greetedRef.current) {
+      greetedRef.current = true;
+      pushFeed(
+        `Welcome back, ${profile.nickname}!${profile.streakDays > 1 ? ` 🔥 ${profile.streakDays}-day streak` : ""}`,
+      );
+    }
+  }, [profile]);
+
+  useEffect(() => {
     const offCare = onCare((notice) => {
-      const who = notice.caretakerId === caretakerRef.current ? "You" : `Friend ${notice.caretakerId.slice(0, 4)}`;
+      const who =
+        notice.caretakerId === caretakerRef.current ? "You" : (notice.caretakerName ?? `Friend ${notice.caretakerId.slice(0, 4)}`);
       const amount = notice.applied >= 1000 ? ` (+${(notice.applied / 10_000).toFixed(1)}%)` : "";
-      pushFeed(`${who} ${ACTION_FEED_TEXT[notice.action]}${amount}`);
+      pushFeed(`${who} ${actionFeedText(petNameRef.current)[notice.action]}${amount}`);
       audioRef.current?.playAction(notice.action);
     });
     const offMilestone = onMilestone((notice) => {
-      const text = MILESTONE_FEED_TEXT[notice.kind];
+      const text = milestoneFeedText(notice.kind === "HATCHED" && notice.detail ? notice.detail : petNameRef.current)[
+        notice.kind
+      ];
       if (text) pushFeed(text);
       if (notice.kind === "CRITICAL" || notice.kind === "BECAME_SICK" || notice.kind === "DIED") {
         audioRef.current?.playAlert();
@@ -123,12 +145,14 @@ export default function GameView() {
   const ctx = context();
   const petName = ui?.state.generation.name ?? "Makoto";
   const stage = ui ? stageAt(ui.state.bornAtTick, ui.state.tick) : null;
+  const isEgg = ui !== null && ui.state.bornAtTick === null;
+  const isDead = ui !== null && ui.state.diedAtTick !== null;
 
   return (
     <div className="flex w-full max-w-xl flex-col items-center gap-4">
       <header className="flex w-full items-center justify-between gap-2 text-sm">
         <div className="flex items-baseline gap-2">
-          <span className="text-lg font-bold">{petName}</span>
+          <span className="text-lg font-bold">{isEgg ? "???" : petName}</span>
           {ui && (
             <span className="text-muted">
               {age(ui.state)} · {STAGE_LABELS[stage ?? ""] ?? ""}
@@ -137,7 +161,11 @@ export default function GameView() {
           )}
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-muted" aria-live="polite">
+          <span
+            className="text-muted"
+            aria-live="polite"
+            title={stream.presenceNames.length > 0 ? stream.presenceNames.join(", ") : undefined}
+          >
             👥 {stream.presenceCount}
           </span>
           <button
@@ -160,9 +188,9 @@ export default function GameView() {
       {/* The pet's condition as plain text — the canvas is decorative. */}
       <p aria-live="polite" className="text-sm text-muted">
         {ui
-          ? ui.state.diedAtTick !== null
-            ? `${petName} has died.`
-            : ui.state.bornAtTick === null
+          ? isDead
+            ? `${petName} has died. A new egg will appear soon.`
+            : isEgg
               ? "The egg is incubating…"
               : ui.state.asleep
                 ? `${petName} is asleep.`
@@ -172,11 +200,27 @@ export default function GameView() {
           : "Connecting…"}
       </p>
 
-      {ui && <Meters percentages={ui.derived.percentages} />}
-      {ui && ctx && caretakerId && (
+      {ui && !isEgg && <Meters percentages={ui.derived.percentages} />}
+      {isEgg && <VotePanel />}
+      {ui && !isEgg && !isDead && ctx && caretakerId && (
         <ActionBar state={ui.state} ctx={ctx} caretakerId={caretakerId} petName={petName} />
       )}
       <FeedLog entries={feed} />
+
+      <footer className="flex w-full flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3 text-sm">
+        <NicknameEditor key={profile?.nickname ?? ""} current={profile?.nickname ?? null} />
+        <nav className="flex gap-4 text-muted">
+          <a href="/leaderboard" className="underline underline-offset-2 hover:text-foreground">
+            leaderboard
+          </a>
+          <a href="/memorial" className="underline underline-offset-2 hover:text-foreground">
+            memorial
+          </a>
+          <a href="/about" className="underline underline-offset-2 hover:text-foreground">
+            about
+          </a>
+        </nav>
+      </footer>
     </div>
   );
 }

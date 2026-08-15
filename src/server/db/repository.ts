@@ -16,6 +16,7 @@ export const createGeneration = async (database: Db, generation: Generation): Pr
     name: generation.name,
     hatchedAtTick: null,
     died: null,
+    memorial: null,
   });
 };
 

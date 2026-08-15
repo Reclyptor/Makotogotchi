@@ -10,6 +10,7 @@ export type CareMessage = {
   tick: number;
   action: CareEvent["action"];
   caretakerId: string;
+  caretakerName?: string;
   applied: number;
   state: PetState;
 };
@@ -31,7 +32,7 @@ export type SnapshotMessage = {
 export type PresenceMessage = {
   type: "presence";
   count: number;
-  caretakers: string[];
+  caretakers: { id: string; name: string }[];
 };
 
 export type EngineMessage = CareMessage | MilestoneMessage | SnapshotMessage | PresenceMessage;

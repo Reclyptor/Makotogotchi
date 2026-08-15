@@ -57,7 +57,10 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
     media.addEventListener("change", onMotionChange);
 
     const offCare = onCare((notice) => {
-      const who = notice.caretakerId === caretakerRef.current ? "you" : `friend ${notice.caretakerId.slice(0, 4)}`;
+      const who =
+        notice.caretakerId === caretakerRef.current
+          ? "you"
+          : (notice.caretakerName ?? `friend ${notice.caretakerId.slice(0, 4)}`);
       const amount = notice.applied >= 1000 ? `+${(notice.applied / 10_000).toFixed(1)}% ` : "";
       room.onCare(notice.action, `${amount}${ACTION_EMOJI[notice.action]} ${who}`, performance.now());
     });

@@ -10,8 +10,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { CARE_ACTIONS } from "@/sim/tuning";
 import { runtime } from "@/server/runtime";
+import { db } from "@/server/db/client";
 import { key, redis } from "@/server/redis/client";
 import { LIMITS, takeToken } from "@/server/ratelimit";
+import { recordContribution } from "@/server/social";
 import { caretakerCookieHeader, clientIp, resolveCaretaker } from "@/server/http";
 
 const bodySchema = z.object({ action: z.enum(CARE_ACTIONS) });
@@ -50,7 +52,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const { engine, generation } = await runtime();
-  const outcome = await engine.care(generation, parsed.data.action, identity.caretakerId);
+  const current = await generation();
+  const outcome = await engine.care(current, parsed.data.action, identity.caretakerId);
 
   if (!outcome.ok) {
     return withCookie(
@@ -64,5 +67,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       ),
     );
   }
-  return withCookie(NextResponse.json({ applied: outcome.applied, tick: outcome.state.tick }));
+
+  // Roll the accepted action into the social ledgers (SPEC §2.11, §13.1).
+  const ledger = await recordContribution(await db(), {
+    caretakerId: identity.caretakerId,
+    generationId: current.id,
+    action: parsed.data.action,
+    applied: outcome.applied,
+    tick: outcome.state.tick,
+  });
+
+  return withCookie(
+    NextResponse.json({
+      applied: outcome.applied,
+      tick: outcome.state.tick,
+      score: ledger.score,
+      coins: ledger.coins,
+      streakDays: ledger.streakDays,
+    }),
+  );
 }

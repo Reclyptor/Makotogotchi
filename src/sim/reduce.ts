@@ -60,6 +60,7 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       state.healthRaw = HEALTH_MAX;
       state.asleep = false;
       state.sleepReason = null;
+      milestones.push({ kind: "HATCHED", tick: event.tick, detail: event.name });
       return { state, milestones, applied: 0 };
     }
 

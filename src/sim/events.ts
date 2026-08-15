@@ -33,6 +33,7 @@ export const hatchedEventSchema = z.object({
 });
 
 export const MILESTONE_KINDS = [
+  "HATCHED", // detail carries the voted name
   "EVOLVED",
   "SLEPT",
   "WOKE",
