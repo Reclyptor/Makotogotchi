@@ -15,7 +15,14 @@ import type { PetState, PhaseSchedule, ProjectionContext } from "@/sim/model";
 import type { CareAction } from "@/sim/tuning";
 import type { SnapshotPayload } from "@/server/snapshot";
 import type { RoomView } from "@/server/shop";
-import type { CareMessage, MilestoneMessage, MinigameMessage, PresenceMessage, SnapshotMessage } from "@/server/engine/messages";
+import type {
+  CareMessage,
+  MilestoneMessage,
+  MinigameMessage,
+  PresenceMessage,
+  ReactMessage,
+  SnapshotMessage,
+} from "@/server/engine/messages";
 
 type Authoritative = {
   state: PetState;
@@ -29,6 +36,7 @@ type Authoritative = {
 export type CareNotice = { action: CareAction; caretakerId: string; caretakerName?: string; applied: number };
 export type MilestoneNotice = { kind: string; detail?: string };
 export type MinigameNotice = Omit<MinigameMessage, "type">;
+export type ReactNotice = Omit<ReactMessage, "type">;
 export type CaretakerProfile = { nickname: string | null; streakDays: number; generationsSurvived: number };
 
 export type PetStream = {
@@ -47,6 +55,7 @@ export type PetStream = {
   onCare: (listener: (notice: CareNotice) => void) => () => void;
   onMilestone: (listener: (notice: MilestoneNotice) => void) => () => void;
   onMinigame: (listener: (notice: MinigameNotice) => void) => () => void;
+  onReact: (listener: (notice: ReactNotice) => void) => () => void;
 };
 
 export const usePetStream = (): PetStream => {
@@ -54,6 +63,7 @@ export const usePetStream = (): PetStream => {
   const careListeners = useRef(new Set<(notice: CareNotice) => void>());
   const milestoneListeners = useRef(new Set<(notice: MilestoneNotice) => void>());
   const minigameListeners = useRef(new Set<(notice: MinigameNotice) => void>());
+  const reactListeners = useRef(new Set<(notice: ReactNotice) => void>());
   const [room, setRoom] = useState<RoomView | null>(null);
   const [connected, setConnected] = useState(false);
   const [caretakerId, setCaretakerId] = useState<string | null>(null);
@@ -137,6 +147,11 @@ export const usePetStream = (): PetStream => {
       const { type: _type, ...notice } = message;
       for (const listener of minigameListeners.current) listener(notice);
     });
+    source.addEventListener("react", (event) => {
+      const message = JSON.parse((event as MessageEvent<string>).data) as ReactMessage;
+      const { type: _type, ...notice } = message;
+      for (const listener of reactListeners.current) listener(notice);
+    });
     source.addEventListener("presence", (event) => {
       const message = JSON.parse((event as MessageEvent<string>).data) as PresenceMessage;
       setPresenceCount(message.count);
@@ -174,6 +189,11 @@ export const usePetStream = (): PetStream => {
     return () => minigameListeners.current.delete(listener);
   }, []);
 
+  const onReact = useCallback((listener: (notice: ReactNotice) => void) => {
+    reactListeners.current.add(listener);
+    return () => reactListeners.current.delete(listener);
+  }, []);
+
   return {
     connected,
     caretakerId,
@@ -186,5 +206,6 @@ export const usePetStream = (): PetStream => {
     onCare,
     onMilestone,
     onMinigame,
+    onReact,
   };
 };

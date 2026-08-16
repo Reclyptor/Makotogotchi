@@ -35,7 +35,7 @@ export type PetCanvasProps = {
 
 export default function PetCanvas({ stream }: PetCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const { projectNow, onCare, onMilestone, onMinigame, caretakerId, room: roomView } = stream;
+  const { projectNow, onCare, onMilestone, onMinigame, onReact, caretakerId, room: roomView } = stream;
   const roomViewRef = useRef(roomView);
   useEffect(() => {
     roomViewRef.current = roomView;
@@ -72,6 +72,10 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
       const label = MILESTONE_LABELS[notice.kind];
       if (label) room.onMilestone(label, performance.now());
     });
+    const offReact = onReact((notice) => {
+      const who = notice.caretakerId === caretakerRef.current ? "you" : notice.caretakerName;
+      room.onMilestone(`${notice.emoji} ${who}`, performance.now());
+    });
     // Spectators watch the run live (SPEC §13.3): the pet plays on every
     // screen while the minigame is on.
     const offMinigame = onMinigame((notice) => {
@@ -99,9 +103,10 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
       offCare();
       offMilestone();
       offMinigame();
+      offReact();
       media.removeEventListener("change", onMotionChange);
     };
-  }, [onCare, onMilestone, onMinigame, projectNow]);
+  }, [onCare, onMilestone, onMinigame, onReact, projectNow]);
 
   // Integer upscaling only (SPEC §10.3): the canvas grows in whole multiples
   // of the logical resolution so pixels stay square and even.

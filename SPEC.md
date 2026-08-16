@@ -418,7 +418,7 @@ Exactly one process may advance simulated time and emit system events
 (`EVOLVED`, `FELL_ASLEEP`, `BECAME_SICK`, `DIED`).
 
 Leadership is a Redis lease: `SET mgc:tick-leader <podId> NX PX 15000`,
-renewed every 5s by the holder. The leader runs the tick loop on a
+renewed each tick by the holder. The leader runs the tick loop on a
 `TICK_INTERVAL` timer. On loss of leadership the loop stops immediately.
 
 Production runs **one replica** — a single global pet needs no horizontal
@@ -679,7 +679,8 @@ other.
 | `caretakers` | Identity, nickname, totals, per-action counts, streak, `generationsSurvived`, coins. | `{ _id }`, `{ nickname: 1 }` unique sparse, `{ score: -1 }` |
 | `contributions` | Pre-aggregated per `(caretakerId, generationId, day)` rollups backing the leaderboards. | `{ generationId: 1, score: -1 }`, `{ day: 1, score: -1 }` |
 | `pushSubscriptions` | Web Push endpoints and keys, per caretaker. | `{ caretakerId: 1 }`, `{ endpoint: 1 }` unique |
-| `nameVotes` | Proposals and votes for the incubating generation. | `{ generationId: 1 }` |
+| `nameVotes` | Proposals and votes for the incubating generation. | `{ generationId: 1, nameLower: 1 }` unique |
+| `roomState` | One communal document: owned cosmetics, the worn one, and installed decor (SPEC §13.2). | singleton `_id: "room"` |
 
 Recovery is `latest snapshot → fold events after it → project to now`. With a
 5-minute snapshot interval, the global cooldowns bound worst-case replay at
@@ -729,7 +730,8 @@ nothing for the cost of a custom server.
 | `hello` | `{ caretakerId, nickname, serverTick, tickSeconds, genesisEpochMs, phaseSchedule }` | On connect. Lets the client align its clock and project locally (§4.5). |
 | `snapshot` | Full `PetState` + generation metadata + `phaseSchedule` refresh | On connect, and every 30s as reconciliation. |
 | `care` | `{ action, caretaker, applied, needsAfter, tick }` | Every care action, by anyone. Drives the attributed toast. |
-| `milestone` | `{ kind, detail }` — `HATCHED`, `EVOLVED`, `BECAME_SICK`, `RECOVERED`, `CRITICAL`, `SLEPT`, `WOKE`, `DIED`, `NAMED` | System events. |
+| `milestone` | `{ kind, detail }` — `HATCHED` (detail carries the voted name), `EVOLVED`, `BECAME_SICK`, `RECOVERED`, `CRITICAL`, `SLEPT`, `WOKE`, `DIED` | System events. |
+| `minigame` | `{ phase: start\|score\|finish, caretakerName, score?, applied? }` | The live Dust Dash spectacle (SPEC §13.3). |
 | `presence` | `{ count, caretakers[] }` | Throttled to at most once per 2s. |
 | `react` | `{ emoji, caretaker }` | Emoji reactions. |
 | `:ping` | comment frame | Every 15s. Keeps intermediaries from reaping an idle stream. |
@@ -831,8 +833,11 @@ All request bodies are zod-validated. All responses are typed.
 | `GET` | `/api/memorial` | Paginated past generations. |
 | `POST` | `/api/nickname` | `{ nickname }` → sets or changes it. |
 | `POST` | `/api/name-vote` | `{ propose? , voteFor? }` → naming vote during incubation. |
-| `POST` | `/api/push/subscribe` | Stores a Web Push subscription. |
-| `DELETE` | `/api/push/subscribe` | Removes it. |
+| `GET` | `/api/push` | VAPID public key + this caretaker's subscription status. |
+| `POST` | `/api/push` | Stores a Web Push subscription. |
+| `DELETE` | `/api/push` | Removes one by endpoint. |
+| `GET`/`POST` | `/api/shop` | Catalog + balance; buy an item or switch the worn cosmetic. |
+| `POST` | `/api/play` | Minigame protocol: `start` / `score` / `finish` (SPEC §13.3). |
 | `GET` | `/health` | `{ status: "ok" }` — liveness/readiness. Never touches the database. |
 | `GET` | `/ready` | Verifies Mongo and Redis reachability. Readiness probe. |
 
@@ -1046,33 +1051,39 @@ Makotogotchi/
 ├── playwright.config.ts
 ├── postcss.config.mjs
 ├── package.json
+├── instrumentation.ts          # boots the engine + tick loop at server start
 ├── .github/workflows/
-│   ├── ci.yml                  # typecheck · lint · unit · e2e
+│   ├── ci.yml                  # typecheck · lint · unit · build · e2e
 │   └── docker-publish.yml      # ghcr.io/reclyptor/makotogotchi
 ├── scripts/
-│   └── atlas.ts                # regenerates the sprite atlas from the PNG
+│   ├── atlas.ts                # regenerates the sprite atlas from the PNG
+│   └── cloudflare-setup.sh     # idempotent edge config (SPEC §19.3)
+├── e2e/                        # Playwright suite + dockerized-store stack
 ├── public/
-│   ├── sprites.png             # optimised atlas
-│   ├── sw.js                   # push service worker
-│   └── audio/
+│   ├── sprites.png             # optimised atlas (13.6KB, was 6.5MB)
+│   └── sw.js                   # push service worker
 └── src/
-    ├── sim/                    # PURE simulation core
+    ├── sim/                    # PURE simulation core (SPEC §4) + economy.ts
     ├── server/
-    │   ├── db/                 # mongo client + repositories
-    │   ├── redis/              # client, pubsub, locks, buckets
-    │   ├── engine/             # tick loop, leader lease, state manager
-    │   ├── identity.ts
-    │   ├── ratelimit.ts
-    │   └── push.ts
-    ├── game/                   # canvas engine + scene
+    │   ├── db/                 # mongo client, collections, repository
+    │   ├── redis/              # client, write lock, leader lease
+    │   ├── engine/             # engine (serialized write path), lifecycle, messages
+    │   ├── push/               # subscriptions store, dispatcher, sender
+    │   ├── stream/             # SSE fanout hub (one Redis sub per pod)
+    │   ├── env.ts identity.ts ratelimit.ts presence.ts http.ts
+    │   ├── social.ts votes.ts shop.ts snapshot.ts schedule.ts
+    │   └── runtime.ts testsetup.ts
+    ├── game/                   # canvas engine, anim machine, room scene, audio
     └── app/                    # Next.js App Router
-        ├── layout.tsx
-        ├── page.tsx
-        ├── globals.css
+        ├── layout.tsx page.tsx globals.css
         ├── memorial/ leaderboard/ about/
         ├── health/ ready/
-        ├── api/
-        └── components/
+        ├── api/                # care state stream react nickname leaderboard
+        │                       # memorial name-vote push shop play
+        ├── hooks/              # usePetStream (client reconciliation, SPEC §7.4)
+        └── components/         # GameView PetCanvas Meters ActionBar FeedLog
+                                # VotePanel NicknameEditor PushToggle ShopPanel
+                                # DustDash
 ```
 
 ---
@@ -1274,8 +1285,8 @@ This is the only step in the whole project that requires your browser.
 | DNS | Proxied `CNAME`s to the tunnel for each hostname |
 | Cache rule | **Bypass cache** for `/api/*` — non-negotiable; a cached SSE stream is a broken SSE stream |
 | Compression | Disabled on `/api/stream` (`no-transform` is set, and the rule enforces it) |
-| Rate limiting | `/api/care` — 60 requests per minute per IP, matching the server-side bucket as a first line of defence |
-| Bot Fight Mode | **Off** for these zones. Every visitor is anonymous by design; a bot challenge on the action endpoint would break the product. |
+| Rate limiting | `/api/care` — 10 requests per 10s per IP (the free plan only permits 10s periods; same average rate as the server-side 60/min bucket) |
+| Bot Fight Mode | **Off** for these zones (verified via the `bot_management` API — readable and settable with the token, contrary to earlier belief). Every visitor is anonymous by design; a bot challenge on the action endpoint would break the product. |
 | Always Use HTTPS | On |
 | Browser Integrity Check | Off on `/api/*` |
 

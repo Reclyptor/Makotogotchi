@@ -45,4 +45,18 @@ export type MinigameMessage = {
   applied?: number;
 };
 
-export type EngineMessage = CareMessage | MilestoneMessage | SnapshotMessage | PresenceMessage | MinigameMessage;
+/** Emoji reactions (SPEC §2.11) — pure broadcast, no state. */
+export type ReactMessage = {
+  type: "react";
+  emoji: string;
+  caretakerId: string;
+  caretakerName: string;
+};
+
+export type EngineMessage =
+  | CareMessage
+  | MilestoneMessage
+  | SnapshotMessage
+  | PresenceMessage
+  | MinigameMessage
+  | ReactMessage;

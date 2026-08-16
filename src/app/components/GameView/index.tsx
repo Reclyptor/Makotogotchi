@@ -61,7 +61,7 @@ const age = (state: PetState): string => {
 
 export default function GameView() {
   const stream = usePetStream();
-  const { projectNow, context, onCare, onMilestone, onMinigame, caretakerId, profile } = stream;
+  const { projectNow, context, onCare, onMilestone, onMinigame, onReact, caretakerId, profile } = stream;
   const [ui, setUi] = useState<{ state: PetState; derived: DerivedState } | null>(null);
   const [feed, setFeed] = useState<FeedEntry[]>([]);
   const [muted, setMuted] = useState(true);
@@ -149,12 +149,17 @@ export default function GameView() {
         if (notice.score !== undefined) pushFeed(`${name} scored ${notice.score} at Dust Dash!`);
       }
     });
+    const offReact = onReact((notice) => {
+      const who = notice.caretakerId === caretakerRef.current ? "You" : notice.caretakerName;
+      pushFeed(`${who} reacted ${notice.emoji}`);
+    });
     return () => {
       offCare();
       offMilestone();
       offMinigame();
+      offReact();
     };
-  }, [onCare, onMilestone, onMinigame]);
+  }, [onCare, onMilestone, onMinigame, onReact]);
 
   const toggleAudio = (): void => {
     const audio = audioRef.current;
@@ -251,6 +256,29 @@ export default function GameView() {
       )}
       {shopOpen && <ShopPanel onClose={() => setShopOpen(false)} />}
       {playing && <DustDash onClose={() => setPlaying(false)} />}
+
+      {/* Emoji reactions (SPEC §2.11): zero moderation surface, high
+          expressiveness — everyone sees them instantly. */}
+      <div role="group" aria-label="React" className="flex items-center gap-1">
+        {["❤️", "💛", "😂", "😮", "😢", "🎉"].map((emoji) => (
+          <button
+            key={emoji}
+            type="button"
+            aria-label={`React with ${emoji}`}
+            onClick={() =>
+              void fetch("/api/react", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ emoji }),
+              }).catch(() => null)
+            }
+            className="rounded-md px-1.5 py-0.5 text-lg outline-offset-2 transition-transform hover:scale-125"
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+
       <FeedLog entries={feed} />
 
       <footer className="flex w-full flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3 text-sm">
