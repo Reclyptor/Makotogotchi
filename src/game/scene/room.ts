@@ -9,7 +9,7 @@ import { AnimationMachine } from "../anim/machine";
 import { BUTTERFLY_CLIP, WALK_CLIP, type OneShotName } from "../anim/clips";
 import type { DerivedState } from "@/sim/derive";
 import type { AmbientEvent } from "@/sim/ambient";
-import type { CareAction } from "@/sim/tuning";
+import type { CareAction, LifeStage } from "@/sim/tuning";
 
 export const ROOM_WIDTH = 260;
 export const ROOM_HEIGHT = 200;
@@ -49,6 +49,24 @@ const CARE_PARTICLES: Record<CareAction, { kind: ParticleKind; count: number }> 
   MEDICATE: { kind: "sparkle", count: 8 },
 };
 
+// Visible growth (SPEC §21.9): the stage the sim already tracks finally
+// shows. A hatchling is small and a juvenile nearly grown; adulthood is the
+// art's own size, and an elder keeps it but gains brow tufts. The anchor is
+// bottom-center throughout, so every size stands on the same floor.
+export const STAGE_SCALE: Record<LifeStage, number> = {
+  EGG: 1,
+  HATCHLING: 0.8,
+  PUP: 0.85,
+  JUVENILE: 0.9,
+  ADULT: 1,
+  ELDER: 1,
+};
+
+export const stageScale = (stage: LifeStage): number => STAGE_SCALE[stage];
+
+/** Where the brow tufts sit above the floor, in the pet's own pixels. */
+const ELDER_BROWS_Y = -112;
+
 /** How this generation feels about the meal it was just fed (SPEC §21.4). */
 export type FoodTaste = "favorite" | "disliked";
 
@@ -66,6 +84,7 @@ export class Room {
   private readonly particles = new Particles();
   private readonly toasts = new Toasts();
   private asleep = false;
+  private stage: LifeStage = "EGG";
   private ambientMs = 0;
   private petX = PET_X;
   private facingRight = false;
@@ -85,6 +104,12 @@ export class Room {
   syncDerived(derived: DerivedState, asleep: boolean, nowMs: number): void {
     this.machine.setBase(derived.animation, nowMs);
     this.asleep = asleep;
+    this.stage = derived.stage;
+  }
+
+  /** The draw scale the pet's life stage calls for right now. */
+  get petScale(): number {
+    return stageScale(this.stage);
   }
 
   onCare(action: CareAction, label: string, nowMs: number, taste?: FoodTaste): void {
@@ -181,17 +206,18 @@ export class Room {
         ? WALK_CLIP.frames[Math.floor(nowMs / WALK_CLIP.frameMs) % WALK_CLIP.frames.length]!
         : this.machine.frameAt(nowMs);
       const x = Math.round(this.petX);
+      const scale = this.petScale;
       if (this.facingRight) {
         // The art faces left; strolling right mirrors it around the anchor.
         ctx.save();
         ctx.translate(x, 0);
         ctx.scale(-1, 1);
-        this.atlas.draw(ctx, frame, 0, PET_Y);
+        this.atlas.draw(ctx, frame, 0, PET_Y, scale);
         ctx.restore();
       } else {
-        this.atlas.draw(ctx, frame, x, PET_Y);
+        this.atlas.draw(ctx, frame, x, PET_Y, scale);
       }
-      this.renderCosmetic(ctx);
+      this.renderHead(ctx, x, scale);
     }
 
     this.particles.render(ctx);
@@ -274,15 +300,27 @@ export class Room {
     }
   }
 
-  /** The worn cosmetic, anchored to the pet's head. */
+  /**
+   * Everything worn on the head, drawn inside the pet's own scaled space so
+   * a hatchling's hat is a hatchling-sized hat. An elder's brow tufts stack
+   * underneath whatever cosmetic is on top of them (SPEC §21.9).
+   */
+  private renderHead(ctx: CanvasRenderingContext2D, x: number, scale: number): void {
+    ctx.save();
+    ctx.translate(x, PET_Y);
+    ctx.scale(scale, scale);
+    if (this.stage === "ELDER") this.atlas.draw(ctx, "elderBrows", -2, ELDER_BROWS_Y);
+    this.renderCosmetic(ctx);
+    ctx.restore();
+  }
+
+  /** The worn cosmetic, in head-anchored coordinates. */
   private renderCosmetic(ctx: CanvasRenderingContext2D): void {
     const hat = this.decor.activeCosmetic;
     if (!hat) return;
-    const x = Math.round(this.petX) - 2;
-    const y = PET_Y - 128;
     const px = (dx: number, dy: number, w: number, h: number, color: string): void => {
       ctx.fillStyle = color;
-      ctx.fillRect(x + dx, y + dy, w, h);
+      ctx.fillRect(dx - 2, dy - 128, w, h);
     };
     if (hat === "bow") {
       px(-10, 2, 8, 8, "#d9538a");

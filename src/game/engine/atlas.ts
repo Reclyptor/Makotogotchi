@@ -3,7 +3,7 @@
 // image request (flaky mobile network, tab restored mid-fetch) must degrade
 // to a late pet, never a permanently empty room.
 
-import { SPRITE_FRAMES, type FrameName } from "../atlas.generated";
+import { SPRITE_FRAMES, type FrameName, type SpriteFrame } from "../atlas.generated";
 
 const LOAD_ATTEMPTS = 4;
 const RETRY_BASE_MS = 600;
@@ -32,6 +32,22 @@ export const loadSpriteSheet = async (src: string): Promise<HTMLImageElement | n
   return null;
 };
 
+/**
+ * Where a frame lands on the canvas: bottom-center anchored at (x, y),
+ * scaled, and snapped to whole pixels so the art never lands half a pixel
+ * off and blurs. Pure, so the life-stage scaling is directly testable.
+ */
+export const drawRect = (
+  frame: SpriteFrame,
+  x: number,
+  y: number,
+  scale: number,
+): { dx: number; dy: number; dw: number; dh: number } => {
+  const dw = Math.round(frame.w * scale);
+  const dh = Math.round(frame.h * scale);
+  return { dx: Math.round(x - dw / 2), dy: Math.round(y - dh), dw, dh };
+};
+
 export class Atlas {
   private image: HTMLImageElement | null = null;
 
@@ -48,11 +64,10 @@ export class Atlas {
   }
 
   /** Draw a frame with its bottom-center anchored at (x, y), snapped. */
-  draw(ctx: CanvasRenderingContext2D, name: FrameName, x: number, y: number): void {
+  draw(ctx: CanvasRenderingContext2D, name: FrameName, x: number, y: number, scale = 1): void {
     if (!this.image) return;
     const frame = SPRITE_FRAMES[name];
-    const dx = Math.round(x - frame.w / 2);
-    const dy = Math.round(y - frame.h);
-    ctx.drawImage(this.image, frame.x, frame.y, frame.w, frame.h, dx, dy, frame.w, frame.h);
+    const { dx, dy, dw, dh } = drawRect(frame, x, y, scale);
+    ctx.drawImage(this.image, frame.x, frame.y, frame.w, frame.h, dx, dy, dw, dh);
   }
 }
