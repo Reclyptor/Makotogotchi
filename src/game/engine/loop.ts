@@ -18,15 +18,30 @@ export const startLoop = (callbacks: LoopCallbacks): (() => void) => {
   let accumulated = 0;
   let running = true;
 
+  // One throwing frame must never kill the loop: the exception would escape
+  // the rAF callback, the next frame would never be requested, and the scene
+  // would freeze on whatever was painted mid-frame. Log and keep going.
+  let lastErrorLogMs = 0;
+  const guard = (fn: () => void, now: number): void => {
+    try {
+      fn();
+    } catch (error) {
+      if (now - lastErrorLogMs > 5000) {
+        lastErrorLogMs = now;
+        console.error("game loop frame failed", error);
+      }
+    }
+  };
+
   const frame = (now: number): void => {
     if (!running) return;
     accumulated = Math.min(accumulated + (now - last), MAX_ACCUMULATED_MS);
     last = now;
     while (accumulated >= UPDATE_STEP_MS) {
-      callbacks.update(UPDATE_STEP_MS);
+      guard(() => callbacks.update(UPDATE_STEP_MS), now);
       accumulated -= UPDATE_STEP_MS;
     }
-    callbacks.render(now);
+    guard(() => callbacks.render(now), now);
     rafId = requestAnimationFrame(frame);
   };
 

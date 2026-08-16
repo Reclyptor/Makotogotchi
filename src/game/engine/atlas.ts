@@ -1,20 +1,38 @@
-// Sprite atlas: loads the sheet once and blits named frames with
-// pixel-snapped positions (SPEC §10.3).
+// Sprite atlas: loads the sheet and blits named frames with pixel-snapped
+// positions (SPEC §10.3). Loading retries with backoff — a single dropped
+// image request (flaky mobile network, tab restored mid-fetch) must degrade
+// to a late pet, never a permanently empty room.
 
 import { SPRITE_FRAMES, type FrameName } from "../atlas.generated";
+
+const LOAD_ATTEMPTS = 4;
+const RETRY_BASE_MS = 600;
 
 export class Atlas {
   private image: HTMLImageElement | null = null;
 
-  load(src: string): Promise<void> {
+  async load(src: string): Promise<void> {
+    for (let attempt = 1; attempt <= LOAD_ATTEMPTS; attempt++) {
+      try {
+        this.image = await this.loadOnce(src, attempt);
+        return;
+      } catch {
+        if (attempt === LOAD_ATTEMPTS) {
+          console.error(`spritesheet failed to load after ${LOAD_ATTEMPTS} attempts: ${src}`);
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, RETRY_BASE_MS * attempt));
+      }
+    }
+  }
+
+  private loadOnce(src: string, attempt: number): Promise<HTMLImageElement> {
     return new Promise((resolve, reject) => {
       const image = new Image();
-      image.onload = () => {
-        this.image = image;
-        resolve();
-      };
+      image.onload = () => resolve(image);
       image.onerror = () => reject(new Error(`failed to load spritesheet: ${src}`));
-      image.src = src;
+      // A cache-busting query on retries sidesteps a poisoned cache entry.
+      image.src = attempt === 1 ? src : `${src}?retry=${attempt}`;
     });
   }
 
