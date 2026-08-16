@@ -136,15 +136,25 @@ export default function GameView() {
       }
     });
     // The minigame spectacle (SPEC §13.3): a banner with the live score for
-    // everyone who isn't the one playing.
+    // everyone who isn't the one playing. A staleness timeout backstops the
+    // finish broadcast — a crashed or abandoned game (closed tab, lost
+    // network) must never pin the banner forever.
+    let spectateTimeout: ReturnType<typeof setTimeout> | null = null;
+    const armSpectateTimeout = (): void => {
+      if (spectateTimeout) clearTimeout(spectateTimeout);
+      spectateTimeout = setTimeout(() => setSpectating(null), 35_000);
+    };
     const offMinigame = onMinigame((notice) => {
       const name = notice.caretakerId === caretakerRef.current ? "You" : (notice.caretakerName ?? "A friend");
       if (notice.phase === "start") {
         setSpectating({ name, score: 0 });
+        armSpectateTimeout();
         pushFeed(`${name} started a game of Dust Dash! 🎮`);
       } else if (notice.phase === "score" && notice.score !== undefined) {
         setSpectating((current) => (current ? { ...current, score: notice.score! } : { name, score: notice.score! }));
+        armSpectateTimeout();
       } else if (notice.phase === "finish") {
+        if (spectateTimeout) clearTimeout(spectateTimeout);
         setSpectating(null);
         if (notice.score !== undefined) pushFeed(`${name} scored ${notice.score} at Dust Dash!`);
       }
@@ -158,6 +168,7 @@ export default function GameView() {
       offMilestone();
       offMinigame();
       offReact();
+      if (spectateTimeout) clearTimeout(spectateTimeout);
     };
   }, [onCare, onMilestone, onMinigame, onReact]);
 

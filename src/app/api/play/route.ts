@@ -71,9 +71,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return withCookie(NextResponse.json({ ok: true }));
   }
 
+  // Ends the spectacle for everyone — sent on EVERY finish path, success or
+  // not: a rejected result must still take the "is playing" banner down.
+  const endSpectacle = async (score?: number, applied?: number): Promise<void> => {
+    await publish({
+      type: "minigame",
+      phase: "finish",
+      caretakerId: identity.caretakerId,
+      caretakerName: await caretakerName(),
+      ...(score !== undefined ? { score } : {}),
+      ...(applied !== undefined ? { applied } : {}),
+    });
+  };
+
   const raw = await redis().get(sessionKey);
   const session = raw ? (JSON.parse(raw) as Session) : null;
   if (!session || session.caretakerId !== identity.caretakerId) {
+    if (parsed.data.phase === "finish") await endSpectacle();
     return withCookie(NextResponse.json({ error: "no_session" }, { status: 409 }));
   }
 
@@ -96,12 +110,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     score <= Math.ceil((elapsedMs / 1000) * MAX_SCORE_PER_SECOND) &&
     inputs >= score;
   if (!plausible) {
+    await endSpectacle();
     return withCookie(NextResponse.json({ error: "implausible" }, { status: 422 }));
   }
 
   const performance = Math.max(PERFORMANCE_MIN, Math.min(PERFORMANCE_MAX, 50 + score * 4));
   const outcome = await engine.care(current, "PLAY", identity.caretakerId, { performance });
   if (!outcome.ok) {
+    await endSpectacle();
     return withCookie(NextResponse.json({ error: "not_now", reason: outcome.rejection.reason }, { status: 409 }));
   }
 
@@ -113,13 +129,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     tick: outcome.state.tick,
   });
   await creditCoins(await db(), identity.caretakerId, score);
-  await publish({
-    type: "minigame",
-    phase: "finish",
-    caretakerId: identity.caretakerId,
-    caretakerName: await caretakerName(),
-    score,
-    applied: outcome.applied,
-  });
+  await endSpectacle(score, outcome.applied);
   return withCookie(NextResponse.json({ applied: outcome.applied, coins: ledger.coins + score, score }));
 }
