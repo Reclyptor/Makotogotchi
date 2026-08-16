@@ -42,7 +42,17 @@ export default function DustDash({ onClose }: DustDashProps) {
       const body = (await response.json()) as { applied: number; coins: number; score: number };
       setFinalResult({ score: body.score, applied: body.applied, coins: body.coins });
     } else {
-      setFinalResult({ error: "The result couldn't be recorded." });
+      const body = (await response?.json().catch(() => null)) as { error?: string; reason?: string } | null;
+      setFinalResult({
+        error:
+          body?.error === "implausible"
+            ? "That run didn't look right — the score wasn't counted."
+            : body?.reason === "COOLDOWN_GLOBAL" || body?.reason === "COOLDOWN_CARETAKER"
+              ? "Makoto is worn out from playing — the joy didn't count this time."
+              : body?.error === "no_session"
+                ? "The game session expired before the result arrived."
+                : "The result couldn't be recorded.",
+      });
     }
     setPhase("done");
   }, []);

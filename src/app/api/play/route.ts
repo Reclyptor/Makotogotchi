@@ -19,7 +19,9 @@ export const dynamic = "force-dynamic";
 
 const SESSION_KEY = "minigame";
 const SESSION_TTL_MS = 60_000;
-const MIN_DURATION_MS = 8_000;
+// A collision seconds in is a legitimate (short, low-scoring) run — the
+// score-per-second cap is what bounds farming, not a minimum duration.
+const MIN_DURATION_MS = 1_000;
 const MAX_DURATION_MS = 45_000;
 const MAX_SCORE_PER_SECOND = 2;
 
