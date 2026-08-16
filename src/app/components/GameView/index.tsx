@@ -20,7 +20,8 @@ import VotePanel from "@/app/components/VotePanel";
 import NicknameEditor from "@/app/components/NicknameEditor";
 import PushToggle from "@/app/components/PushToggle";
 import ShopPanel from "@/app/components/ShopPanel";
-import DustDash from "@/app/components/DustDash";
+import MinigameShell from "@/app/components/minigames/Shell";
+import { isMinigameId, MINIGAME_IDS, MINIGAMES, type MinigameId } from "@/sim/minigames";
 import { usePetStream } from "@/app/hooks/usePetStream";
 import type { FeedEntryPayload } from "@/app/api/feed/route";
 
@@ -87,11 +88,18 @@ export default function GameView() {
   const stream = usePetStream();
   const { projectNow, context, onCare, onMilestone, onMinigame, onReact, caretakerId, profile } = stream;
   const [ui, setUi] = useState<{ state: PetState; derived: DerivedState } | null>(null);
+  // Play launches a random game from the roster; a ?game= query pins it —
+  // handy for sharing a favourite and for deterministic e2e runs.
+  const pickGame = (): MinigameId => {
+    const pinned = new URLSearchParams(window.location.search).get("game");
+    if (isMinigameId(pinned)) return pinned;
+    return MINIGAME_IDS[Math.floor(Math.random() * MINIGAME_IDS.length)]!;
+  };
   const [feed, setFeed] = useState<FeedEntry[]>([]);
   const [muted, setMuted] = useState(true);
   const [shopOpen, setShopOpen] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  const [spectating, setSpectating] = useState<{ name: string; score: number } | null>(null);
+  const [playing, setPlaying] = useState<MinigameId | null>(null);
+  const [spectating, setSpectating] = useState<{ name: string; game: string; score: number } | null>(null);
   const audioRef = useRef<GameAudio | null>(null);
   const localId = useRef(0);
   const maxSeqRef = useRef(-1);
@@ -210,17 +218,18 @@ export default function GameView() {
     };
     const offMinigame = onMinigame((notice) => {
       const name = notice.caretakerId === caretakerRef.current ? "You" : (notice.caretakerName ?? "A friend");
+      const game = isMinigameId(notice.game) ? MINIGAMES[notice.game].title : "Dust Dash";
       if (notice.phase === "start") {
-        setSpectating({ name, score: 0 });
+        setSpectating({ name, game, score: 0 });
         armSpectateTimeout();
-        pushFeed("🎮", `${name} started a game of Dust Dash!`);
+        pushFeed("🎮", `${name} started a game of ${game}!`);
       } else if (notice.phase === "score" && notice.score !== undefined) {
-        setSpectating((current) => (current ? { ...current, score: notice.score! } : { name, score: notice.score! }));
+        setSpectating((current) => (current ? { ...current, score: notice.score! } : { name, game, score: notice.score! }));
         armSpectateTimeout();
       } else if (notice.phase === "finish") {
         if (spectateTimeout) clearTimeout(spectateTimeout);
         setSpectating(null);
-        if (notice.score !== undefined) pushFeed("🏆", `${name} scored ${notice.score} at Dust Dash!`);
+        if (notice.score !== undefined) pushFeed("🏆", `${name} scored ${notice.score} at ${game}!`);
       }
     });
     const offReact = onReact((notice) => {
@@ -322,7 +331,7 @@ export default function GameView() {
 
       {spectating && (
         <p aria-live="polite" className="panel animate-pop w-full !rounded-full px-4 py-2 text-center text-sm">
-          🎮 {spectating.name === "You" ? "You are" : `${spectating.name} is`} playing Dust Dash — score{" "}
+          🎮 {spectating.name === "You" ? "You are" : `${spectating.name} is`} playing {spectating.game} — score{" "}
           <strong className="tabular-nums text-gold">{spectating.score}</strong>
         </p>
       )}
@@ -330,7 +339,7 @@ export default function GameView() {
       {ui && !isEgg && <Meters percentages={ui.derived.percentages} />}
       {isEgg && <VotePanel />}
       {ui && !isEgg && !isDead && ctx && caretakerId && (
-        <ActionBar state={ui.state} ctx={ctx} caretakerId={caretakerId} petName={petName} onPlay={() => setPlaying(true)} />
+        <ActionBar state={ui.state} ctx={ctx} caretakerId={caretakerId} petName={petName} onPlay={() => setPlaying(pickGame())} />
       )}
 
       {/* Reactions + shop in one strip (SPEC §2.11, §13.2) */}
@@ -367,7 +376,7 @@ export default function GameView() {
       </div>
 
       {shopOpen && <ShopPanel onClose={() => setShopOpen(false)} />}
-      {playing && <DustDash onClose={() => setPlaying(false)} />}
+      {playing && <MinigameShell gameId={playing} onClose={() => setPlaying(null)} />}
 
       <FeedLog entries={feed} />
 

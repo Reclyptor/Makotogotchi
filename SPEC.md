@@ -1027,18 +1027,32 @@ Cosmetics and decor are the interesting sink: they are **visible to everybody**,
 which turns spending into a form of contribution rather than a private
 inventory.
 
-### 13.3 Minigame
+### 13.3 Minigames
 
-A short skill game (the spritesheet has dedicated "playing" frames) launched
-from `PLAY`. The player's score determines the joy restored and the coins
-earned. While it runs, every other connected client sees the pet playing and
-sees the live score — spectating is the point, and it is the reason this is a
-realtime feature rather than a solo one.
+`PLAY` launches a short skill game from a five-game roster, picked at random
+per run (a `?game=` query pins the choice — for sharing a favourite and for
+deterministic e2e runs). The player's score determines the joy restored and
+the coins earned. While a run is live, every other connected client sees the
+pet playing and the live score — spectating is the point, and it is the
+reason this is a realtime feature rather than a solo one. One run exists at a
+time, world-wide, by design.
 
-The minigame is scored client-side but validated server-side against a
-plausibility envelope (max score per second, input count), because a fully
+| Game | Play | Beats |
+| --- | --- | --- |
+| Dust Dash | 20s runner: hop the dust bunnies | one point per cleared bunny; collision ends the run |
+| Snack Catch | 25s: steer under falling food, dodge junk | +1 per snack, −3 for junk |
+| Bubble Bath Pop | 25s: pop the bath bubbles before they escape | +1 per pop |
+| Simon Squeaks | memory: repeat Makoto's pose sequence on four pads | +1 per completed round; a miss ends the run |
+| Wheel Sprint | 30s rhythm: tap as the spark crosses the wheel's top | +1 per on-beat hit |
+
+Each game is scored client-side but validated server-side against a
+**per-game plausibility envelope** (`src/sim/minigames.ts`: max duration, max
+score, max score per second, minimum inputs per point), because a fully
 authoritative implementation is disproportionate for a friends' toy while an
-unbounded client score is not acceptable either.
+unbounded client score is not acceptable either. The chosen game is fixed at
+`start` and stored in the server's session, so a client cannot start a cheap
+envelope and finish an expensive one; per-game curves translate the score
+into the `PLAY` performance multiplier (50–150) and the coin payout.
 
 ---
 

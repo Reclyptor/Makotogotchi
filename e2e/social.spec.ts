@@ -73,7 +73,8 @@ test.describe("social and economy", () => {
     const spectator = await browser.newContext();
     const playerPage = await player.newPage();
     const spectatorPage = await spectator.newPage();
-    await playerPage.goto("/");
+    // ?game= pins the rotation so the collision path below is deterministic.
+    await playerPage.goto("/?game=dustdash");
     await spectatorPage.goto("/");
     await expect(playerPage.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
     await expect(spectatorPage.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });

@@ -8,32 +8,35 @@ import { SPRITE_FRAMES, type FrameName } from "../atlas.generated";
 const LOAD_ATTEMPTS = 4;
 const RETRY_BASE_MS = 600;
 
-export class Atlas {
-  private image: HTMLImageElement | null = null;
+const loadOnce = (src: string, attempt: number): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error(`failed to load spritesheet: ${src}`));
+    // A cache-busting query on retries sidesteps a poisoned cache entry.
+    image.src = attempt === 1 ? src : `${src}?retry=${attempt}`;
+  });
 
-  async load(src: string): Promise<void> {
-    for (let attempt = 1; attempt <= LOAD_ATTEMPTS; attempt++) {
-      try {
-        this.image = await this.loadOnce(src, attempt);
-        return;
-      } catch {
-        if (attempt === LOAD_ATTEMPTS) {
-          console.error(`spritesheet failed to load after ${LOAD_ATTEMPTS} attempts: ${src}`);
-          return;
-        }
+/** Load the sheet with backoff; null only after every attempt failed. */
+export const loadSpriteSheet = async (src: string): Promise<HTMLImageElement | null> => {
+  for (let attempt = 1; attempt <= LOAD_ATTEMPTS; attempt++) {
+    try {
+      return await loadOnce(src, attempt);
+    } catch {
+      if (attempt < LOAD_ATTEMPTS) {
         await new Promise((resolve) => setTimeout(resolve, RETRY_BASE_MS * attempt));
       }
     }
   }
+  console.error(`spritesheet failed to load after ${LOAD_ATTEMPTS} attempts: ${src}`);
+  return null;
+};
 
-  private loadOnce(src: string, attempt: number): Promise<HTMLImageElement> {
-    return new Promise((resolve, reject) => {
-      const image = new Image();
-      image.onload = () => resolve(image);
-      image.onerror = () => reject(new Error(`failed to load spritesheet: ${src}`));
-      // A cache-busting query on retries sidesteps a poisoned cache entry.
-      image.src = attempt === 1 ? src : `${src}?retry=${attempt}`;
-    });
+export class Atlas {
+  private image: HTMLImageElement | null = null;
+
+  async load(src: string): Promise<void> {
+    this.image = await loadSpriteSheet(src);
   }
 
   get ready(): boolean {

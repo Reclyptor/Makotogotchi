@@ -44,6 +44,8 @@ export type MinigameMessage = {
   phase: "start" | "score" | "finish";
   caretakerId: string;
   caretakerName?: string;
+  /** Which game of the roster (src/sim/minigames.ts) is being played. */
+  game?: string;
   score?: number;
   applied?: number;
 };
