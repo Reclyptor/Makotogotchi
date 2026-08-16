@@ -6,6 +6,7 @@
 import { phaseAt, type PetState, type ProjectionContext } from "./model";
 import { project } from "./project";
 import { foodItem, toysPlayBonusPercent } from "./economy";
+import { quirkFoodPercent } from "./quirks";
 import { caretakerRecord, pruneCaretakers, recordApplied } from "./score";
 import {
   ACTION_MAGNITUDE,
@@ -95,7 +96,11 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
           // percent arithmetic keeps the fold exact.
           let base = magnitude.base;
           const food = event.action === "FEED" ? foodItem(event.itemId) : null;
-          if (food) base = Math.floor((base * food.scalePercent) / 100);
+          if (food) {
+            base = Math.floor((base * food.scalePercent) / 100);
+            // This generation's taste for the dish (SPEC §21.4).
+            base = Math.floor((base * quirkFoodPercent(state.generation.seed, event.itemId)) / 100);
+          }
           if (event.action === "PLAY") {
             base = Math.floor((base * (100 + toysPlayBonusPercent(state.toys))) / 100);
             if (event.performance !== undefined) base = Math.floor((base * event.performance) / 100);

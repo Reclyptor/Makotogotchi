@@ -48,6 +48,9 @@ const CARE_PARTICLES: Record<CareAction, { kind: ParticleKind; count: number }> 
   MEDICATE: { kind: "sparkle", count: 8 },
 };
 
+/** How this generation feels about the meal it was just fed (SPEC §21.4). */
+export type FoodTaste = "favorite" | "disliked";
+
 export type RoomDecor = { decor: string[]; activeCosmetic: string | null };
 
 export class Room {
@@ -76,13 +79,14 @@ export class Room {
     this.asleep = asleep;
   }
 
-  onCare(action: CareAction, label: string, nowMs: number): void {
-    this.machine.trigger(CARE_ONE_SHOTS[action], nowMs);
+  onCare(action: CareAction, label: string, nowMs: number, taste?: FoodTaste): void {
+    this.machine.trigger(taste === "disliked" ? "unhappyEating" : CARE_ONE_SHOTS[action], nowMs);
     this.toasts.push(label, nowMs);
-    if (!this.reducedMotion) {
-      const particles = CARE_PARTICLES[action];
-      this.particles.spawn(particles.kind, this.petX, PET_Y - 60, particles.count);
-    }
+    if (this.reducedMotion) return;
+    // A favourite meal draws hearts instead of crumbs — the same tell the
+    // pet gives when it is petted.
+    const particles = taste === "favorite" ? { kind: "heart" as const, count: 10 } : CARE_PARTICLES[action];
+    this.particles.spawn(particles.kind, this.petX, PET_Y - 60, particles.count);
   }
 
   celebrate(nowMs: number, kind: ParticleKind = "sparkle"): void {

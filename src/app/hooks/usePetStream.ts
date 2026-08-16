@@ -34,7 +34,15 @@ type Authoritative = {
   clockOffsetMs: number;
 };
 
-export type CareNotice = { seq: number; action: CareAction; caretakerId: string; caretakerName?: string; applied: number };
+export type CareNotice = {
+  seq: number;
+  action: CareAction;
+  caretakerId: string;
+  caretakerName?: string;
+  /** The item applied with the action, when there was one (SPEC §21.4). */
+  itemId?: string;
+  applied: number;
+};
 export type MilestoneNotice = { seq: number; kind: string; detail?: string };
 export type MinigameNotice = Omit<MinigameMessage, "type">;
 export type RecordNotice = Omit<RecordMessage, "type">;
@@ -140,6 +148,7 @@ export const usePetStream = (): PetStream => {
           action: message.action,
           caretakerId: message.caretakerId,
           ...(message.caretakerName !== undefined ? { caretakerName: message.caretakerName } : {}),
+          ...(message.itemId !== undefined ? { itemId: message.itemId } : {}),
           applied: message.applied,
         });
       }

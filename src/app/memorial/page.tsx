@@ -4,7 +4,10 @@
 import Link from "next/link";
 import { db } from "@/server/db/client";
 import { generations } from "@/server/db/collections";
+import { FOOD_ITEMS } from "@/sim/economy";
+import { MINIGAMES } from "@/sim/minigames";
 import { TICKS_PER_DAY } from "@/sim/tuning";
+import type { Quirks } from "@/sim/quirks";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +19,12 @@ const CAUSE_TEXT: Record<string, string> = {
   sickness: "succumbed to illness",
   age: "passed peacefully of old age",
 };
+
+/** "loved pizza, hated peppers, was best at Wheel Sprint" (SPEC §21.4). */
+const quirkText = (quirks: Quirks | undefined): string | null =>
+  quirks === undefined
+    ? null
+    : `Loved ${FOOD_ITEMS[quirks.favoriteFood].label}, hated ${FOOD_ITEMS[quirks.dislikedFood].label}, was best at ${MINIGAMES[quirks.favoriteGame].title}.`;
 
 export default async function MemorialPage() {
   const docs = await generations(await db())
@@ -41,6 +50,7 @@ export default async function MemorialPage() {
         {docs.map((doc) => {
           const lifespanDays =
             doc.hatchedAtTick !== null ? Math.round(((doc.died!.tick - doc.hatchedAtTick) / TICKS_PER_DAY) * 10) / 10 : 0;
+          const quirks = quirkText(doc.memorial?.quirks);
           return (
             <li key={doc._id} className="flex flex-col gap-2 rounded-lg bg-surface p-4">
               <div className="flex items-baseline justify-between">
@@ -51,6 +61,7 @@ export default async function MemorialPage() {
                 Lived {lifespanDays} days · {CAUSE_TEXT[doc.died!.cause] ?? doc.died!.cause} ·{" "}
                 {doc.died!.at.toLocaleDateString()}
               </p>
+              {quirks && <p className="text-sm italic text-muted">{quirks}</p>}
               {doc.memorial && doc.memorial.ranking.length > 0 && (
                 <div className="text-sm">
                   <h3 className="text-xs uppercase tracking-wide text-muted">devoted caretakers</h3>

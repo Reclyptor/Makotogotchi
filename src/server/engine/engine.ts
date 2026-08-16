@@ -204,6 +204,9 @@ export class PetEngine {
           action: inputEvent.action,
           caretakerId: inputEvent.caretakerId,
           ...(caretakerName !== undefined ? { caretakerName } : {}),
+          // The item rides along so clients can react to the pet's taste for
+          // it without a second round trip (SPEC §21.4).
+          ...(inputEvent.itemId !== undefined ? { itemId: inputEvent.itemId } : {}),
           applied,
           state,
         });

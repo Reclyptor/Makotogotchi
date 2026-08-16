@@ -5,6 +5,7 @@
 import type { Collection, Db } from "mongodb";
 import type { CauseOfDeath, PetState } from "@/sim/model";
 import type { PetEvent } from "@/sim/events";
+import type { Quirks } from "@/sim/quirks";
 
 export type GenerationDoc = {
   _id: string;
@@ -18,6 +19,13 @@ export type GenerationDoc = {
   memorial: {
     sealedAt: Date;
     ranking: { caretakerId: string; name: string; score: number }[];
+    /**
+     * The generation's personality, frozen at death (SPEC §21.4). Derivable
+     * from the seed today, but the memorial is a historical record: it must
+     * still say what was true even if the quirk tables are ever retuned.
+     * Absent on generations sealed before quirks existed.
+     */
+    quirks?: Quirks;
   } | null;
 };
 

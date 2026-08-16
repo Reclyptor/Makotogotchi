@@ -8,6 +8,7 @@
 
 import type { Db } from "mongodb";
 import type { Generation, PetState } from "@/sim/model";
+import { quirks } from "@/sim/quirks";
 import { INCUBATION_TICKS, MOURNING_TICKS } from "@/sim/tuning";
 import { generations, isDuplicateKeyError } from "../db/collections";
 import { createGeneration } from "../db/repository";
@@ -51,9 +52,11 @@ export class Lifecycle {
 
   /** Seal exactly once across restarts: the guard is the memorial field. */
   private async sealOnce(generationId: string): Promise<void> {
+    const doc = await generations(this.db).findOne({ _id: generationId });
+    if (!doc) return;
     const claimed = await generations(this.db).findOneAndUpdate(
       { _id: generationId, memorial: null, died: { $ne: null } },
-      { $set: { memorial: { sealedAt: new Date(), ranking: [] } } },
+      { $set: { memorial: { sealedAt: new Date(), ranking: [], quirks: quirks(doc.seed) } } },
     );
     if (!claimed) return; // already sealed, or death not yet recorded
     const ranking = await generationRanking(this.db, generationId);

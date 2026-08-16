@@ -21,6 +21,7 @@ export async function GET(): Promise<NextResponse> {
     lifespanDays:
       doc.hatchedAtTick !== null ? Math.round(((doc.died!.tick - doc.hatchedAtTick) / TICKS_PER_DAY) * 10) / 10 : 0,
     ranking: doc.memorial?.ranking ?? [],
+    quirks: doc.memorial?.quirks ?? null,
   }));
   return NextResponse.json({ entries }, { headers: { "Cache-Control": "no-store" } });
 }

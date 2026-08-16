@@ -28,12 +28,24 @@ export const BASE_CLIPS: Record<AnimationKey, Clip> = {
   dead: clip(["dead1", "dead2"], 2000, true),
 };
 
-export const ONE_SHOT_NAMES = ["eating", "playing", "bathing", "petted", "soothed", "medicated", "greeting", "celebrating"] as const;
+export const ONE_SHOT_NAMES = [
+  "eating",
+  "unhappyEating",
+  "playing",
+  "bathing",
+  "petted",
+  "soothed",
+  "medicated",
+  "greeting",
+  "celebrating",
+] as const;
 export type OneShotName = (typeof ONE_SHOT_NAMES)[number];
 
 /** Care-action reactions: play once, then return to the base clip. */
 export const ONE_SHOT_CLIPS: Record<OneShotName, Clip> = {
   eating: clip(["eat1", "eat2", "eat1", "eat2", "eat1", "eat2"], 450, false),
+  // A meal this generation dislikes still gets eaten, just resentfully.
+  unhappyEating: clip(["unhappyEat1", "unhappyEat2", "unhappyEat1", "unhappyEat2"], 450, false),
   playing: clip(["game1", "game2", "game3", "game1", "game2", "game3"], 400, false),
   bathing: clip(["dustbath1", "dustbath2", "dustbath3", "dustbath1", "dustbath2", "dustbath3"], 450, false),
   petted: clip(["lights1", "lights2", "lights1", "lights2"], 450, false),

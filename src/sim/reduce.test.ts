@@ -4,6 +4,8 @@ import { canPerform } from "./validate";
 import { project } from "./project";
 import { genesis } from "./genesis";
 import { budgetRemaining, caretakerRecord } from "./score";
+import { quirks } from "./quirks";
+import { FOOD_ITEMS, QUIRK_DISLIKED_PERCENT, QUIRK_FAVORITE_PERCENT, type FoodItemId } from "./economy";
 import { EventLog, hatchedState, replay, TEST_GENERATION, testCtx } from "./testkit";
 import {
   ACTION_MAGNITUDE,
@@ -219,6 +221,30 @@ describe("economy items (SPEC §13)", () => {
     expect(boosted.applied).toBeGreaterThan(plain.applied);
     expect(boosted.state.needs.joy).toBe(state.needs.joy + 35_000);
     expect(plain.state.needs.joy).toBe(state.needs.joy);
+  });
+
+  it("generational taste scales the same meal up or down (SPEC §21.4)", () => {
+    const taste = quirks(TEST_GENERATION.seed);
+    const state = { ...bornState(), needs: { hunger: 0, energy: 500_000, hygiene: 500_000, joy: 100_000 } };
+    const log = new EventLog();
+    const loved = reduce(state, { ...log.care(1000, "FEED", "a"), tick: 1000, itemId: taste.favoriteFood }, ctx);
+    const loathed = reduce(state, { ...log.care(1001, "FEED", "b"), tick: 1000, itemId: taste.dislikedFood }, ctx);
+
+    // Both meals run the same curve from the same empty stomach, so each
+    // one's result is its item scale and then its taste scale, in that order.
+    const expected = (itemId: string, tastePercent: number): number => {
+      const item = Math.floor((ACTION_MAGNITUDE.FEED * FOOD_ITEMS[itemId as FoodItemId].scalePercent) / 100);
+      return diminishedMagnitude(Math.floor((item * tastePercent) / 100), 0);
+    };
+    expect(loved.applied).toBe(expected(taste.favoriteFood, QUIRK_FAVORITE_PERCENT));
+    expect(loathed.applied).toBe(expected(taste.dislikedFood, QUIRK_DISLIKED_PERCENT));
+    expect(loved.applied).toBeGreaterThan(loathed.applied);
+  });
+
+  it("leaves a plain feed untouched by taste — no item, no opinion", () => {
+    const state = { ...bornState(), needs: { hunger: 0, energy: 500_000, hygiene: 500_000, joy: 100_000 } };
+    const log = new EventLog();
+    expect(reduce(state, log.care(1000, "FEED", "a"), ctx).applied).toBe(diminishedMagnitude(ACTION_MAGNITUDE.FEED, 0));
   });
 
   it("TOY_ADDED installs once and raises PLAY magnitude for the generation", () => {

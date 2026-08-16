@@ -6,8 +6,9 @@
 
 import { useEffect, useRef } from "react";
 import { derive } from "@/sim/derive";
+import { quirks } from "@/sim/quirks";
 import type { CareAction } from "@/sim/tuning";
-import { Room, ROOM_HEIGHT, ROOM_WIDTH } from "@/game/scene/room";
+import { Room, ROOM_HEIGHT, ROOM_WIDTH, type FoodTaste } from "@/game/scene/room";
 import { startLoop } from "@/game/engine/loop";
 import type { PetStream } from "@/app/hooks/usePetStream";
 
@@ -99,13 +100,25 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
     };
     media.addEventListener("change", onMotionChange);
 
+    // The generation's taste is recomputable from the seed the state stream
+    // already carries, so a meal needs no extra round trip (SPEC §21.4).
+    const tasteOf = (itemId: string | undefined): FoodTaste | undefined => {
+      const state = itemId === undefined ? null : projectNow();
+      if (!state) return undefined;
+      const taste = quirks(state.generation.seed);
+      if (itemId === taste.favoriteFood) return "favorite";
+      if (itemId === taste.dislikedFood) return "disliked";
+      return undefined;
+    };
+
     const offCare = onCare((notice) => {
       const who =
         notice.caretakerId === caretakerRef.current
           ? "you"
           : (notice.caretakerName ?? `friend ${notice.caretakerId.slice(0, 4)}`);
       const amount = notice.applied >= 1000 ? `+${(notice.applied / 10_000).toFixed(1)}% ` : "";
-      room.onCare(notice.action, `${amount}${ACTION_EMOJI[notice.action]} ${who}`, performance.now());
+      const taste = notice.action === "FEED" ? tasteOf(notice.itemId) : undefined;
+      room.onCare(notice.action, `${amount}${ACTION_EMOJI[notice.action]} ${who}`, performance.now(), taste);
     });
     const offMilestone = onMilestone((notice) => {
       const label = MILESTONE_LABELS[notice.kind];

@@ -13,6 +13,8 @@ import { key, redis } from "@/server/redis/client";
 import { runtime } from "@/server/runtime";
 import { canPerform } from "@/sim/validate";
 import { MINIGAME_IDS, MINIGAMES, plausibleRun, type MinigameId } from "@/sim/minigames";
+import { quirks } from "@/sim/quirks";
+import { QUIRK_FAVORITE_GAME_COIN_PERCENT } from "@/sim/economy";
 import { anonymousName, creditCoins, nicknameMap, recordContribution } from "@/server/social";
 import { submitScore } from "@/server/records";
 import { isoWeekKeyAtTick } from "@/server/schedule";
@@ -140,7 +142,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return withCookie(NextResponse.json({ error: "not_now", reason: outcome.rejection.reason }, { status: 409 }));
   }
 
-  const coins = sessionGame.coins(score);
+  // This generation is better at one game than the others, and paid for it
+  // (SPEC §21.4) — the same pure function every client can check.
+  const favorite = quirks(current.seed).favoriteGame === sessionGame.id;
+  const base = sessionGame.coins(score);
+  const coins = favorite ? Math.round((base * QUIRK_FAVORITE_GAME_COIN_PERCENT) / 100) : base;
   const ledger = await recordContribution(await db(), {
     caretakerId: identity.caretakerId,
     generationId: current.id,

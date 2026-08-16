@@ -15,6 +15,8 @@ export type CareMessage = {
   action: CareEvent["action"];
   caretakerId: string;
   caretakerName?: string;
+  /** The purchased item applied with the action, when there was one. */
+  itemId?: string;
   applied: number;
   state: PetState;
 };

@@ -11,11 +11,11 @@
 import { useCallback, useEffect, useState } from "react";
 
 type Catalog = {
-  food: Record<string, { price: number; scalePercent: number; joyBonus: number }>;
-  medicine: Record<string, { price: number }>;
-  toys: Record<string, { price: number; playBonusPercent: number }>;
-  cosmetics: Record<string, { price: number; label: string }>;
-  decor: Record<string, { price: number; label: string }>;
+  food: Record<string, { label: string; price: number; scalePercent: number; joyBonus: number }>;
+  medicine: Record<string, { label: string; price: number }>;
+  toys: Record<string, { label: string; price: number; playBonusPercent: number }>;
+  cosmetics: Record<string, { label: string; price: number }>;
+  decor: Record<string, { label: string; price: number }>;
 };
 
 type ShopState = {
@@ -26,21 +26,12 @@ type ShopState = {
   toys: string[];
 };
 
-const ITEM_LABELS: Record<string, string> = {
-  pepper_treat: "Pepper Treat",
-  fish_feast: "Fish Feast",
-  super_medicine: "Super Medicine",
-  teeter: "Teeter Toy",
-  wheel: "Running Wheel",
-  bow: "Ribbon Bow",
-  cap: "Tiny Cap",
-  crown: "Royal Crown",
-  plant: "Potted Plant",
-  picture: "Framed Picture",
-  lamp: "Cozy Lamp",
+/** Every section reads its display name from the catalog — one source. */
+const itemLabel = (shop: ShopState | null, itemId: string): string => {
+  if (!shop) return itemId;
+  const sections = [shop.catalog.food, shop.catalog.medicine, shop.catalog.toys, shop.catalog.cosmetics, shop.catalog.decor];
+  return sections.map((section) => section[itemId]?.label).find((label) => label !== undefined) ?? itemId;
 };
-
-const itemLabel = (itemId: string): string => ITEM_LABELS[itemId] ?? itemId;
 
 export type ShopPanelProps = {
   onClose: () => void;
@@ -103,7 +94,7 @@ export default function ShopPanel({ onClose }: ShopPanelProps) {
     }).catch(() => null);
     if (!response) return;
     if (response.ok) {
-      setNotice(`Bought ${itemLabel(itemId)}!`);
+      setNotice(`Bought ${itemLabel(shop, itemId)}!`);
     } else {
       const body = (await response.json().catch(() => null)) as { error?: string } | null;
       setNotice(
@@ -146,7 +137,7 @@ export default function ShopPanel({ onClose }: ShopPanelProps) {
     <button
       type="button"
       onClick={() => void buy(itemId)}
-      aria-label={`Buy ${itemLabel(itemId)} for ${price} coins`}
+      aria-label={`Buy ${itemLabel(shop, itemId)} for ${price} coins`}
       className="press w-full rounded-lg bg-accent-strong px-2 py-1.5 text-center text-xs font-bold tabular-nums text-white"
     >
       🪙 {price}
@@ -197,7 +188,7 @@ export default function ShopPanel({ onClose }: ShopPanelProps) {
               .map(([itemId, count]) => (
                 <Row
                   key={`pack-${itemId}`}
-                  name={`${itemLabel(itemId)} ×${count}`}
+                  name={`${itemLabel(shop, itemId)} ×${count}`}
                   detail={itemId in shop.catalog.medicine ? "Cures instantly, no cooldown" : "Extra-tasty meal"}
                   action={smallButton("Use", () => void consumeOwnedItem(itemId, itemId in shop.catalog.medicine ? "MEDICATE" : "FEED"))}
                 />
@@ -209,20 +200,20 @@ export default function ShopPanel({ onClose }: ShopPanelProps) {
         {Object.entries(shop.catalog.food).map(([itemId, item]) => (
           <Row
             key={itemId}
-            name={itemLabel(itemId)}
+            name={item.label}
             detail={`Feeds ×${(item.scalePercent / 100).toFixed(2)} · +${item.joyBonus / 10_000}% joy`}
             action={priceButton(itemId, item.price)}
           />
         ))}
         {Object.entries(shop.catalog.medicine).map(([itemId, item]) => (
-          <Row key={itemId} name={itemLabel(itemId)} detail="Cures instantly, no cooldown" action={priceButton(itemId, item.price)} />
+          <Row key={itemId} name={item.label} detail="Cures instantly, no cooldown" action={priceButton(itemId, item.price)} />
         ))}
 
         <SectionHeading>Toys · This Generation</SectionHeading>
         {Object.entries(shop.catalog.toys).map(([itemId, item]) => (
           <Row
             key={itemId}
-            name={itemLabel(itemId)}
+            name={item.label}
             detail={`Play restores +${item.playBonusPercent}% more`}
             action={shop.toys.includes(itemId) ? <Badge>Owned</Badge> : priceButton(itemId, item.price)}
           />

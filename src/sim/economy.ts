@@ -5,6 +5,7 @@
 
 export type FoodItem = {
   kind: "food";
+  label: string;
   price: number;
   /** Multiplies FEED's base magnitude (percent). */
   scalePercent: number;
@@ -14,6 +15,7 @@ export type FoodItem = {
 
 export type MedicineItem = {
   kind: "medicine";
+  label: string;
   price: number;
   /** Cures instantly: global and per-caretaker cooldowns are bypassed. */
   bypassCooldowns: true;
@@ -21,29 +23,33 @@ export type MedicineItem = {
 
 export type ToyItem = {
   kind: "toy";
+  label: string;
   price: number;
   /** Permanent for the generation: raises PLAY's base magnitude (percent). */
   playBonusPercent: number;
 };
 
 export const FOOD_ITEMS = {
-  pepper_treat: { kind: "food", price: 60, scalePercent: 120, joyBonus: 15_000 },
-  fish_feast: { kind: "food", price: 150, scalePercent: 145, joyBonus: 35_000 },
+  pepper_treat: { kind: "food", label: "Pepper Treat", price: 60, scalePercent: 120, joyBonus: 15_000 },
+  fish_feast: { kind: "food", label: "Fish Feast", price: 150, scalePercent: 145, joyBonus: 35_000 },
 } as const satisfies Record<string, FoodItem>;
 
 export const MEDICINE_ITEMS = {
-  super_medicine: { kind: "medicine", price: 250, bypassCooldowns: true },
+  super_medicine: { kind: "medicine", label: "Super Medicine", price: 250, bypassCooldowns: true },
 } as const satisfies Record<string, MedicineItem>;
 
 export const TOY_ITEMS = {
-  teeter: { kind: "toy", price: 400, playBonusPercent: 15 },
-  wheel: { kind: "toy", price: 900, playBonusPercent: 30 },
+  teeter: { kind: "toy", label: "Teeter Toy", price: 400, playBonusPercent: 15 },
+  wheel: { kind: "toy", label: "Running Wheel", price: 900, playBonusPercent: 30 },
 } as const satisfies Record<string, ToyItem>;
 
 export type FoodItemId = keyof typeof FOOD_ITEMS;
 export type MedicineItemId = keyof typeof MEDICINE_ITEMS;
 export type ToyItemId = keyof typeof TOY_ITEMS;
 export type SimItemId = FoodItemId | MedicineItemId | ToyItemId;
+
+/** Declaration order is the canonical order every quirk draw indexes into. */
+export const FOOD_ITEM_IDS = Object.keys(FOOD_ITEMS) as readonly FoodItemId[];
 
 export const foodItem = (itemId: string | undefined): FoodItem | null =>
   itemId !== undefined && itemId in FOOD_ITEMS ? FOOD_ITEMS[itemId as FoodItemId] : null;
@@ -62,3 +68,11 @@ export const toysPlayBonusPercent = (toys: readonly string[]): number =>
 // magnitude between these percentages of base.
 export const PERFORMANCE_MIN = 50;
 export const PERFORMANCE_MAX = 150;
+
+// Generational taste (SPEC §21.4). A generation's favourite meal lands harder
+// and its least favourite lands softer — applied to FEED's base magnitude, so
+// diminishing returns still govern the result. The favourite minigame pays
+// out better for the same score; joy is joy, but enthusiasm is worth coins.
+export const QUIRK_FAVORITE_PERCENT = 125;
+export const QUIRK_DISLIKED_PERCENT = 75;
+export const QUIRK_FAVORITE_GAME_COIN_PERCENT = 125;

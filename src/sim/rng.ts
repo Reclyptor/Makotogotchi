@@ -5,6 +5,9 @@
 
 export const RNG_PURPOSE = {
   sickOnset: 1,
+  quirkFavoriteFood: 2,
+  quirkDislikedFood: 3,
+  quirkFavoriteGame: 4,
 } as const;
 
 export type RngPurpose = (typeof RNG_PURPOSE)[keyof typeof RNG_PURPOSE];
