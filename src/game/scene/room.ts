@@ -3,7 +3,7 @@
 // by an integer factor with image-rendering: pixelated.
 
 import { Atlas } from "../engine/atlas";
-import { Particles } from "../engine/particles";
+import { Particles, type ParticleKind } from "../engine/particles";
 import { Toasts } from "./toasts";
 import { AnimationMachine } from "../anim/machine";
 import { WALK_CLIP, type OneShotName } from "../anim/clips";
@@ -39,7 +39,7 @@ const CARE_ONE_SHOTS: Record<CareAction, OneShotName> = {
   MEDICATE: "medicated",
 };
 
-const CARE_PARTICLES: Record<CareAction, { kind: "heart" | "sparkle" | "zzz" | "crumb" | "dust"; count: number }> = {
+const CARE_PARTICLES: Record<CareAction, { kind: ParticleKind; count: number }> = {
   FEED: { kind: "crumb", count: 8 },
   PLAY: { kind: "sparkle", count: 10 },
   CLEAN: { kind: "dust", count: 14 },
@@ -85,9 +85,9 @@ export class Room {
     }
   }
 
-  celebrate(nowMs: number): void {
+  celebrate(nowMs: number, kind: ParticleKind = "sparkle"): void {
     this.machine.trigger("celebrating", nowMs);
-    if (!this.reducedMotion) this.particles.spawn("sparkle", this.petX, PET_Y - 60, 12);
+    if (!this.reducedMotion) this.particles.spawn(kind, this.petX, PET_Y - 60, 12);
   }
 
   onMilestone(label: string, nowMs: number): void {

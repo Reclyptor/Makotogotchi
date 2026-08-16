@@ -2,6 +2,8 @@
 // everything a client needs to render now and project forward locally —
 // state, derived view, clock alignment, and the phase schedule so the
 // browser's project() sees the same sleep/wake boundaries as the server's.
+// The zone name rides along too: the client needs the pet's own calendar to
+// decide whether it has already been greeted today (SPEC §21.1).
 
 import { derive, type DerivedState } from "@/sim/derive";
 import type { Generation, PetState, PhaseSchedule } from "@/sim/model";
@@ -19,6 +21,8 @@ export type SnapshotPayload = {
   genesisEpochMs: number;
   generation: { id: string; ordinal: number; name: string | null };
   phaseSchedule: PhaseSchedule;
+  /** The pet's IANA zone — the calendar every client-side day boundary uses. */
+  timeZone: string;
   room: RoomView;
 };
 
@@ -42,5 +46,6 @@ export const snapshotPayload = async (state: PetState, generation: Generation): 
   genesisEpochMs: generation.genesisEpochMs,
   generation: { id: generation.id, ordinal: generation.ordinal, name: state.generation.name },
   phaseSchedule: scheduleFor(generation.genesisEpochMs, state.tick, state.tick + 2 * TICKS_PER_DAY, env().PET_TIMEZONE),
+  timeZone: env().PET_TIMEZONE,
   room: await cachedRoom(),
 });

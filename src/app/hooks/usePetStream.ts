@@ -48,6 +48,8 @@ export type PetStream = {
   presenceNames: string[];
   /** Communal room decoration (SPEC §13.2), from the latest snapshot. */
   room: RoomView | null;
+  /** The pet's IANA zone, from the latest snapshot — its calendar, not ours. */
+  timeZone: string | null;
   /** Authoritative state projected to the corrected current tick. */
   projectNow: () => PetState | null;
   /** The projection context (phase schedule) for validate/derive callers. */
@@ -65,6 +67,7 @@ export const usePetStream = (): PetStream => {
   const minigameListeners = useRef(new Set<(notice: MinigameNotice) => void>());
   const reactListeners = useRef(new Set<(notice: ReactNotice) => void>());
   const [room, setRoom] = useState<RoomView | null>(null);
+  const [timeZone, setTimeZone] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [caretakerId, setCaretakerId] = useState<string | null>(null);
   const [profile, setProfile] = useState<CaretakerProfile | null>(null);
@@ -89,6 +92,7 @@ export const usePetStream = (): PetStream => {
         clockOffsetMs: Date.now() - (payload.genesisEpochMs + payload.serverTick * payload.tickSeconds * 1000),
       };
       setRoom(payload.room);
+      setTimeZone(payload.timeZone);
     };
 
     const acceptState = (state: PetState): void => {
@@ -202,6 +206,7 @@ export const usePetStream = (): PetStream => {
     presenceCount,
     presenceNames,
     room,
+    timeZone,
     projectNow,
     context,
     onCare,

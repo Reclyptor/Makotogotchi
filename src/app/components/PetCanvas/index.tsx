@@ -29,17 +29,55 @@ const MILESTONE_LABELS: Record<string, string> = {
   EVOLVED: "Makoto evolved!",
 };
 
+// The greeting bow (SPEC §21.1): once per pet-calendar day, per browser,
+// landing on a settled room rather than the first painted frame.
+const GREET_STORAGE_KEY = "mgc:last-greet";
+const GREET_DELAY_MS = 1000;
+
+// Crowd moments (SPEC §21.2): the rising edge past this many watchers is
+// worth celebrating, but no more often than this. Module scope on purpose —
+// a remount must not hand the room a fresh throttle.
+const CROWD_THRESHOLD = 3;
+const CROWD_THROTTLE_MS = 10 * 60 * 1000;
+let lastCrowdMs = 0;
+
+/** The pet's own calendar date, as a stable YYYY-MM-DD key. */
+const petDayKey = (timeZone: string): string =>
+  new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+
+/** localStorage is unavailable in some privacy modes; a lost bow is fine. */
+const readStored = (storageKey: string): string | null => {
+  try {
+    return window.localStorage.getItem(storageKey);
+  } catch {
+    return null;
+  }
+};
+
+const writeStored = (storageKey: string, value: string): void => {
+  try {
+    window.localStorage.setItem(storageKey, value);
+  } catch {
+    // Nothing to do — the pet simply bows again tomorrow's first load.
+  }
+};
+
 export type PetCanvasProps = {
   stream: PetStream;
 };
 
 export default function PetCanvas({ stream }: PetCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const { projectNow, onCare, onMilestone, onMinigame, onReact, caretakerId, room: roomView } = stream;
+  const { projectNow, onCare, onMilestone, onMinigame, onReact, caretakerId, room: roomView, timeZone, presenceCount } = stream;
+  const roomRef = useRef<Room | null>(null);
   const roomViewRef = useRef(roomView);
   useEffect(() => {
     roomViewRef.current = roomView;
   }, [roomView]);
+  const timeZoneRef = useRef(timeZone);
+  useEffect(() => {
+    timeZoneRef.current = timeZone;
+  }, [timeZone]);
   const caretakerRef = useRef<string | null>(null);
   useEffect(() => {
     caretakerRef.current = caretakerId;
@@ -51,6 +89,7 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
     if (!canvas || !ctx) return;
 
     const room = new Room();
+    roomRef.current = room;
     void room.atlas.load("/sprites.png");
 
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -88,11 +127,37 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
       }
     });
 
+    // The greeting is armed the first frame every precondition holds, then
+    // fires a beat later so the bow reads as a greeting and not a twitch.
+    let greetDueAtMs: number | null = null;
+    let greeted = false;
+    const maybeGreet = (awake: boolean, nowMs: number): void => {
+      if (greeted) return;
+      const zone = timeZoneRef.current;
+      if (!zone || !room.atlas.ready || !awake) return;
+      const today = petDayKey(zone);
+      if (readStored(GREET_STORAGE_KEY) === today) {
+        greeted = true;
+        return;
+      }
+      if (greetDueAtMs === null) {
+        greetDueAtMs = nowMs + GREET_DELAY_MS;
+        return;
+      }
+      if (nowMs < greetDueAtMs) return;
+      greeted = true;
+      writeStored(GREET_STORAGE_KEY, today);
+      room.machine.trigger("greeting", nowMs);
+    };
+
     const stop = startLoop({
       update: (dt) => room.update(dt),
       render: (now) => {
         const state = projectNow();
-        if (state) room.syncDerived(derive(state), state.asleep, now);
+        if (state) {
+          room.syncDerived(derive(state), state.asleep, now);
+          maybeGreet(state.bornAtTick !== null && state.diedAtTick === null && !state.asleep, now);
+        }
         const view = roomViewRef.current;
         if (view) room.decor = { decor: view.decor, activeCosmetic: view.activeCosmetic };
         room.render(ctx, now);
@@ -101,6 +166,7 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
 
     return () => {
       stop();
+      roomRef.current = null;
       offCare();
       offMilestone();
       offMinigame();
@@ -108,6 +174,21 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
       media.removeEventListener("change", onMotionChange);
     };
   }, [onCare, onMilestone, onMinigame, onReact, projectNow]);
+
+  // A crowd gathering is a rising edge, not a level: the room celebrates the
+  // moment the third watcher arrives, and stays quiet while they linger.
+  const previousCrowdRef = useRef(0);
+  useEffect(() => {
+    const previous = previousCrowdRef.current;
+    previousCrowdRef.current = presenceCount;
+    const room = roomRef.current;
+    if (!room || previous >= CROWD_THRESHOLD || presenceCount < CROWD_THRESHOLD) return;
+    const now = Date.now();
+    if (now - lastCrowdMs < CROWD_THROTTLE_MS) return;
+    lastCrowdMs = now;
+    room.celebrate(performance.now(), "heart");
+    room.onMilestone("a crowd gathers!", performance.now());
+  }, [presenceCount]);
 
   // Integer upscaling only (SPEC §10.3): the canvas grows in whole multiples
   // of the logical resolution so pixels stay square and even.
