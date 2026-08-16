@@ -63,6 +63,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const session: Session = { caretakerId: identity.caretakerId, startedAtMs: Date.now(), game: game.id };
     const claimed = await redis().set(sessionKey, JSON.stringify(session), "PX", game.maxDurationMs + SESSION_SLACK_MS, "NX");
     if (claimed !== "OK") {
+      // A duplicate start from the same caretaker for the same game (a
+      // remount, a retried request) rejoins its own fresh session instead
+      // of reading as "someone else is playing".
+      const raw = await redis().get(sessionKey);
+      const existing = raw ? (JSON.parse(raw) as Session) : null;
+      if (existing && existing.caretakerId === identity.caretakerId && existing.game === game.id) {
+        return withCookie(NextResponse.json({ ok: true }));
+      }
       return withCookie(NextResponse.json({ error: "busy", reason: "GAME_IN_PROGRESS" }, { status: 409 }));
     }
     await publish({
