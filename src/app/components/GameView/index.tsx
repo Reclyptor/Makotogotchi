@@ -1,10 +1,11 @@
 "use client";
 
-// The game screen (SPEC §11.2): header, room canvas, meters, actions, and
-// the live feed — mobile-first single column. Owns the stream connection,
-// a 4 Hz UI projection tick (the canvas runs its own rAF loop), the feed
-// log, and the audio toggle. During incubation the naming vote takes the
-// action bar's place; after death, the memorial link does.
+// The game screen (SPEC §11.2): identity bar, the habitat, meters, actions,
+// reactions, and the persistent activity feed — mobile-first, springy, and
+// fast. Owns the stream connection, a 4 Hz UI projection tick (the canvas
+// runs its own rAF loop), feed history + live merge, and the audio toggle.
+// During incubation the naming vote takes the action bar's place; after
+// death, the memorial takes over.
 
 import { useEffect, useRef, useState } from "react";
 import { derive, type DerivedState } from "@/sim/derive";
@@ -21,6 +22,7 @@ import PushToggle from "@/app/components/PushToggle";
 import ShopPanel from "@/app/components/ShopPanel";
 import DustDash from "@/app/components/DustDash";
 import { usePetStream } from "@/app/hooks/usePetStream";
+import type { FeedEntryPayload } from "@/app/api/feed/route";
 
 const STAGE_LABELS: Record<string, string> = {
   EGG: "Egg",
@@ -29,6 +31,26 @@ const STAGE_LABELS: Record<string, string> = {
   JUVENILE: "Juvenile",
   ADULT: "Adult",
   ELDER: "Elder",
+};
+
+const ACTION_EMOJI: Record<CareAction, string> = {
+  FEED: "🍖",
+  PLAY: "🎮",
+  CLEAN: "🌪️",
+  PET: "💛",
+  LULLABY: "🎵",
+  MEDICATE: "💊",
+};
+
+const MILESTONE_ICONS: Record<string, string> = {
+  HATCHED: "🐣",
+  EVOLVED: "✨",
+  BECAME_SICK: "🌡️",
+  RECOVERED: "💊",
+  SLEPT: "💤",
+  WOKE: "☀️",
+  DIED: "🪦",
+  CRITICAL: "⚠️",
 };
 
 const actionFeedText = (petName: string): Record<CareAction, string> => ({
@@ -41,15 +63,17 @@ const actionFeedText = (petName: string): Record<CareAction, string> => ({
 });
 
 const milestoneFeedText = (petName: string): Record<string, string> => ({
-  HATCHED: `🎉 ${petName} hatched!`,
-  BECAME_SICK: `${petName} got sick! 🌡️`,
+  HATCHED: `${petName} hatched!`,
+  BECAME_SICK: `${petName} got sick!`,
   RECOVERED: `${petName} recovered!`,
-  SLEPT: `${petName} fell asleep 💤`,
-  WOKE: `${petName} woke up ☀️`,
-  DIED: `${petName} has died. 🪦`,
-  EVOLVED: `${petName} evolved! ✨`,
-  CRITICAL: "A need is critically low! ⚠️",
+  SLEPT: `${petName} fell asleep`,
+  WOKE: `${petName} woke up`,
+  DIED: `${petName} has died.`,
+  EVOLVED: `${petName} evolved!`,
+  CRITICAL: "A need is critically low!",
 });
+
+const clockTime = (date: Date): string => date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 const age = (state: PetState): string => {
   if (state.bornAtTick === null) return "incubating";
@@ -69,10 +93,12 @@ export default function GameView() {
   const [playing, setPlaying] = useState(false);
   const [spectating, setSpectating] = useState<{ name: string; score: number } | null>(null);
   const audioRef = useRef<GameAudio | null>(null);
-  const feedId = useRef(0);
+  const localId = useRef(0);
+  const maxSeqRef = useRef(-1);
   const caretakerRef = useRef<string | null>(null);
   const petNameRef = useRef("Makoto");
   const greetedRef = useRef(false);
+  const historyLoadedRef = useRef(false);
 
   useEffect(() => {
     caretakerRef.current = caretakerId;
@@ -98,21 +124,58 @@ export default function GameView() {
     return () => clearInterval(timer);
   }, [projectNow]);
 
-  const pushFeed = (text: string): void => {
-    feedId.current += 1;
+  const pushFeed = (icon: string, text: string, id?: number | string, at?: Date): void => {
+    localId.current += 1;
     const entry: FeedEntry = {
-      id: feedId.current,
+      id: id ?? `local-${localId.current}`,
+      icon,
       text,
-      at: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      at: clockTime(at ?? new Date()),
     };
-    setFeed((current) => [...current.slice(-49), entry]);
+    setFeed((current) => [...current.slice(-119), entry]);
   };
+
+  // Seed the feed from history once identity is known, so "You" attribution
+  // works for past entries too. Live events with seq ≤ the newest historical
+  // seq are duplicates from the connect race and are dropped.
+  useEffect(() => {
+    if (!caretakerId || historyLoadedRef.current) return;
+    historyLoadedRef.current = true;
+    void (async () => {
+      const response = await fetch("/api/feed").catch(() => null);
+      if (!response?.ok) return;
+      const body = (await response.json()) as { generationName: string | null; entries: FeedEntryPayload[] };
+      const petName = body.generationName ?? "Makoto";
+      const seeded: FeedEntry[] = body.entries.map((entry) => {
+        if (entry.type === "care") {
+          const who = entry.caretakerId === caretakerId ? "You" : (entry.caretakerName ?? "A friend");
+          const amount = (entry.applied ?? 0) >= 1000 ? ` (+${((entry.applied ?? 0) / 10_000).toFixed(1)}%)` : "";
+          return {
+            id: entry.seq,
+            icon: ACTION_EMOJI[entry.action as CareAction] ?? "✨",
+            text: `${who} ${actionFeedText(petName)[entry.action as CareAction]}${amount}`,
+            at: clockTime(new Date(entry.at)),
+          };
+        }
+        const name = entry.kind === "HATCHED" && entry.detail ? entry.detail : petName;
+        return {
+          id: entry.seq,
+          icon: MILESTONE_ICONS[entry.kind ?? ""] ?? "✨",
+          text: milestoneFeedText(name)[entry.kind ?? ""] ?? (entry.kind ?? ""),
+          at: clockTime(new Date(entry.at)),
+        };
+      });
+      if (seeded.length > 0) maxSeqRef.current = Math.max(maxSeqRef.current, seeded[seeded.length - 1]!.id as number);
+      setFeed((live) => [...seeded, ...live.filter((entry) => typeof entry.id === "string")]);
+    })();
+  }, [caretakerId]);
 
   // Returning caretakers get greeted by name (SPEC §2.11).
   useEffect(() => {
     if (profile?.nickname && !greetedRef.current) {
       greetedRef.current = true;
       pushFeed(
+        "👋",
         `Welcome back, ${profile.nickname}!${profile.streakDays > 1 ? ` 🔥 ${profile.streakDays}-day streak` : ""}`,
       );
     }
@@ -120,25 +183,26 @@ export default function GameView() {
 
   useEffect(() => {
     const offCare = onCare((notice) => {
+      if (notice.seq <= maxSeqRef.current) return;
+      maxSeqRef.current = notice.seq;
       const who =
         notice.caretakerId === caretakerRef.current ? "You" : (notice.caretakerName ?? `Friend ${notice.caretakerId.slice(0, 4)}`);
       const amount = notice.applied >= 1000 ? ` (+${(notice.applied / 10_000).toFixed(1)}%)` : "";
-      pushFeed(`${who} ${actionFeedText(petNameRef.current)[notice.action]}${amount}`);
+      pushFeed(ACTION_EMOJI[notice.action], `${who} ${actionFeedText(petNameRef.current)[notice.action]}${amount}`, notice.seq);
       audioRef.current?.playAction(notice.action);
     });
     const offMilestone = onMilestone((notice) => {
-      const text = milestoneFeedText(notice.kind === "HATCHED" && notice.detail ? notice.detail : petNameRef.current)[
-        notice.kind
-      ];
-      if (text) pushFeed(text);
+      if (notice.seq <= maxSeqRef.current) return;
+      maxSeqRef.current = notice.seq;
+      const name = notice.kind === "HATCHED" && notice.detail ? notice.detail : petNameRef.current;
+      const text = milestoneFeedText(name)[notice.kind];
+      if (text) pushFeed(MILESTONE_ICONS[notice.kind] ?? "✨", text, notice.seq);
       if (notice.kind === "CRITICAL" || notice.kind === "BECAME_SICK" || notice.kind === "DIED") {
         audioRef.current?.playAlert();
       }
     });
-    // The minigame spectacle (SPEC §13.3): a banner with the live score for
-    // everyone who isn't the one playing. A staleness timeout backstops the
-    // finish broadcast — a crashed or abandoned game (closed tab, lost
-    // network) must never pin the banner forever.
+    // The minigame spectacle (SPEC §13.3), with a staleness backstop so a
+    // crashed game can never pin the banner.
     let spectateTimeout: ReturnType<typeof setTimeout> | null = null;
     const armSpectateTimeout = (): void => {
       if (spectateTimeout) clearTimeout(spectateTimeout);
@@ -149,19 +213,19 @@ export default function GameView() {
       if (notice.phase === "start") {
         setSpectating({ name, score: 0 });
         armSpectateTimeout();
-        pushFeed(`${name} started a game of Dust Dash! 🎮`);
+        pushFeed("🎮", `${name} started a game of Dust Dash!`);
       } else if (notice.phase === "score" && notice.score !== undefined) {
         setSpectating((current) => (current ? { ...current, score: notice.score! } : { name, score: notice.score! }));
         armSpectateTimeout();
       } else if (notice.phase === "finish") {
         if (spectateTimeout) clearTimeout(spectateTimeout);
         setSpectating(null);
-        if (notice.score !== undefined) pushFeed(`${name} scored ${notice.score} at Dust Dash!`);
+        if (notice.score !== undefined) pushFeed("🏆", `${name} scored ${notice.score} at Dust Dash!`);
       }
     });
     const offReact = onReact((notice) => {
       const who = notice.caretakerId === caretakerRef.current ? "You" : notice.caretakerName;
-      pushFeed(`${who} reacted ${notice.emoji}`);
+      pushFeed(notice.emoji, `${who} reacted ${notice.emoji}`);
     });
     return () => {
       offCare();
@@ -185,21 +249,28 @@ export default function GameView() {
   const isEgg = ui !== null && ui.state.bornAtTick === null;
   const isDead = ui !== null && ui.state.diedAtTick !== null;
 
+  const statusText = ui
+    ? isDead
+      ? `${petName} has died. A new egg will appear soon.`
+      : isEgg
+        ? "The egg is incubating…"
+        : ui.state.asleep
+          ? `${petName} is asleep.`
+          : ui.derived.ailments.length > 0
+            ? `${petName} is ${ui.derived.ailments.join(", ").toLowerCase()}.`
+            : `${petName} is doing fine.`
+    : "Connecting…";
+
   return (
-    <div className="flex w-full max-w-xl flex-col items-center gap-4">
-      <header className="flex w-full items-center justify-between gap-2 text-sm">
-        <div className="flex items-baseline gap-2">
-          <span className="text-lg font-bold">{isEgg ? "???" : petName}</span>
-          {ui && (
-            <span className="text-muted">
-              {age(ui.state)} · {STAGE_LABELS[stage ?? ""] ?? ""}
-              {ui.state.form ? ` · ${ui.state.form.toLowerCase()}` : ""}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
+    <div className="flex w-full max-w-xl flex-col items-center gap-3">
+      {/* Top bar: wordmark + live status cluster */}
+      <header className="flex w-full items-center justify-between gap-2">
+        <span className="font-pixel text-[13px] tracking-tight text-accent drop-shadow-[0_0_12px_rgba(167,139,250,0.5)]">
+          MAKOTOGOTCHI
+        </span>
+        <div className="flex items-center gap-2">
           <span
-            className="text-muted"
+            className="panel !rounded-full px-2.5 py-1 text-xs text-muted"
             aria-live="polite"
             title={stream.presenceNames.length > 0 ? stream.presenceNames.join(", ") : undefined}
           >
@@ -210,99 +281,107 @@ export default function GameView() {
             onClick={toggleAudio}
             aria-pressed={!muted}
             aria-label={muted ? "Unmute sounds" : "Mute sounds"}
-            className="rounded-md bg-surface px-2 py-1 outline-offset-2"
+            className="press panel !rounded-full px-2.5 py-1 text-xs"
           >
             {muted ? "🔇" : "🔊"}
           </button>
-          <span className={stream.connected ? "text-emerald-400" : "text-muted"} role="status">
-            {stream.connected ? "● live" : "○ connecting"}
+          <span
+            role="status"
+            className={`panel flex items-center gap-1.5 !rounded-full px-2.5 py-1 text-xs ${stream.connected ? "text-mint" : "text-muted"}`}
+          >
+            <span
+              aria-hidden="true"
+              className={`inline-block h-1.5 w-1.5 rounded-full ${stream.connected ? "animate-glow bg-mint" : "bg-muted"}`}
+            />
+            {stream.connected ? "live" : "connecting"}
           </span>
         </div>
       </header>
 
-      <PetCanvas stream={stream} />
+      {/* Identity */}
+      <div className="flex w-full items-baseline justify-between px-1">
+        <h1 className="text-2xl font-extrabold tracking-tight">{isEgg ? "???" : petName}</h1>
+        {ui && (
+          <span className="flex items-center gap-1.5 text-xs text-muted">
+            <span className="panel !rounded-full px-2 py-0.5">{age(ui.state)}</span>
+            <span className="panel !rounded-full px-2 py-0.5">{STAGE_LABELS[stage ?? ""] ?? ""}</span>
+            {ui.state.form && <span className="panel !rounded-full px-2 py-0.5 capitalize">{ui.state.form.toLowerCase()}</span>}
+          </span>
+        )}
+      </div>
 
-      {/* The pet's condition as plain text — the canvas is decorative. */}
-      <p aria-live="polite" className="text-sm text-muted">
-        {ui
-          ? isDead
-            ? `${petName} has died. A new egg will appear soon.`
-            : isEgg
-              ? "The egg is incubating…"
-              : ui.state.asleep
-                ? `${petName} is asleep.`
-                : ui.derived.ailments.length > 0
-                  ? `${petName} is ${ui.derived.ailments.join(", ").toLowerCase()}.`
-                  : `${petName} is doing fine.`
-          : "Connecting…"}
-      </p>
+      {/* The habitat */}
+      <div className="panel w-full overflow-hidden !rounded-3xl p-1.5">
+        <div className="overflow-hidden rounded-[1.15rem] bg-[#2a2333]">
+          <PetCanvas stream={stream} />
+        </div>
+        <p aria-live="polite" className="px-3 py-2 text-center text-sm text-muted">
+          {statusText}
+        </p>
+      </div>
 
       {spectating && (
-        <p aria-live="polite" className="w-full rounded-md bg-accent/20 px-3 py-1.5 text-center text-sm">
+        <p aria-live="polite" className="panel animate-pop w-full !rounded-full px-4 py-2 text-center text-sm">
           🎮 {spectating.name === "You" ? "You are" : `${spectating.name} is`} playing Dust Dash — score{" "}
-          <strong className="tabular-nums">{spectating.score}</strong>
+          <strong className="tabular-nums text-gold">{spectating.score}</strong>
         </p>
       )}
 
       {ui && !isEgg && <Meters percentages={ui.derived.percentages} />}
       {isEgg && <VotePanel />}
       {ui && !isEgg && !isDead && ctx && caretakerId && (
-        <ActionBar
-          state={ui.state}
-          ctx={ctx}
-          caretakerId={caretakerId}
-          petName={petName}
-          onPlay={() => setPlaying(true)}
-        />
+        <ActionBar state={ui.state} ctx={ctx} caretakerId={caretakerId} petName={petName} onPlay={() => setPlaying(true)} />
       )}
-      {ui && !isEgg && !isDead && (
-        <button
-          type="button"
-          onClick={() => setShopOpen((open) => !open)}
-          aria-expanded={shopOpen}
-          className="self-start text-sm text-muted underline underline-offset-2 hover:text-foreground"
-        >
-          {shopOpen ? "hide shop" : "🛒 open shop"}
-        </button>
-      )}
+
+      {/* Reactions + shop in one strip (SPEC §2.11, §13.2) */}
+      <div className="flex w-full items-center justify-between gap-2">
+        <div role="group" aria-label="React" className="panel flex items-center gap-0.5 !rounded-full px-2 py-1">
+          {["❤️", "💛", "😂", "😮", "😢", "🎉"].map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              aria-label={`React with ${emoji}`}
+              onClick={() =>
+                void fetch("/api/react", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ emoji }),
+                }).catch(() => null)
+              }
+              className="press rounded-full px-1.5 py-0.5 text-lg hover:bg-white/10"
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+        {ui && !isEgg && !isDead && (
+          <button
+            type="button"
+            onClick={() => setShopOpen((open) => !open)}
+            aria-expanded={shopOpen}
+            className="press panel !rounded-full px-4 py-1.5 text-sm font-semibold hover:border-gold/40"
+          >
+            🛒 Shop
+          </button>
+        )}
+      </div>
+
       {shopOpen && <ShopPanel onClose={() => setShopOpen(false)} />}
       {playing && <DustDash onClose={() => setPlaying(false)} />}
 
-      {/* Emoji reactions (SPEC §2.11): zero moderation surface, high
-          expressiveness — everyone sees them instantly. */}
-      <div role="group" aria-label="React" className="flex items-center gap-1">
-        {["❤️", "💛", "😂", "😮", "😢", "🎉"].map((emoji) => (
-          <button
-            key={emoji}
-            type="button"
-            aria-label={`React with ${emoji}`}
-            onClick={() =>
-              void fetch("/api/react", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ emoji }),
-              }).catch(() => null)
-            }
-            className="rounded-md px-1.5 py-0.5 text-lg outline-offset-2 transition-transform hover:scale-125"
-          >
-            {emoji}
-          </button>
-        ))}
-      </div>
-
       <FeedLog entries={feed} />
 
-      <footer className="flex w-full flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3 text-sm">
+      <footer className="flex w-full flex-wrap items-center justify-between gap-2 px-1 pt-1 text-sm">
         <NicknameEditor key={profile?.nickname ?? ""} current={profile?.nickname ?? null} />
         <PushToggle />
         <nav className="flex gap-4 text-muted">
-          <a href="/leaderboard" className="underline underline-offset-2 hover:text-foreground">
+          <a href="/leaderboard" className="transition-colors hover:text-foreground">
             leaderboard
           </a>
-          <a href="/memorial" className="underline underline-offset-2 hover:text-foreground">
+          <a href="/memorial" className="transition-colors hover:text-foreground">
             memorial
           </a>
-          <a href="/about" className="underline underline-offset-2 hover:text-foreground">
+          <a href="/about" className="transition-colors hover:text-foreground">
             about
           </a>
         </nav>

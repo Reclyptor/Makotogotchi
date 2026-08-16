@@ -91,7 +91,7 @@ export default function PushToggle() {
       onClick={() => void (status === "on" ? disable() : enable())}
       disabled={status === "working"}
       aria-pressed={status === "on"}
-      className="rounded-md bg-surface px-2 py-1 text-sm outline-offset-2 hover:bg-accent/20 disabled:opacity-50"
+      className="press panel !rounded-full px-3 py-1.5 text-sm outline-offset-2 hover:border-accent/40 disabled:opacity-50"
     >
       {status === "on" ? "🔔 emergency alerts on" : "🔕 get emergency alerts"}
     </button>

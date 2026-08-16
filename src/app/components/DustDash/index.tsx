@@ -187,12 +187,12 @@ export default function DustDash({ onClose }: DustDashProps) {
 
   return (
     <div role="dialog" aria-label="Dust Dash minigame" className="fixed inset-0 z-10 flex items-center justify-center bg-black/70 p-4">
-      <div className="flex w-full max-w-md flex-col items-center gap-3 rounded-xl bg-surface p-4">
+      <div className="panel animate-pop flex w-full max-w-md flex-col items-center gap-3 !rounded-2xl p-5">
         <h2 className="text-sm font-semibold">🎮 Dust Dash</h2>
         {phase === "refused" && (
           <>
             <p className="text-sm text-muted">Makoto can&apos;t play right now (busy, tired, or someone else is playing).</p>
-            <button type="button" onClick={() => onClose(false)} className="rounded-md bg-accent/30 px-3 py-1 text-sm">
+            <button type="button" onClick={() => onClose(false)} className="press rounded-lg bg-accent-strong px-4 py-1.5 text-sm font-semibold text-white">
               Close
             </button>
           </>
@@ -213,7 +213,7 @@ export default function DustDash({ onClose }: DustDashProps) {
                 {(finalResult.applied / 10_000).toFixed(1)}% · 🪙 +{finalResult.coins}
               </p>
             )}
-            <button type="button" onClick={() => onClose(true)} className="rounded-md bg-accent/30 px-3 py-1 text-sm">
+            <button type="button" onClick={() => onClose(true)} className="press rounded-lg bg-accent-strong px-4 py-1.5 text-sm font-semibold text-white">
               Done
             </button>
           </>

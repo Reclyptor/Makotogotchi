@@ -58,7 +58,7 @@ export default function VotePanel() {
   };
 
   return (
-    <section aria-label="Name the egg" className="flex w-full flex-col gap-2 rounded-lg bg-surface p-3">
+    <section aria-label="Name the egg" className="panel animate-pop flex w-full flex-col gap-2 p-4">
       <h2 className="text-sm font-semibold">🥚 A new egg is incubating — name it!</h2>
       <p className="text-xs text-muted">The name with the most votes hatches with the egg. One vote each.</p>
       <form
@@ -74,9 +74,9 @@ export default function VotePanel() {
           placeholder="Propose a name…"
           maxLength={16}
           aria-label="Propose a name"
-          className="min-w-0 flex-1 rounded-md bg-black/30 px-2 py-1 text-sm outline-offset-2"
+          className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-sm outline-offset-2 focus:border-accent/50"
         />
-        <button type="submit" className="rounded-md bg-accent/30 px-3 py-1 text-sm hover:bg-accent/40">
+        <button type="submit" className="press rounded-lg bg-accent-strong px-3.5 py-1.5 text-sm font-semibold text-white hover:brightness-110">
           Propose
         </button>
       </form>
@@ -97,7 +97,7 @@ export default function VotePanel() {
                 <button
                   type="button"
                   onClick={() => void post({ voteFor: row.name })}
-                  className="rounded-md bg-black/30 px-2 py-0.5 text-xs hover:bg-accent/30"
+                  className="press rounded-md bg-white/10 px-2.5 py-1 text-xs hover:bg-accent/30"
                 >
                   Vote
                 </button>

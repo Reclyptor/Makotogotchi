@@ -105,7 +105,7 @@ export default function ShopPanel({ onClose }: ShopPanelProps) {
 
   if (!shop) {
     return (
-      <section aria-label="Shop" className="w-full rounded-lg bg-surface p-3 text-sm text-muted">
+      <section aria-label="Shop" className="panel w-full p-4 text-sm text-muted">
         Opening the shop…
       </section>
     );
@@ -123,7 +123,7 @@ export default function ShopPanel({ onClose }: ShopPanelProps) {
         <button
           type="button"
           onClick={onBuy ?? (() => void buy(itemId))}
-          className="rounded-md bg-accent/30 px-2 py-0.5 text-xs hover:bg-accent/40"
+          className="press rounded-md bg-accent-strong/80 px-2.5 py-1 text-xs font-semibold text-white hover:brightness-110"
         >
           🪙 {price}
         </button>
@@ -132,7 +132,7 @@ export default function ShopPanel({ onClose }: ShopPanelProps) {
   );
 
   return (
-    <section aria-label="Shop" className="flex w-full flex-col gap-3 rounded-lg bg-surface p-3">
+    <section aria-label="Shop" className="panel animate-pop flex w-full flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">🛒 Shop</h2>
         <div className="flex items-center gap-3">
@@ -157,7 +157,7 @@ export default function ShopPanel({ onClose }: ShopPanelProps) {
                   <button
                     type="button"
                     onClick={() => void consumeOwnedItem(itemId, itemId in shop.catalog.medicine ? "MEDICATE" : "FEED")}
-                    className="rounded-md bg-black/30 px-2 py-0.5 text-xs hover:bg-accent/30"
+                    className="press rounded-md bg-white/10 px-2.5 py-1 text-xs hover:bg-accent/30"
                   >
                     use
                   </button>
@@ -205,16 +205,16 @@ export default function ShopPanel({ onClose }: ShopPanelProps) {
                   </span>
                   {owned ? (
                     active ? (
-                      <button type="button" onClick={() => void wear(null)} className="rounded-md bg-black/30 px-2 py-0.5 text-xs">
+                      <button type="button" onClick={() => void wear(null)} className="press rounded-md bg-white/10 px-2.5 py-1 text-xs">
                         take off
                       </button>
                     ) : (
-                      <button type="button" onClick={() => void wear(itemId)} className="rounded-md bg-black/30 px-2 py-0.5 text-xs">
+                      <button type="button" onClick={() => void wear(itemId)} className="press rounded-md bg-white/10 px-2.5 py-1 text-xs">
                         wear
                       </button>
                     )
                   ) : (
-                    <button type="button" onClick={() => void buy(itemId)} className="rounded-md bg-accent/30 px-2 py-0.5 text-xs hover:bg-accent/40">
+                    <button type="button" onClick={() => void buy(itemId)} className="press rounded-md bg-accent-strong/80 px-2.5 py-1 text-xs font-semibold text-white hover:brightness-110">
                       🪙 {item.price}
                     </button>
                   )}

@@ -2,8 +2,7 @@ import GameView from "@/app/components/GameView";
 
 export default function Home() {
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-6 p-4">
-      <h1 className="text-2xl font-bold tracking-wide">Makotogotchi</h1>
+    <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col items-center justify-start px-3 py-4 sm:justify-center">
       <GameView />
     </main>
   );

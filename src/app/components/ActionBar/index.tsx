@@ -1,14 +1,15 @@
 "use client";
 
-// The care actions (SPEC §11.2). Availability comes from the same
-// canPerform() the server enforces — the single authority (SPEC §4.1) — so a
-// disabled button always knows its reason, with a live countdown for
-// cooldowns. Buttons stay keyboard-operable and expose the reason via
-// aria-label even while disabled.
+// The care actions (SPEC §11.2) as tactile tiles: springy press feedback, a
+// draining progress track while a cooldown runs, and the reason always
+// visible. Availability comes from the same canPerform() the server
+// enforces — the single authority (SPEC §4.1). aria-disabled (never
+// disabled) keeps unavailable actions in the tab order with their reason in
+// the accessible name (SPEC §11.3).
 
 import { useCallback, useState } from "react";
 import { canPerform } from "@/sim/validate";
-import { CARE_ACTIONS, TICK_SECONDS, type CareAction } from "@/sim/tuning";
+import { CARE_ACTIONS, COOLDOWNS, TICK_SECONDS, type CareAction } from "@/sim/tuning";
 import type { PetState, ProjectionContext } from "@/sim/model";
 
 const ACTION_META: Record<CareAction, { label: string; emoji: string }> = {
@@ -75,9 +76,14 @@ export default function ActionBar({ state, ctx, caretakerId, petName, onPlay }: 
           const verdict = canPerform(state, action, caretakerId, ctx);
           const meta = ACTION_META[action];
           let hint: string | null = null;
+          let cooldownFraction = 0; // 0 = ready, 1 = just used
           if (!verdict.ok) {
             if (verdict.retryAtTick !== undefined) {
-              const seconds = Math.max(1, (verdict.retryAtTick - state.tick) * TICK_SECONDS);
+              const remainingTicks = Math.max(0, verdict.retryAtTick - state.tick);
+              const totalTicks =
+                verdict.reason === "COOLDOWN_GLOBAL" ? COOLDOWNS[action].global : COOLDOWNS[action].caretaker;
+              cooldownFraction = Math.min(1, remainingTicks / totalTicks);
+              const seconds = Math.max(1, remainingTicks * TICK_SECONDS);
               hint =
                 verdict.reason === "COOLDOWN_GLOBAL"
                   ? `${petName} is busy (${seconds}s)`
@@ -87,9 +93,6 @@ export default function ActionBar({ state, ctx, caretakerId, petName, onPlay }: 
             }
           }
           return (
-            // aria-disabled instead of disabled: unavailable actions stay in
-            // the tab order so keyboard and screen-reader users can reach
-            // them and hear the reason (SPEC §11.3).
             <button
               key={action}
               type="button"
@@ -101,15 +104,24 @@ export default function ActionBar({ state, ctx, caretakerId, petName, onPlay }: 
               aria-disabled={!verdict.ok}
               aria-label={hint ? `${meta.label} — ${hint}` : meta.label}
               title={hint ?? meta.label}
-              className={`flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-lg bg-surface px-2 py-1.5 text-sm outline-offset-2 transition-colors ${
-                verdict.ok ? "hover:bg-accent/20 active:bg-accent/30" : "cursor-not-allowed opacity-40"
+              className={`press panel relative flex min-h-16 flex-col items-center justify-center gap-0.5 overflow-hidden !rounded-xl px-1 py-2 text-sm ${
+                verdict.ok
+                  ? "hover:border-accent/40 hover:shadow-[0_0_18px_-6px_var(--color-accent)]"
+                  : "cursor-not-allowed opacity-45"
               }`}
             >
-              <span aria-hidden="true" className="text-lg leading-none">
+              <span aria-hidden="true" className="text-xl leading-none drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]">
                 {meta.emoji}
               </span>
-              <span className="leading-tight">{meta.label}</span>
-              <span className="min-h-3 text-[10px] leading-none text-muted">{hint ?? " "}</span>
+              <span className="text-[12px] font-semibold leading-tight">{meta.label}</span>
+              <span className="min-h-3 max-w-full truncate px-1 text-[9px] leading-none text-muted">{hint ?? " "}</span>
+              {/* Cooldown drain track along the bottom edge. */}
+              <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[3px] bg-white/5">
+                <span
+                  className="block h-full rounded-r-full bg-accent transition-[width] duration-500 ease-linear"
+                  style={{ width: `${cooldownFraction * 100}%` }}
+                />
+              </span>
             </button>
           );
         })}

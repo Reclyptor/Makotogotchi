@@ -1,5 +1,15 @@
 import type { Metadata, Viewport } from "next";
+import { Press_Start_2P } from "next/font/google";
 import "./globals.css";
+
+// The wordmark's retro face — used sparingly; body text stays a system
+// stack for legibility (SPEC §11.6).
+const pressStart = Press_Start_2P({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-press-start",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://makotogotchi.com"),
@@ -31,7 +41,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={pressStart.variable}>
       <body className="min-h-dvh antialiased">{children}</body>
     </html>
   );

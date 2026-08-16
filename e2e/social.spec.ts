@@ -43,7 +43,7 @@ test.describe("social and economy", () => {
     await page.goto("/");
     await expect(page.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
 
-    await page.getByRole("button", { name: /open shop/ }).click();
+    await page.getByRole("button", { name: /Shop/ }).click();
     await expect(page.getByRole("region", { name: "Shop" })).toBeVisible();
 
     // Broke: buying anything is refused with a reason.
@@ -61,7 +61,7 @@ test.describe("social and economy", () => {
     const pageB = await contextB.newPage();
     await pageB.goto("/");
     await expect(pageB.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
-    await pageB.getByRole("button", { name: /open shop/ }).click();
+    await pageB.getByRole("button", { name: /Shop/ }).click();
     await expect(pageB.getByRole("region", { name: "Shop" }).getByText("owned").first()).toBeVisible({ timeout: 10_000 });
 
     await context.close();
