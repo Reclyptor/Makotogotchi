@@ -84,6 +84,7 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
       }
       if (notice.phase === "finish" && notice.score !== undefined) {
         room.onMilestone(`🎮 scored ${notice.score}!`, performance.now());
+        if (notice.score > 0) room.celebrate(performance.now());
       }
     });
 

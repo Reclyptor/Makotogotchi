@@ -1,15 +1,42 @@
 import { describe, expect, it } from "vitest";
 import { AnimationMachine } from "./machine";
-import { BASE_CLIPS, durationMs, ONE_SHOT_CLIPS } from "./clips";
+import { BASE_CLIPS, durationMs, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP } from "./clips";
 import { SPRITE_FRAMES } from "../atlas.generated";
 
 describe("AnimationMachine", () => {
   it("every clip frame exists in the atlas", () => {
-    for (const clip of [...Object.values(BASE_CLIPS), ...Object.values(ONE_SHOT_CLIPS)]) {
+    for (const clip of [...Object.values(BASE_CLIPS), ...Object.values(ONE_SHOT_CLIPS), ...IDLE_FLOURISH_CLIPS, WALK_CLIP]) {
       for (const frame of clip.frames) {
         expect(SPRITE_FRAMES[frame]).toBeDefined();
       }
     }
+  });
+
+  it("sprinkles idle flourishes deterministically, but never in the first slot", () => {
+    const machine = new AnimationMachine();
+    machine.setBase("idle", 0);
+    const idleFrames = new Set(BASE_CLIPS.idle.frames);
+    const flourishFrames = new Set(IDLE_FLOURISH_CLIPS.flatMap((clip) => [...clip.frames]));
+    // The first 6.5s slot always plays plain idle.
+    for (let t = 0; t < 6500; t += 100) expect(idleFrames.has(machine.frameAt(t))).toBe(true);
+    // Over a minute of idling, at least one flourish frame appears…
+    let sawFlourish = false;
+    for (let t = 0; t < 60_000; t += 50) {
+      const frame = machine.frameAt(t);
+      if (flourishFrames.has(frame) && !idleFrames.has(frame)) sawFlourish = true;
+    }
+    expect(sawFlourish).toBe(true);
+    // …and two machines with the same phase agree exactly.
+    const twin = new AnimationMachine();
+    twin.setBase("idle", 0);
+    for (let t = 0; t < 30_000; t += 137) expect(twin.frameAt(t)).toBe(machine.frameAt(t));
+  });
+
+  it("never flourishes under reduced motion", () => {
+    const machine = new AnimationMachine();
+    machine.reducedMotion = true;
+    machine.setBase("idle", 0);
+    for (let t = 0; t < 60_000; t += 250) expect(machine.frameAt(t)).toBe(BASE_CLIPS.idle.frames[0]);
   });
 
   it("loops the base clip", () => {
