@@ -1352,12 +1352,234 @@ built on top of it, not at the end when changing course is expensive.
 
 ---
 
-## 21. Appendix: What the Original Got Wrong
+## 21. Liveliness and Community Program
+
+Nine features that deepen the two feelings this app exists for: *it is
+alive*, and *it is ours*. They are specified together because they share
+machinery — deterministic seeding, the seq event log, the SSE fan-out, the
+sprite pipeline — but they land in five independent phases (§21.10), each
+individually shippable. Nothing here changes the core simulation contract
+(§4): every sim-visible addition folds through the event log exactly like
+care actions do, and every presentation-only addition is derived
+deterministically from data every client already has.
+
+### 21.1 Greeting of the Day (presentation only)
+
+The `greeting` one-shot clip (pekori bow) exists and is never triggered.
+On GameView mount, when the pet is awake, born, and alive, and
+`localStorage["mgc:last-greet"]` differs from the current date in the pet's
+timezone (the server already exposes the timezone via the schedule context),
+the client triggers the `greeting` one-shot after the atlas is ready (delay
+~1s so it lands on the settled room) and writes today's date back. Reduced
+motion suppresses nothing here — the machine already pins one-shots to their
+first frame.
+
+No server involvement, no message types. The bow is the pet greeting *this
+caretaker*; it is deliberately not broadcast.
+
+### 21.2 Crowd Moments (presentation only)
+
+Presence messages already carry `count`. When a client observes `count`
+rise to ≥ 3 from below (rising edge, not level), the room celebrates: the
+`celebrating` one-shot plus heart particles, and a toast "a crowd gathers!".
+Throttle: at most once per 10 minutes per client (module-scope ref;
+localStorage unnecessary). Reduced motion skips particles as usual.
+
+### 21.3 Per-Game Records (server + UI)
+
+A new Mongo collection `records` stores the best plausible finish per game
+and scope: `{ gameId, scope: "alltime" | "weekly", weekKey, score,
+caretakerId, at }` with a unique index on `(gameId, scope, weekKey)` —
+`weekKey` is `""` for all-time and the ISO week (`YYYY-Www`, computed in
+the pet's timezone) for weekly. On a plausible `/api/play` finish, after
+`creditCoins`, the route compares-and-swaps the two records (`findOneAndUpdate`
+with a `$lt` guard on score — atomic, no lock needed). A newly set record
+publishes a new `record` engine message `{ type: "record", game, scope,
+score, caretakerId, caretakerName }`, which clients surface in the feed
+("🏅 X set the Dust Dash record — 17!") and celebrate via the existing
+minigame-finish path.
+
+`GET /api/records` returns both scopes for all five games with holder
+nicknames resolved (same `nicknameMap` pattern the leaderboard uses). UI: a
+"Records" section inside the existing leaderboard panel — five rows, each
+`game title · weekly best (holder) · all-time best (holder)`, using the
+Shop panel's aligned-row layout conventions.
+
+Weekly reset needs no job: a new week produces a new `weekKey`, and the
+query for "this week" simply finds nothing yet.
+
+### 21.4 Generational Quirks (sim)
+
+Each generation has a personality derived deterministically from its seed —
+never stored, never voted, discovered through play:
+
+```
+quirks(seed) = {
+  favoriteFood:  rng(seed, 0, "quirk-fav-food")  over FOOD_ITEM_IDS,
+  dislikedFood:  rng(seed, 0, "quirk-bad-food")  over FOOD_ITEM_IDS \ favorite,
+  favoriteGame:  rng(seed, 0, "quirk-fav-game")  over MINIGAME_IDS,
+}
+```
+
+implemented in `src/sim/quirks.ts` (pure, unit-tested: same seed → same
+quirks; favorite ≠ disliked). `FOOD_ITEM_IDS` are the shop's food item ids.
+
+Effects, all folded in the sim so every client and the server agree:
+- **FEED with the favorite food**: `applied` gains ×1.25 before the
+  diminishing-returns curve; clients that see the care message for a
+  favorite-food feed play `eating` followed by heart particles (the
+  favorite is recomputable client-side from the generation seed, which the
+  state stream already carries).
+- **FEED with the disliked food**: ×0.75, and the client plays the
+  `unhappyEat` frames instead of `eating`.
+- **Favorite minigame**: the coin payout for a plausible finish gains +25%
+  (rounded); the server computes this in `/api/play` from the same pure
+  function.
+
+The item id must therefore reach the reducer: the FEED care event context
+gains an optional `itemId` (already plumbed for toy bonuses — follow that
+pattern; if FEED currently has no item identity, extend the care POST body
+and CareEvent the same way `toyBonus` traveled). Quirk multipliers live in
+`src/sim/economy.ts` beside the existing curves.
+
+The memorial records each generation's quirks when it ends ("loved pizza,
+hated peppers, was best at Wheel Sprint") — the memorial write path gains
+the three fields, computed at death from the seed.
+
+### 21.5 Shared Rare Events (sim tick + presentation)
+
+Roughly once an hour, something small and delightful happens — for
+everyone at the same moment, which is the entire point. In the leader's
+tick loop: `rng(seed, tickIndex, "ambient") < 1/360` (ticks are 10s → one
+event per hour on average) selects an event from a weighted table filtered
+by context:
+
+| Event | Context | Weight |
+| --- | --- | --- |
+| `shooting-star` | pet asleep (night) | 3 |
+| `butterfly` | awake, daytime | 3 |
+| `coin-dig` | awake | 2 |
+| `mystery-noise` | any | 1 |
+
+The event is a **milestone-class event** appended to the log
+(`MILESTONE` kind `AMBIENT` with `detail` = event name) so it replays, then
+fans out over the existing milestone message path. No economy effect —
+`coin-dig` is Makoto finding *its own* shiny thing (the feed says so); the
+moment is the reward, and keeping it material-free keeps the log fold
+trivial.
+
+Clients render a ~6s overlay in the room: shooting star = a two-pixel
+streak tweened across the night sky (procedural, particles system);
+butterfly = a new 2-frame `@1x` sprite fluttering a sine path; coin-dig =
+Makoto plays `dustbath` frames with gold sparkle particles and a feed entry
+"✨ Makoto dug up something shiny!"; mystery-noise = the room dims 10% for a
+beat, pet plays `earTwitch`, "…did you hear that?" in the feed. Reduced
+motion: feed entry only.
+
+### 21.6 Spectator Cheering (wiring only)
+
+During a live spectacle, reactions become crowd noise inside the player's
+game. The Shell (which owns the dialog) subscribes to `onReact` while phase
+is `playing` and floats incoming emoji up over the game canvas — a DOM
+overlay (absolutely positioned spans with the existing `rise` animation),
+never touching the game components. The existing reaction bar and its rate
+limit are unchanged; spectators simply see the pill and use the bar they
+already have. Cap the overlay at 6 concurrent floaters; excess drops
+silently.
+
+### 21.7 Daily Communal Quest (server + sim-adjacent)
+
+One shared goal per pet-day, derived deterministically:
+`quest(seed, dayIndex)` — `dayIndex` = days since genesis in the pet's
+timezone — picks from a table in `src/sim/quests.ts` (pure, tested):
+
+| Quest | Target | Measured by |
+| --- | --- | --- |
+| Full bellies | every meter ≥ 70% at the evening check (1h before sleep) | projection at the check tick |
+| Game night | combined minigame score ≥ 40 today | sum of plausible finishes |
+| Many hands | ≥ 4 distinct caretakers perform care today | distinct caretakerIds in today's care events |
+| Feast day | ≥ 10 FEEDs today | count of FEED events |
+
+Progress is **computed, not stored**: `GET /api/quest` derives progress by
+scanning today's slice of the event log (bounded — one pet-day of events)
+plus, for Full bellies, a projection. The leader's tick loop performs the
+completion check (on every tick for count-quests once the threshold could
+be met; at the check tick for Full bellies) and, on completion, appends a
+`MILESTONE` kind `QUEST_DONE`, credits every caretaker who contributed
+today +15 coins (`creditCoins` over the day's distinct contributors), and
+the milestone message triggers feed + `celebrating` on every client.
+Completion must be idempotent: the `QUEST_DONE` milestone for a given
+`dayIndex` is appended at most once (guard: scan-back or a `questDone`
+marker keyed by day in Mongo — prefer the marker, unique index on dayIndex).
+
+UI: a slim glass banner between the meters and the action bar — quest text
+and a progress fraction ("Game night — 26/40"), sourced from `/api/quest`
+on load and nudged by relevant SSE messages (recompute lazily; exactness
+between refreshes is not required). Completed state: gold check + "done!
++15 🪙 to today's caretakers".
+
+### 21.8 Co-op Purchases (server + UI)
+
+Grand decor items too expensive for one caretaker, funded communally. New
+shop category `grand` with three items (window seat 500, aquarium 650,
+kotatsu 800 — rendered procedurally in `renderDecor` like existing decor,
+each with one small ambient touch: aquarium bubbles, kotatsu glow).
+
+New collection `funding`: `{ itemId, pooled, contributors: { [caretakerId]:
+amount } }`. `POST /api/shop/contribute { itemId, amount }` — amount ∈
+{10, 50, all-remaining}; deducts the caretaker's coins and `$inc`s the pool
+atomically; over-contribution beyond the price is clamped with the excess
+refunded. When `pooled ≥ price`, the item becomes communal decor through
+the existing decor-placement path, a `MILESTONE` kind `FUNDED` (detail =
+itemId) fans out, the feed lists the top three contributors, and everyone's
+room celebrates. A funded item's pool row is retained for the memorial
+(generations remember who built the room).
+
+UI: a "Together" section in the Shop panel — item row + progress bar
+(`pooled/price`) + two press buttons (+10, +50). Contributions are
+non-refundable; the section says so in one quiet line.
+
+### 21.9 Visible Growth (presentation + art)
+
+Life stages already exist in the sim (`stage` in the derived state); the
+pet just never looks different. Presentation-layer only:
+
+- **HATCHLING**: drawn at 80% scale (the room's draw call gains a
+  stage-driven scale factor; bottom-center anchor unchanged).
+- **JUVENILE**: 90%.
+- **ADULT**: 100% (today's look).
+- **ELDER**: 100% plus a new `@1x` accessory sprite — gray brow tufts —
+  drawn at the head anchor like cosmetics are (stacking under any worn
+  cosmetic).
+
+The stage scale applies everywhere the room draws the pet (idle, wander,
+one-shots). Minigames keep drawing the adult frames — the game canvas is a
+caricature, and a 36px runner does not need life stages. New sprites go
+through the §10.2 pipeline (`art/pet/elderBrows@1x.png`).
+
+### 21.10 Delivery Phases
+
+Same rules as §20: each phase ends with green typecheck/lint/tests (and
+e2e where it touches flows), one commit per seam, nothing broken ever
+committed.
+
+| # | Phase | Features | Done when |
+| --- | --- | --- | --- |
+| **L1** | Free wins | §21.1 greeting, §21.2 crowd moments, §21.3 records | records survive an e2e minigame run; greeting fires once per day in a fresh context |
+| **L2** | Personality | §21.4 quirks, §21.5 rare events | quirks unit-tested pure; an AMBIENT milestone replays identically after engine restart |
+| **L3** | Spectacle + growth | §21.6 cheering, §21.9 stages | cheer emoji visibly float over a live game in e2e; stage scale asserted in a render test |
+| **L4** | Communal quest | §21.7 | quest completes idempotently under a restarted leader; contributors credited exactly once |
+| **L5** | Co-op purchases | §21.8 | e2e: two caretakers fund an item, it appears in both rooms, coins deducted correctly |
+
+
+---
+
+## 22. Appendix: What the Original Got Wrong
 
 Recorded so the rebuild is measured against real defects rather than vague
 dissatisfaction. Source: `~/Projects/makotogotchi_old` at `master`.
 
-### 21.1 Architectural
+### 22.1 Architectural
 
 1. **No server.** State lived in `localStorage`. Every visitor had a private
    pet. The premise of a shared global pet was unimplementable on that
@@ -1371,7 +1593,7 @@ dissatisfaction. Source: `~/Projects/makotogotchi_old` at `master`.
    the simulation unreproducible. There were no tests, and none could have
    been written without heavy mocking.
 
-### 21.2 Simulation Bugs
+### 22.2 Simulation Bugs
 
 4. **`status()` read pre-tick state**, so every derived status lagged one tick
    behind the values it was derived from.
@@ -1389,7 +1611,7 @@ dissatisfaction. Source: `~/Projects/makotogotchi_old` at `master`.
     and the reconstruction silently dropped `ANGRY` from the array — so any
     angry state that had been set would vanish on the next tick.
 
-### 21.3 Structural
+### 22.3 Structural
 
 11. **Presentation stored as game state.** `Status.CLONE1..4` were animation
     frames living in the state enum.
