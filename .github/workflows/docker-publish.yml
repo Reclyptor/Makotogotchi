@@ -43,9 +43,12 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # The timestamped tag is what Flux image automation sorts on:
+          # newest build wins (see the ImagePolicy in the Kubernetes repo).
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha
+            type=raw,value={{date 'YYYYMMDDHHmmss'}}-{{sha}},enable={{is_default_branch}}
 
       - name: Build And Push Docker Image
         id: push
