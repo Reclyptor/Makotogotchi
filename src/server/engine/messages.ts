@@ -7,6 +7,8 @@ import type { CareEvent, Milestone } from "@/sim/events";
 
 export type CareMessage = {
   type: "care";
+  /** Event-log seq — lets clients merge live messages with /api/feed history. */
+  seq: number;
   tick: number;
   action: CareEvent["action"];
   caretakerId: string;
@@ -17,6 +19,7 @@ export type CareMessage = {
 
 export type MilestoneMessage = {
   type: "milestone";
+  seq: number;
   tick: number;
   kind: Milestone["kind"];
   detail?: string;

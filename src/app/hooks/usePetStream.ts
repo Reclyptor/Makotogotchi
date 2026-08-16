@@ -33,8 +33,8 @@ type Authoritative = {
   clockOffsetMs: number;
 };
 
-export type CareNotice = { action: CareAction; caretakerId: string; caretakerName?: string; applied: number };
-export type MilestoneNotice = { kind: string; detail?: string };
+export type CareNotice = { seq: number; action: CareAction; caretakerId: string; caretakerName?: string; applied: number };
+export type MilestoneNotice = { seq: number; kind: string; detail?: string };
 export type MinigameNotice = Omit<MinigameMessage, "type">;
 export type ReactNotice = Omit<ReactMessage, "type">;
 export type CaretakerProfile = { nickname: string | null; streakDays: number; generationsSurvived: number };
@@ -128,6 +128,7 @@ export const usePetStream = (): PetStream => {
       acceptState(message.state);
       for (const listener of careListeners.current) {
         listener({
+          seq: message.seq,
           action: message.action,
           caretakerId: message.caretakerId,
           ...(message.caretakerName !== undefined ? { caretakerName: message.caretakerName } : {}),
@@ -139,7 +140,7 @@ export const usePetStream = (): PetStream => {
       const message = JSON.parse((event as MessageEvent<string>).data) as MilestoneMessage;
       acceptState(message.state);
       for (const listener of milestoneListeners.current) {
-        listener({ kind: message.kind, ...(message.detail !== undefined ? { detail: message.detail } : {}) });
+        listener({ seq: message.seq, kind: message.kind, ...(message.detail !== undefined ? { detail: message.detail } : {}) });
       }
     });
     source.addEventListener("minigame", (event) => {

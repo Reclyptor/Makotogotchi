@@ -185,13 +185,21 @@ export class PetEngine {
       for (const entry of toAppend) {
         await appendEvent(this.deps.db, entry.event, entry.applied);
         if (entry.event.type === "MILESTONE") {
-          toPublish.push({ type: "milestone", tick: state.tick, kind: entry.event.kind, ...(entry.event.detail !== undefined ? { detail: entry.event.detail } : {}), state });
+          toPublish.push({
+            type: "milestone",
+            seq: entry.event.seq,
+            tick: state.tick,
+            kind: entry.event.kind,
+            ...(entry.event.detail !== undefined ? { detail: entry.event.detail } : {}),
+            state,
+          });
         }
       }
       if (inputEvent?.type === "CARE") {
         const caretakerName = (await this.deps.caretakerName?.(inputEvent.caretakerId)) ?? undefined;
         toPublish.push({
           type: "care",
+          seq: inputEvent.seq,
           tick: state.tick,
           action: inputEvent.action,
           caretakerId: inputEvent.caretakerId,
