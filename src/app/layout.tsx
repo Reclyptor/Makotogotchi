@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Press_Start_2P } from "next/font/google";
+import { Atkinson_Hyperlegible, Press_Start_2P } from "next/font/google";
 import "./globals.css";
 
 // The wordmark's retro face — used sparingly; body text stays a system
@@ -8,6 +8,15 @@ const pressStart = Press_Start_2P({
   weight: "400",
   subsets: ["latin"],
   variable: "--font-press-start",
+  display: "swap",
+});
+
+// Body face: designed by the Braille Institute for maximum legibility —
+// distinct glyph shapes that read cleanly at small sizes over glass.
+const atkinson = Atkinson_Hyperlegible({
+  weight: ["400", "700"],
+  subsets: ["latin"],
+  variable: "--font-atkinson",
   display: "swap",
 });
 
@@ -41,8 +50,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={pressStart.variable}>
-      <body className="min-h-dvh antialiased">{children}</body>
+    <html lang="en" className={`${pressStart.variable} ${atkinson.variable}`}>
+      <body className={`${atkinson.className} min-h-dvh antialiased`}>{children}</body>
     </html>
   );
 }
