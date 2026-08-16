@@ -2,10 +2,16 @@
 // from src/sim/economy; cosmetics and room decor are purely visual and
 // live entirely here, in one communal room document — spending on them is
 // a form of contribution everyone sees.
+//
+// Grand items (SPEC §21.8) go one step further: nobody can afford them
+// alone. Coins go into a pool instead of a purchase, and when the pool
+// clears the price the item becomes room decor for everyone, forever. The
+// pool row is kept afterwards — generations remember who built the room.
 
 import type { Collection, Db } from "mongodb";
 import { FOOD_ITEMS, MEDICINE_ITEMS, TOY_ITEMS } from "@/sim/economy";
-import { caretakers } from "./social";
+import { isDuplicateKeyError } from "./db/collections";
+import { caretakerProfile, caretakers, creditCoins } from "./social";
 
 export const COSMETIC_ITEMS = {
   bow: { kind: "cosmetic", price: 300, label: "Ribbon Bow" },
@@ -19,8 +25,17 @@ export const DECOR_ITEMS = {
   lamp: { kind: "decor", price: 800, label: "Cozy Lamp" },
 } as const;
 
+export const GRAND_ITEMS = {
+  window_seat: { kind: "grand", price: 500, label: "Window Seat" },
+  aquarium: { kind: "grand", price: 650, label: "Aquarium" },
+  kotatsu: { kind: "grand", price: 800, label: "Kotatsu" },
+} as const;
+
 export type CosmeticId = keyof typeof COSMETIC_ITEMS;
 export type DecorId = keyof typeof DECOR_ITEMS;
+export type GrandId = keyof typeof GRAND_ITEMS;
+
+export const isGrandId = (itemId: string): itemId is GrandId => itemId in GRAND_ITEMS;
 
 export type RoomStateDoc = {
   _id: "room";
@@ -45,6 +60,7 @@ export const catalog = () => ({
   toys: TOY_ITEMS,
   cosmetics: COSMETIC_ITEMS,
   decor: DECOR_ITEMS,
+  grand: GRAND_ITEMS,
 });
 
 export type PurchaseResult =
@@ -131,4 +147,130 @@ export const consumeItem = async (db: Db, caretakerId: string, itemId: string): 
 
 export const refundItem = async (db: Db, caretakerId: string, itemId: string): Promise<void> => {
   await caretakers(db).updateOne({ _id: caretakerId }, { $inc: { [`inventory.${itemId}`]: 1 } });
+};
+
+// ── Co-op purchases (SPEC §21.8) ────────────────────────────────────────────
+
+export type FundingDoc = {
+  /** The grand item's id — one pool per item, kept after it is funded. */
+  _id: string;
+  pooled: number;
+  contributors: Record<string, number>;
+  fundedAt: Date | null;
+};
+
+const fundingCollection = (db: Db): Collection<FundingDoc> => db.collection("funding");
+
+export type FundingView = { itemId: string; label: string; price: number; pooled: number; funded: boolean };
+
+export const fundingState = async (db: Db): Promise<FundingView[]> => {
+  const pools = await fundingCollection(db).find({}).toArray();
+  return Object.entries(GRAND_ITEMS).map(([itemId, item]) => {
+    const pool = pools.find((candidate) => candidate._id === itemId);
+    return {
+      itemId,
+      label: item.label,
+      price: item.price,
+      pooled: Math.min(pool?.pooled ?? 0, item.price),
+      funded: pool?.fundedAt != null,
+    };
+  });
+};
+
+/**
+ * How much of an offered contribution can actually land: never more than the
+ * giver has, and never more than the pool still needs.
+ */
+export const clampContribution = (input: { offered: number; pooled: number; price: number; balance: number }): number =>
+  Math.max(0, Math.min(Math.floor(input.offered), input.price - input.pooled, input.balance));
+
+/** How far a pool overshot its price — always refunded to whoever overshot. */
+export const fundingOverflow = (pooled: number, price: number): number => Math.max(0, pooled - price);
+
+export type ContributeResult =
+  | {
+      ok: true;
+      itemId: GrandId;
+      label: string;
+      spent: number;
+      pooled: number;
+      price: number;
+      /** True only for the contribution that pushed the pool over the line. */
+      funded: boolean;
+      /** Top three givers, biggest first — the ones the feed names. */
+      top: { caretakerId: string; amount: number }[];
+    }
+  | { ok: false; reason: "UNKNOWN_ITEM" | "ALREADY_FUNDED" | "INSUFFICIENT_COINS" };
+
+export const contribute = async (
+  db: Db,
+  caretakerId: string,
+  itemId: string,
+  offered: number | "all",
+): Promise<ContributeResult> => {
+  if (!isGrandId(itemId)) return { ok: false, reason: "UNKNOWN_ITEM" };
+  const item = GRAND_ITEMS[itemId];
+
+  const pool = await fundingCollection(db).findOne({ _id: itemId });
+  if (pool?.fundedAt != null) return { ok: false, reason: "ALREADY_FUNDED" };
+
+  const pooled = pool?.pooled ?? 0;
+  const balance = (await caretakerProfile(db, caretakerId))?.coins ?? 0;
+  const wanted = offered === "all" ? item.price - pooled : offered;
+  const spend = clampContribution({ offered: wanted, pooled, price: item.price, balance });
+  if (spend <= 0 || !(await spendCoins(db, caretakerId, spend))) {
+    return { ok: false, reason: "INSUFFICIENT_COINS" };
+  }
+
+  const updated = await fundingCollection(db).findOneAndUpdate(
+    { _id: itemId },
+    { $inc: { pooled: spend, [`contributors.${caretakerId}`]: spend }, $setOnInsert: { fundedAt: null } },
+    { upsert: true, returnDocument: "after" },
+  );
+  let landed = spend;
+  let total = updated?.pooled ?? pooled + spend;
+
+  // Two people can clear the last stretch at the same moment; whoever ends up
+  // over the price gets the excess back rather than gifting it to the void.
+  const overflow = Math.min(fundingOverflow(total, item.price), spend);
+  if (overflow > 0) {
+    await creditCoins(db, caretakerId, overflow);
+    const trimmed = await fundingCollection(db).findOneAndUpdate(
+      { _id: itemId },
+      { $inc: { pooled: -overflow, [`contributors.${caretakerId}`]: -overflow } },
+      { returnDocument: "after" },
+    );
+    landed -= overflow;
+    total = trimmed?.pooled ?? total - overflow;
+  }
+
+  const claimed = await fundingCollection(db).findOneAndUpdate(
+    { _id: itemId, fundedAt: null, pooled: { $gte: item.price } },
+    { $set: { fundedAt: new Date() } },
+    { returnDocument: "after" },
+  );
+  if (claimed) await placeCommunalDecor(db, itemId);
+
+  const contributors = claimed?.contributors ?? updated?.contributors ?? {};
+  const top = Object.entries(contributors)
+    .map(([id, amount]) => ({ caretakerId: id, amount }))
+    .sort((a, b) => b.amount - a.amount || a.caretakerId.localeCompare(b.caretakerId))
+    .slice(0, 3);
+
+  return { ok: true, itemId, label: item.label, spent: landed, pooled: total, price: item.price, funded: claimed !== null, top };
+};
+
+/** A funded grand item joins the room through the ordinary decor path. */
+const placeCommunalDecor = async (db: Db, itemId: string): Promise<void> => {
+  try {
+    await roomCollection(db).updateOne(
+      { _id: "room" },
+      { $addToSet: { decor: itemId }, $setOnInsert: { cosmetics: [], activeCosmetic: null } },
+      { upsert: true },
+    );
+  } catch (error) {
+    // Two upserts racing to create the room document: the loser's item is
+    // already there, because $addToSet on the winner's document ran first.
+    if (!isDuplicateKeyError(error)) throw error;
+  }
 };

@@ -100,6 +100,60 @@ test.describe("social and economy", () => {
     await contextB.close();
   });
 
+  test("two caretakers fund a grand item and the room keeps it", async ({ browser }) => {
+    const contextA = await browser.newContext();
+    const contextB = await browser.newContext();
+    const pageA = await contextA.newPage();
+    const pageB = await contextB.newPage();
+    await pageA.goto("/");
+    await pageB.goto("/");
+    await expect(pageA.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
+    await expect(pageB.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
+
+    const idA = ((await (await pageA.request.get("/api/state")).json()) as { caretakerId: string }).caretakerId;
+    const idB = ((await (await pageB.request.get("/api/state")).json()) as { caretakerId: string }).caretakerId;
+    seedCoins(idA, 260);
+    seedCoins(idB, 260);
+
+    // Each caretaker chips in through the shop, then empties their purse
+    // into the pool — the Window Seat costs 500 and neither can afford it.
+    for (const page of [pageA, pageB]) {
+      await page.getByRole("button", { name: /Shop/ }).click();
+      const shop = page.getByRole("region", { name: "Shop" });
+      await expect(shop).toBeVisible();
+      await shop.getByRole("button", { name: /Chip in 50 coins toward Window Seat/ }).click();
+      await expect(page.getByText(/Chipped in 50/)).toBeVisible({ timeout: 10_000 });
+    }
+    const topUpA = await contextA.request.post("/api/shop/contribute", { data: { itemId: "window_seat", amount: "all" } });
+    expect(topUpA.ok()).toBe(true);
+    const topUpB = await contextB.request.post("/api/shop/contribute", { data: { itemId: "window_seat", amount: "all" } });
+    expect((await topUpB.json()) as { funded: boolean; pooled: number }).toMatchObject({ funded: true, pooled: 500 });
+
+    // Both rooms hear about it and both rooms own it…
+    await expect(pageA.getByText(/Window Seat is funded/)).toBeVisible({ timeout: 15_000 });
+    await expect(pageB.getByText(/Window Seat is funded/)).toBeVisible({ timeout: 15_000 });
+    for (const context of [contextA, contextB]) {
+      const shop = (await (await context.request.get("/api/shop")).json()) as {
+        coins: number;
+        room: { decor: string[] };
+        funding: { itemId: string; pooled: number; funded: boolean }[];
+      };
+      expect(shop.room.decor).toContain("window_seat");
+      expect(shop.funding.find((pool) => pool.itemId === "window_seat")).toMatchObject({ pooled: 500, funded: true });
+    }
+
+    // …and the price came out of their pockets exactly once: 260 seeded
+    // each, 500 spent between them, and B's overshoot handed straight back.
+    const coinsA = ((await (await contextA.request.get("/api/shop")).json()) as { coins: number }).coins;
+    const coinsB = ((await (await contextB.request.get("/api/shop")).json()) as { coins: number }).coins;
+    expect(coinsA).toBe(0);
+    expect(coinsB).toBe(20);
+    expect(260 - coinsA + (260 - coinsB)).toBe(500);
+
+    await contextA.close();
+    await contextB.close();
+  });
+
   test("a minigame run is spectated live and a collision still records", async ({ browser }) => {
     const player = await browser.newContext();
     const spectator = await browser.newContext();

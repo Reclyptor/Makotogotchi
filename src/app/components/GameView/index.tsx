@@ -79,6 +79,12 @@ const ambientFeedText = (petName: string): Record<AmbientEvent, string> => ({
   "mystery-noise": "…did you hear that?",
 });
 
+const GRAND_LABELS: Record<string, string> = {
+  window_seat: "Window Seat",
+  aquarium: "Aquarium",
+  kotatsu: "Kotatsu",
+};
+
 const milestoneFeedText = (petName: string): Record<string, string> => ({
   QUEST_DONE: "Today's goal is done — +15 🪙 to everyone who helped!",
   HATCHED: `${petName} hatched!`,
@@ -95,6 +101,9 @@ const milestoneFeedText = (petName: string): Record<string, string> => ({
 const milestoneLine = (kind: string, detail: string | undefined, petName: string): { icon: string; text: string } | null => {
   if (kind === "AMBIENT") {
     return isAmbientEvent(detail) ? { icon: AMBIENT_ICONS[detail], text: ambientFeedText(petName)[detail] } : null;
+  }
+  if (kind === "FUNDED" && detail !== undefined) {
+    return { icon: "🏠", text: `The ${GRAND_LABELS[detail] ?? detail} is funded — it's in the room for good!` };
   }
   const name = kind === "HATCHED" && detail !== undefined ? detail : petName;
   const text = milestoneFeedText(name)[kind];
@@ -113,7 +122,7 @@ const age = (state: PetState): string => {
 
 export default function GameView() {
   const stream = usePetStream();
-  const { projectNow, context, onCare, onMilestone, onMinigame, onRecord, onReact, caretakerId, profile } = stream;
+  const { projectNow, context, onCare, onMilestone, onMinigame, onRecord, onFunded, onReact, caretakerId, profile } = stream;
   const [ui, setUi] = useState<{ state: PetState; derived: DerivedState } | null>(null);
   // Play launches a random game from the roster; a ?game= query pins it —
   // handy for sharing a favourite and for deterministic e2e runs.
@@ -276,6 +285,12 @@ export default function GameView() {
       const who = notice.caretakerId === caretakerRef.current ? "You" : notice.caretakerName;
       pushFeed("🏅", `${who} set the ${MINIGAMES[notice.game].title} record — ${notice.score}!`);
     });
+    const offFunded = onFunded((notice) => {
+      const names = notice.contributors.map((entry) => entry.name);
+      const credit =
+        names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : (names[0] ?? "Everyone");
+      pushFeed("🪙", `${credit} led the way on the ${notice.label}.`);
+    });
     const offReact = onReact((notice) => {
       const who = notice.caretakerId === caretakerRef.current ? "You" : notice.caretakerName;
       pushFeed(notice.emoji, `${who} reacted ${notice.emoji}`);
@@ -285,10 +300,11 @@ export default function GameView() {
       offMilestone();
       offMinigame();
       offRecord();
+      offFunded();
       offReact();
       if (spectateTimeout) clearTimeout(spectateTimeout);
     };
-  }, [onCare, onMilestone, onMinigame, onRecord, onReact]);
+  }, [onCare, onMilestone, onMinigame, onRecord, onFunded, onReact]);
 
   const toggleAudio = (): void => {
     const audio = audioRef.current;

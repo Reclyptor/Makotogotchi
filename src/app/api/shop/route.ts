@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "@/server/db/client";
 import { runtime } from "@/server/runtime";
 import { caretakerProfile } from "@/server/social";
-import { catalog, purchase, roomState, wearCosmetic } from "@/server/shop";
+import { catalog, fundingState, purchase, roomState, wearCosmetic } from "@/server/shop";
 import { caretakerCookieHeader, resolveCaretaker } from "@/server/http";
 
 export const dynamic = "force-dynamic";
@@ -23,10 +23,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const database = await db();
   const { engine, generation } = await runtime();
   const current = await generation();
-  const [profile, room, state] = await Promise.all([
+  const [profile, room, state, funding] = await Promise.all([
     caretakerProfile(database, identity.caretakerId),
     roomState(database),
     engine.view(current),
+    fundingState(database),
   ]);
   const response = NextResponse.json({
     catalog: catalog(),
@@ -34,6 +35,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     inventory: profile?.inventory ?? {},
     room,
     toys: state.toys,
+    funding,
   });
   if (identity.setCookie) response.headers.set("Set-Cookie", caretakerCookieHeader(identity.setCookie));
   return response;

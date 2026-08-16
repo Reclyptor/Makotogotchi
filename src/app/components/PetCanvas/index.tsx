@@ -126,6 +126,12 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
         room.ambient(notice.detail, performance.now());
         return;
       }
+      if (notice.kind === "QUEST_DONE" || notice.kind === "FUNDED") {
+        // Communal wins belong to the whole room, so the whole room cheers.
+        room.celebrate(performance.now(), "heart");
+        room.onMilestone(notice.kind === "FUNDED" ? "the room grows!" : "goal complete!", performance.now());
+        return;
+      }
       const label = MILESTONE_LABELS[notice.kind];
       if (label) room.onMilestone(label, performance.now());
     });

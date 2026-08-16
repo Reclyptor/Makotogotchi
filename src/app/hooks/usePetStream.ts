@@ -21,6 +21,7 @@ import type {
   MinigameMessage,
   PresenceMessage,
   ReactMessage,
+  FundedMessage,
   RecordMessage,
   SnapshotMessage,
 } from "@/server/engine/messages";
@@ -46,6 +47,7 @@ export type CareNotice = {
 export type MilestoneNotice = { seq: number; kind: string; detail?: string };
 export type MinigameNotice = Omit<MinigameMessage, "type">;
 export type RecordNotice = Omit<RecordMessage, "type">;
+export type FundedNotice = Omit<FundedMessage, "type">;
 export type ReactNotice = Omit<ReactMessage, "type">;
 export type CaretakerProfile = { nickname: string | null; streakDays: number; generationsSurvived: number };
 
@@ -68,6 +70,7 @@ export type PetStream = {
   onMilestone: (listener: (notice: MilestoneNotice) => void) => () => void;
   onMinigame: (listener: (notice: MinigameNotice) => void) => () => void;
   onRecord: (listener: (notice: RecordNotice) => void) => () => void;
+  onFunded: (listener: (notice: FundedNotice) => void) => () => void;
   onReact: (listener: (notice: ReactNotice) => void) => () => void;
 };
 
@@ -77,6 +80,7 @@ export const usePetStream = (): PetStream => {
   const milestoneListeners = useRef(new Set<(notice: MilestoneNotice) => void>());
   const minigameListeners = useRef(new Set<(notice: MinigameNotice) => void>());
   const recordListeners = useRef(new Set<(notice: RecordNotice) => void>());
+  const fundedListeners = useRef(new Set<(notice: FundedNotice) => void>());
   const reactListeners = useRef(new Set<(notice: ReactNotice) => void>());
   const [room, setRoom] = useState<RoomView | null>(null);
   const [timeZone, setTimeZone] = useState<string | null>(null);
@@ -170,6 +174,11 @@ export const usePetStream = (): PetStream => {
       const { type: _type, ...notice } = message;
       for (const listener of recordListeners.current) listener(notice);
     });
+    source.addEventListener("funded", (event) => {
+      const message = JSON.parse((event as MessageEvent<string>).data) as FundedMessage;
+      const { type: _type, ...notice } = message;
+      for (const listener of fundedListeners.current) listener(notice);
+    });
     source.addEventListener("react", (event) => {
       const message = JSON.parse((event as MessageEvent<string>).data) as ReactMessage;
       const { type: _type, ...notice } = message;
@@ -217,6 +226,11 @@ export const usePetStream = (): PetStream => {
     return () => recordListeners.current.delete(listener);
   }, []);
 
+  const onFunded = useCallback((listener: (notice: FundedNotice) => void) => {
+    fundedListeners.current.add(listener);
+    return () => fundedListeners.current.delete(listener);
+  }, []);
+
   const onReact = useCallback((listener: (notice: ReactNotice) => void) => {
     reactListeners.current.add(listener);
     return () => reactListeners.current.delete(listener);
@@ -236,6 +250,7 @@ export const usePetStream = (): PetStream => {
     onMilestone,
     onMinigame,
     onRecord,
+    onFunded,
     onReact,
   };
 };

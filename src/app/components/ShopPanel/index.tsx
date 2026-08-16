@@ -16,7 +16,11 @@ type Catalog = {
   toys: Record<string, { label: string; price: number; playBonusPercent: number }>;
   cosmetics: Record<string, { label: string; price: number }>;
   decor: Record<string, { label: string; price: number }>;
+  grand: Record<string, { label: string; price: number }>;
 };
+
+/** A grand item's pool (SPEC §21.8) — communal, never one person's. */
+type Funding = { itemId: string; label: string; price: number; pooled: number; funded: boolean };
 
 type ShopState = {
   catalog: Catalog;
@@ -24,12 +28,20 @@ type ShopState = {
   inventory: Partial<Record<string, number>>;
   room: { cosmetics: string[]; activeCosmetic: string | null; decor: string[] };
   toys: string[];
+  funding: Funding[];
 };
 
 /** Every section reads its display name from the catalog — one source. */
 const itemLabel = (shop: ShopState | null, itemId: string): string => {
   if (!shop) return itemId;
-  const sections = [shop.catalog.food, shop.catalog.medicine, shop.catalog.toys, shop.catalog.cosmetics, shop.catalog.decor];
+  const sections = [
+    shop.catalog.food,
+    shop.catalog.medicine,
+    shop.catalog.toys,
+    shop.catalog.cosmetics,
+    shop.catalog.decor,
+    shop.catalog.grand,
+  ];
   return sections.map((section) => section[itemId]?.label).find((label) => label !== undefined) ?? itemId;
 };
 
@@ -40,7 +52,7 @@ export type ShopPanelProps = {
 /** The one row shape every section uses — this is what keeps the shop tidy. */
 type RowProps = {
   name: string;
-  detail: string;
+  detail: React.ReactNode;
   action: React.ReactNode;
 };
 
@@ -120,6 +132,30 @@ export default function ShopPanel({ onClose }: ShopPanelProps) {
     else {
       const body = (await response.json().catch(() => null)) as { reason?: string } | null;
       setNotice(body?.reason === "NO_ITEM" ? "None left." : `Makoto can't right now (${body?.reason ?? "busy"}).`);
+    }
+    await refresh();
+  };
+
+  const chipIn = async (itemId: string, amount: 10 | 50): Promise<void> => {
+    setNotice(null);
+    const response = await fetch("/api/shop/contribute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itemId, amount }),
+    }).catch(() => null);
+    if (!response) return;
+    if (response.ok) {
+      const body = (await response.json()) as { funded: boolean; spent: number };
+      setNotice(body.funded ? "Funded! Look at the room." : `Chipped in ${body.spent} 🪙.`);
+    } else {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null;
+      setNotice(
+        body?.error === "INSUFFICIENT_COINS"
+          ? "Not enough coins — care for Makoto to earn more."
+          : body?.error === "ALREADY_FUNDED"
+            ? "Already funded."
+            : "Couldn't chip in.",
+      );
     }
     await refresh();
   };
@@ -228,6 +264,54 @@ export default function ShopPanel({ onClose }: ShopPanelProps) {
             action={shop.room.decor.includes(itemId) ? <Badge>Placed</Badge> : priceButton(itemId, item.price)}
           />
         ))}
+        <SectionHeading>Together · Funded by Everyone</SectionHeading>
+        {shop.funding.map((pool) => (
+          <Row
+            key={pool.itemId}
+            name={pool.label}
+            detail={
+              pool.funded ? (
+                "In the room, funded by everyone"
+              ) : (
+                <>
+                  <span className="tabular-nums">
+                    {pool.pooled}/{pool.price} 🪙
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="ml-2 inline-block h-1 w-16 max-w-full align-middle overflow-hidden rounded-full bg-white/10"
+                  >
+                    <span
+                      className="block h-full rounded-full bg-gold transition-[width] duration-500 ease-out"
+                      style={{ width: `${(pool.pooled / pool.price) * 100}%` }}
+                    />
+                  </span>
+                </>
+              )
+            }
+            action={
+              pool.funded ? (
+                <Badge>Placed</Badge>
+              ) : (
+                <span className="flex w-full gap-1">
+                  {([10, 50] as const).map((amount) => (
+                    <button
+                      key={amount}
+                      type="button"
+                      onClick={() => void chipIn(pool.itemId, amount)}
+                      aria-label={`Chip in ${amount} coins toward ${pool.label}`}
+                      className="press w-full rounded-lg bg-accent-strong px-1 py-1.5 text-center text-xs font-bold tabular-nums text-white"
+                    >
+                      +{amount}
+                    </button>
+                  ))}
+                </span>
+              )
+            }
+          />
+        ))}
+        <li className="px-2.5 pb-1 text-[11px] leading-tight text-muted">Contributions are shared and non-refundable.</li>
+
         {Object.entries(shop.catalog.cosmetics).map(([itemId, item]) => {
           const owned = shop.room.cosmetics.includes(itemId);
           const active = shop.room.activeCosmetic === itemId;

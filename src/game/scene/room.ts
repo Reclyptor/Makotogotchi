@@ -198,7 +198,7 @@ export class Room {
     ctx.fillStyle = "#5b4b71";
     ctx.fillRect(PET_X - 58, PET_Y - 8, 116, 10);
 
-    this.renderDecor(ctx);
+    this.renderDecor(ctx, nowMs);
 
     this.updateWander(nowMs);
     if (this.atlas.ready) {
@@ -274,8 +274,8 @@ export class Room {
     }
   }
 
-  /** Communal decor (SPEC §13.2), drawn procedurally in the room palette. */
-  private renderDecor(ctx: CanvasRenderingContext2D): void {
+  /** Communal decor (SPEC §13.2, §21.8), drawn procedurally in the palette. */
+  private renderDecor(ctx: CanvasRenderingContext2D, nowMs: number): void {
     const px = (x: number, y: number, w: number, h: number, color: string): void => {
       ctx.fillStyle = color;
       ctx.fillRect(x, y, w, h);
@@ -297,6 +297,43 @@ export class Room {
       ctx.globalAlpha = 0.12;
       px(206, 98, 44, 64, "#ffe9a3"); // glow
       ctx.globalAlpha = 1;
+    }
+
+    // Grand items (SPEC §21.8): each carries one small living touch, frozen
+    // under reduced motion like everything else in the room.
+    const beat = this.reducedMotion ? 0 : nowMs;
+    if (this.decor.decor.includes("window_seat")) {
+      px(148, 30, 50, 50, "#6a5a3b"); // frame
+      px(152, 34, 42, 42, "#8fb3d9"); // sky
+      px(152, 58, 42, 6, "#5b7a4a"); // hills
+      px(172, 34, 2, 42, "#6a5a3b"); // mullion
+      px(144, 108, 58, 12, "#7a5f8a"); // bench
+      px(148, 104, 50, 6, "#9b7fae"); // cushion
+      ctx.globalAlpha = 0.10;
+      px(150, 80, 46, 40, "#ffe9a3"); // daylight spilling in
+      ctx.globalAlpha = 1;
+    }
+    if (this.decor.decor.includes("aquarium")) {
+      px(36, 92, 52, 44, "#3d3450"); // stand-and-tank shell
+      px(39, 95, 46, 38, "#2f6f7a"); // water
+      px(39, 128, 46, 5, "#c9b48a"); // gravel
+      px(56, 108, 6, 4, "#e8a05a"); // a fish, mid-drift
+      px(62, 109, 4, 2, "#e8a05a");
+      for (let index = 0; index < 4; index++) {
+        // Bubbles rise on their own phase and restart at the gravel.
+        const phase = ((beat / 1300 + index * 0.27) % 1 + 1) % 1;
+        px(46 + index * 10, Math.round(126 - phase * 28), 2, 2, "#bfe6ff");
+      }
+    }
+    if (this.decor.decor.includes("kotatsu")) {
+      const warmth = this.reducedMotion ? 0.14 : 0.11 + Math.sin(beat / 1400) * 0.04;
+      ctx.globalAlpha = warmth;
+      px(96, 126, 68, 26, "#ffb26a"); // the glow under the quilt
+      ctx.globalAlpha = 1;
+      px(98, 132, 64, 14, "#c9738a"); // quilt
+      px(94, 126, 72, 6, "#8a5a3a"); // tabletop
+      px(100, 146, 4, 8, "#6f4630"); // legs
+      px(156, 146, 4, 8, "#6f4630");
     }
   }
 

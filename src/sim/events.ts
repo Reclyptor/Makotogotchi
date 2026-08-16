@@ -55,6 +55,7 @@ export const MILESTONE_KINDS = [
   "DIED",
   "AMBIENT", // detail carries the shared rare event's name (SPEC §21.5)
   "QUEST_DONE", // detail carries the completed quest's id (SPEC §21.7)
+  "FUNDED", // detail carries the funded grand item's id (SPEC §21.8)
 ] as const;
 
 export const milestoneEventSchema = z.object({

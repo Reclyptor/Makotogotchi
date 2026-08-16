@@ -64,6 +64,15 @@ export type RecordMessage = {
   caretakerName: string;
 };
 
+/** A grand item finished funding (SPEC §21.8) — the names, not the fact. */
+export type FundedMessage = {
+  type: "funded";
+  itemId: string;
+  label: string;
+  /** Top three givers, biggest first. */
+  contributors: { name: string; amount: number }[];
+};
+
 /** Emoji reactions (SPEC §2.11) — pure broadcast, no state. */
 export type ReactMessage = {
   type: "react";
@@ -79,4 +88,5 @@ export type EngineMessage =
   | PresenceMessage
   | MinigameMessage
   | RecordMessage
+  | FundedMessage
   | ReactMessage;
