@@ -47,13 +47,13 @@ test.describe("social and economy", () => {
     await expect(page.getByRole("region", { name: "Shop" })).toBeVisible();
 
     // Broke: buying anything is refused with a reason.
-    await page.getByRole("region", { name: "Shop" }).getByRole("button", { name: /🪙 400/ }).first().click();
+    await page.getByRole("region", { name: "Shop" }).getByRole("button", { name: /for 400 coins/ }).first().click();
     await expect(page.getByText(/Not enough coins/)).toBeVisible({ timeout: 10_000 });
 
     // Funded: the potted plant becomes communal decor.
     const state = (await (await page.request.get("/api/state")).json()) as { caretakerId: string };
     seedCoins(state.caretakerId, 5000);
-    await page.getByRole("region", { name: "Shop" }).getByRole("button", { name: /🪙 400/ }).first().click();
+    await page.getByRole("region", { name: "Shop" }).getByRole("button", { name: /for 400 coins/ }).first().click();
     await expect(page.getByText(/Bought/)).toBeVisible({ timeout: 10_000 });
 
     // A second visitor's shop shows it owned — spending is communal.

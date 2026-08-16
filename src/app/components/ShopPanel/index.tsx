@@ -3,6 +3,10 @@
 // The shop (SPEC §13.2): spend coins earned by caring. Consumables land in
 // your pack (use them from here), toys install for the generation, and
 // cosmetics/decor change the room everyone sees.
+//
+// Layout discipline: every item renders through ONE row component — name
+// over a muted detail line on the left, a fixed-width action slot on the
+// right — so labels, prices, and badges align across all sections.
 
 import { useCallback, useEffect, useState } from "react";
 
@@ -28,11 +32,46 @@ const ITEM_LABELS: Record<string, string> = {
   super_medicine: "Super Medicine",
   teeter: "Teeter Toy",
   wheel: "Running Wheel",
+  bow: "Ribbon Bow",
+  cap: "Tiny Cap",
+  crown: "Royal Crown",
+  plant: "Potted Plant",
+  picture: "Framed Picture",
+  lamp: "Cozy Lamp",
 };
+
+const itemLabel = (itemId: string): string => ITEM_LABELS[itemId] ?? itemId;
 
 export type ShopPanelProps = {
   onClose: () => void;
 };
+
+/** The one row shape every section uses — this is what keeps the shop tidy. */
+type RowProps = {
+  name: string;
+  detail: string;
+  action: React.ReactNode;
+};
+
+const Row = ({ name, detail, action }: RowProps) => (
+  <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-2.5 py-2 hover:bg-white/[0.04]">
+    <div className="min-w-0">
+      <p className="truncate text-sm font-semibold leading-tight">{name}</p>
+      <p className="truncate text-[11px] leading-tight text-muted">{detail}</p>
+    </div>
+    <div className="flex w-24 justify-end">{action}</div>
+  </li>
+);
+
+const SectionHeading = ({ children }: { children: React.ReactNode }) => (
+  <h3 className="px-2.5 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted first:pt-0">
+    {children}
+  </h3>
+);
+
+const Badge = ({ children }: { children: React.ReactNode }) => (
+  <span className="rounded-full bg-mint/15 px-2.5 py-1 text-[11px] font-semibold text-mint">{children}</span>
+);
 
 export default function ShopPanel({ onClose }: ShopPanelProps) {
   const [shop, setShop] = useState<ShopState | null>(null);
@@ -64,7 +103,7 @@ export default function ShopPanel({ onClose }: ShopPanelProps) {
     }).catch(() => null);
     if (!response) return;
     if (response.ok) {
-      setNotice(`Bought ${ITEM_LABELS[itemId] ?? itemId}!`);
+      setNotice(`Bought ${itemLabel(itemId)}!`);
     } else {
       const body = (await response.json().catch(() => null)) as { error?: string } | null;
       setNotice(
@@ -103,6 +142,27 @@ export default function ShopPanel({ onClose }: ShopPanelProps) {
     await refresh();
   };
 
+  const priceButton = (itemId: string, price: number) => (
+    <button
+      type="button"
+      onClick={() => void buy(itemId)}
+      aria-label={`Buy ${itemLabel(itemId)} for ${price} coins`}
+      className="press w-full rounded-lg bg-accent-strong px-2 py-1.5 text-center text-xs font-bold tabular-nums text-white"
+    >
+      🪙 {price}
+    </button>
+  );
+
+  const smallButton = (label: string, onClick: () => void) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className="press w-full rounded-lg bg-white/10 px-2 py-1.5 text-center text-xs font-semibold hover:bg-accent/25"
+    >
+      {label}
+    </button>
+  );
+
   if (!shop) {
     return (
       <section aria-label="Shop" className="panel w-full p-4 text-sm text-muted">
@@ -111,122 +171,94 @@ export default function ShopPanel({ onClose }: ShopPanelProps) {
     );
   }
 
-  const row = (itemId: string, price: number, detail: string, owned: boolean, onBuy?: () => void): React.ReactElement => (
-    <li key={itemId} className="flex items-center justify-between gap-2 text-sm">
-      <span>
-        {ITEM_LABELS[itemId] ?? itemId}
-        <span className="ml-2 text-xs text-muted">{detail}</span>
-      </span>
-      {owned ? (
-        <span className="text-xs text-emerald-400">owned</span>
-      ) : (
-        <button
-          type="button"
-          onClick={onBuy ?? (() => void buy(itemId))}
-          className="press rounded-md bg-accent-strong/80 px-2.5 py-1 text-xs font-semibold text-white hover:brightness-110"
-        >
-          🪙 {price}
-        </button>
-      )}
-    </li>
-  );
-
   return (
-    <section aria-label="Shop" className="panel animate-pop flex w-full flex-col gap-3 p-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">🛒 Shop</h2>
-        <div className="flex items-center gap-3">
-          <span className="text-sm tabular-nums">🪙 {shop.coins}</span>
-          <button type="button" onClick={onClose} className="text-sm text-muted underline underline-offset-2">
-            close
+    <section aria-label="Shop" className="panel animate-pop flex w-full flex-col gap-1 p-4">
+      <div className="flex items-center justify-between pb-1">
+        <h2 className="text-sm font-bold">🛒 Shop</h2>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-gold/15 px-3 py-1 text-sm font-bold tabular-nums text-gold">🪙 {shop.coins}</span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close shop"
+            className="press rounded-full bg-white/10 px-3 py-1 text-xs font-semibold"
+          >
+            ✕
           </button>
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <h3 className="text-xs uppercase tracking-wide text-muted">Pack</h3>
-          <ul className="mt-1 flex flex-col gap-1">
+      <ul className="flex flex-col">
+        {Object.entries(shop.inventory).some(([, count]) => (count ?? 0) > 0) && (
+          <>
+            <SectionHeading>Your Pack</SectionHeading>
             {Object.entries(shop.inventory)
               .filter(([, count]) => (count ?? 0) > 0)
               .map(([itemId, count]) => (
-                <li key={itemId} className="flex items-center justify-between gap-2 text-sm">
-                  <span>
-                    {ITEM_LABELS[itemId] ?? itemId} ×{count}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => void consumeOwnedItem(itemId, itemId in shop.catalog.medicine ? "MEDICATE" : "FEED")}
-                    className="press rounded-md bg-white/10 px-2.5 py-1 text-xs hover:bg-accent/30"
-                  >
-                    use
-                  </button>
-                </li>
+                <Row
+                  key={`pack-${itemId}`}
+                  name={`${itemLabel(itemId)} ×${count}`}
+                  detail={itemId in shop.catalog.medicine ? "Cures instantly, no cooldown" : "Extra-tasty meal"}
+                  action={smallButton("Use", () => void consumeOwnedItem(itemId, itemId in shop.catalog.medicine ? "MEDICATE" : "FEED"))}
+                />
               ))}
-            {Object.values(shop.inventory).every((count) => !count) && (
-              <li className="text-xs text-muted">Empty — buy food or medicine below.</li>
-            )}
-          </ul>
-        </div>
+          </>
+        )}
 
-        <div>
-          <h3 className="text-xs uppercase tracking-wide text-muted">Food &amp; Medicine</h3>
-          <ul className="mt-1 flex flex-col gap-1">
-            {Object.entries(shop.catalog.food).map(([itemId, item]) =>
-              row(itemId, item.price, `feeds ×${(item.scalePercent / 100).toFixed(2)} +joy`, false),
-            )}
-            {Object.entries(shop.catalog.medicine).map(([itemId, item]) => row(itemId, item.price, "instant cure", false))}
-          </ul>
-        </div>
+        <SectionHeading>Food &amp; Medicine</SectionHeading>
+        {Object.entries(shop.catalog.food).map(([itemId, item]) => (
+          <Row
+            key={itemId}
+            name={itemLabel(itemId)}
+            detail={`Feeds ×${(item.scalePercent / 100).toFixed(2)} · +${item.joyBonus / 10_000}% joy`}
+            action={priceButton(itemId, item.price)}
+          />
+        ))}
+        {Object.entries(shop.catalog.medicine).map(([itemId, item]) => (
+          <Row key={itemId} name={itemLabel(itemId)} detail="Cures instantly, no cooldown" action={priceButton(itemId, item.price)} />
+        ))}
 
-        <div>
-          <h3 className="text-xs uppercase tracking-wide text-muted">Toys (this generation)</h3>
-          <ul className="mt-1 flex flex-col gap-1">
-            {Object.entries(shop.catalog.toys).map(([itemId, item]) =>
-              row(itemId, item.price, `play +${item.playBonusPercent}%`, shop.toys.includes(itemId)),
-            )}
-          </ul>
-        </div>
+        <SectionHeading>Toys · This Generation</SectionHeading>
+        {Object.entries(shop.catalog.toys).map(([itemId, item]) => (
+          <Row
+            key={itemId}
+            name={itemLabel(itemId)}
+            detail={`Play restores +${item.playBonusPercent}% more`}
+            action={shop.toys.includes(itemId) ? <Badge>Owned</Badge> : priceButton(itemId, item.price)}
+          />
+        ))}
 
-        <div>
-          <h3 className="text-xs uppercase tracking-wide text-muted">Room &amp; Style (everyone sees)</h3>
-          <ul className="mt-1 flex flex-col gap-1">
-            {Object.entries(shop.catalog.decor).map(([itemId, item]) =>
-              row(itemId, item.price, item.label, shop.room.decor.includes(itemId)),
-            )}
-            {Object.entries(shop.catalog.cosmetics).map(([itemId, item]) => {
-              const owned = shop.room.cosmetics.includes(itemId);
-              const active = shop.room.activeCosmetic === itemId;
-              return (
-                <li key={itemId} className="flex items-center justify-between gap-2 text-sm">
-                  <span>
-                    {item.label}
-                    {active && <span className="ml-2 text-xs text-emerald-400">wearing</span>}
-                  </span>
-                  {owned ? (
-                    active ? (
-                      <button type="button" onClick={() => void wear(null)} className="press rounded-md bg-white/10 px-2.5 py-1 text-xs">
-                        take off
-                      </button>
-                    ) : (
-                      <button type="button" onClick={() => void wear(itemId)} className="press rounded-md bg-white/10 px-2.5 py-1 text-xs">
-                        wear
-                      </button>
-                    )
-                  ) : (
-                    <button type="button" onClick={() => void buy(itemId)} className="press rounded-md bg-accent-strong/80 px-2.5 py-1 text-xs font-semibold text-white hover:brightness-110">
-                      🪙 {item.price}
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      </div>
+        <SectionHeading>Room &amp; Style · Everyone Sees</SectionHeading>
+        {Object.entries(shop.catalog.decor).map(([itemId, item]) => (
+          <Row
+            key={itemId}
+            name={item.label}
+            detail="Permanent room decoration"
+            action={shop.room.decor.includes(itemId) ? <Badge>Placed</Badge> : priceButton(itemId, item.price)}
+          />
+        ))}
+        {Object.entries(shop.catalog.cosmetics).map(([itemId, item]) => {
+          const owned = shop.room.cosmetics.includes(itemId);
+          const active = shop.room.activeCosmetic === itemId;
+          return (
+            <Row
+              key={itemId}
+              name={item.label}
+              detail={active ? "Makoto is wearing this" : "Wearable, kept forever"}
+              action={
+                !owned
+                  ? priceButton(itemId, item.price)
+                  : active
+                    ? smallButton("Take Off", () => void wear(null))
+                    : smallButton("Wear", () => void wear(itemId))
+              }
+            />
+          );
+        })}
+      </ul>
 
       {notice && (
-        <p aria-live="polite" className="text-xs text-muted">
+        <p aria-live="polite" className="px-2.5 pt-2 text-xs text-muted">
           {notice}
         </p>
       )}
