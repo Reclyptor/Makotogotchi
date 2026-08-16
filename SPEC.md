@@ -1242,7 +1242,7 @@ via `EventSource` backoff.
 
 ## 19. Cloudflare
 
-Both `makotogotchi.com` and `makoto.reclyptor.com` serve the same app through
+Both `makotogotchi.com` and `makotogotchi.reclyptor.com` serve the same app through
 the existing `cloudflared` tunnel (`414c90a2-c38a-46b2-9d6b-53670c4dfc3f`).
 
 ### 19.1 Prerequisite — API Token
@@ -1270,7 +1270,7 @@ This is the only step in the whole project that requires your browser.
 
 | Item | Value |
 | --- | --- |
-| Tunnel public hostnames | `makotogotchi.com`, `www.makotogotchi.com`, `makoto.reclyptor.com` → `http://makotogotchi.makotogotchi.svc.cluster.local:3000` |
+| Tunnel public hostnames | `makotogotchi.com`, `www.makotogotchi.com`, `makotogotchi.reclyptor.com` → `http://makotogotchi.makotogotchi.svc.cluster.local:3000` |
 | DNS | Proxied `CNAME`s to the tunnel for each hostname |
 | Cache rule | **Bypass cache** for `/api/*` — non-negotiable; a cached SSE stream is a broken SSE stream |
 | Compression | Disabled on `/api/stream` (`no-transform` is set, and the rule enforces it) |

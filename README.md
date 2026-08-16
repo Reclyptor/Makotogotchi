@@ -31,4 +31,4 @@ npm run verify     # typecheck + lint + tests — the bar for every commit
 Built into a standalone Docker image by GitHub Actions
 (`ghcr.io/reclyptor/makotogotchi`), deployed to a k3s cluster via Flux, and
 served through a Cloudflare tunnel at makotogotchi.com and
-makoto.reclyptor.com. See SPEC.md §17–§19.
+makotogotchi.reclyptor.com. See SPEC.md §17–§19.

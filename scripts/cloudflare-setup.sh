@@ -10,7 +10,7 @@
 # What it configures:
 #   1. Tunnel public hostnames (MERGED into the existing tunnel config —
 #      routes for other apps are preserved) → the in-cluster service
-#   2. Proxied CNAMEs for makotogotchi.com, www, makoto.reclyptor.com
+#   2. Proxied CNAMEs for makotogotchi.com, www, makotogotchi.reclyptor.com
 #   3. A cache rule bypassing /api/* (a cached SSE stream is a broken one)
 #   4. A rate-limit rule: 60 req/min per IP on /api/care
 #   5. Always Use HTTPS on both zones
@@ -23,7 +23,7 @@ set -euo pipefail
 
 TUNNEL_ID="414c90a2-c38a-46b2-9d6b-53670c4dfc3f"
 SERVICE="http://makotogotchi.makotogotchi.svc.cluster.local:3000"
-HOSTNAMES=("makotogotchi.com" "www.makotogotchi.com" "makoto.reclyptor.com")
+HOSTNAMES=("makotogotchi.com" "www.makotogotchi.com" "makotogotchi.reclyptor.com")
 API="https://api.cloudflare.com/client/v4"
 
 DRY_RUN=false
@@ -101,14 +101,16 @@ dns_upsert() {
 }
 dns_upsert "$ZONE_MGC" "makotogotchi.com"
 dns_upsert "$ZONE_MGC" "www.makotogotchi.com"
-dns_upsert "$ZONE_REC" "makoto.reclyptor.com"
+dns_upsert "$ZONE_REC" "makotogotchi.reclyptor.com"
 
 # ── 3. Cache rule: bypass /api/* ───────────────────────────────────────────
 echo "── cache bypass ──"
 cache_rule() {
   local zone=$1 host=$2
   local ruleset
-  ruleset=$(cf GET "/zones/$zone/rulesets/phases/http_request_cache_settings/entrypoint" 2>/dev/null | jq -r '.result.id // empty')
+  # The entrypoint 404s until the first rule exists — an expected miss, not
+  # an error, so the probe must survive pipefail.
+  ruleset=$(cf GET "/zones/$zone/rulesets/phases/http_request_cache_settings/entrypoint" 2>/dev/null | jq -r '.result.id // empty' || true)
   local expr="(http.host eq \"$host\" and starts_with(http.request.uri.path, \"/api/\"))"
   local rule="{\"action\":\"set_cache_settings\",\"expression\":$(jq -Rn --arg e "$expr" '$e'),\"description\":\"makotogotchi: never cache the API or the SSE stream\",\"action_parameters\":{\"cache\":false}}"
   if [[ -n "$ruleset" ]] && cf GET "/zones/$zone/rulesets/$ruleset" | jq -e '.result.rules[]? | select(.description == "makotogotchi: never cache the API or the SSE stream")' >/dev/null; then
@@ -124,16 +126,19 @@ cache_rule() {
   fi
 }
 cache_rule "$ZONE_MGC" "makotogotchi.com"
-cache_rule "$ZONE_REC" "makoto.reclyptor.com"
+cache_rule "$ZONE_REC" "makotogotchi.reclyptor.com"
 
 # ── 4. Rate limit: /api/care 60/min per IP ─────────────────────────────────
 echo "── rate limit ──"
 ratelimit_rule() {
   local zone=$1 host=$2
   local ruleset
-  ruleset=$(cf GET "/zones/$zone/rulesets/phases/http_ratelimit/entrypoint" 2>/dev/null | jq -r '.result.id // empty')
+  # Same expected-404 probe as the cache phase.
+  ruleset=$(cf GET "/zones/$zone/rulesets/phases/http_ratelimit/entrypoint" 2>/dev/null | jq -r '.result.id // empty' || true)
   local expr="(http.host eq \"$host\" and http.request.uri.path eq \"/api/care\")"
-  local rule="{\"action\":\"block\",\"expression\":$(jq -Rn --arg e "$expr" '$e'),\"description\":\"makotogotchi: care action rate limit\",\"ratelimit\":{\"characteristics\":[\"ip.src\",\"cf.colo.id\"],\"period\":60,\"requests_per_period\":60,\"mitigation_timeout\":60}}"
+  # Free-plan rate limiting only permits a 10s period; 10/10s matches the
+  # 60/min server-side bucket's average rate.
+  local rule="{\"action\":\"block\",\"expression\":$(jq -Rn --arg e "$expr" '$e'),\"description\":\"makotogotchi: care action rate limit\",\"ratelimit\":{\"characteristics\":[\"ip.src\",\"cf.colo.id\"],\"period\":10,\"requests_per_period\":10,\"mitigation_timeout\":10}}"
   if [[ -n "$ruleset" ]] && cf GET "/zones/$zone/rulesets/$ruleset" | jq -e '.result.rules[]? | select(.description == "makotogotchi: care action rate limit")' >/dev/null; then
     echo "  $host: rate limit already present"
     return
@@ -147,7 +152,7 @@ ratelimit_rule() {
   fi
 }
 ratelimit_rule "$ZONE_MGC" "makotogotchi.com"
-ratelimit_rule "$ZONE_REC" "makoto.reclyptor.com"
+ratelimit_rule "$ZONE_REC" "makotogotchi.reclyptor.com"
 
 # ── 5. Always Use HTTPS ────────────────────────────────────────────────────
 echo "── https ──"
