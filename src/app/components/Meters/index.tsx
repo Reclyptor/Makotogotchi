@@ -17,7 +17,6 @@ const METER_ROWS = [
 ] as const;
 
 const CRITICAL_PERCENT = 20;
-const SEGMENTS = 10;
 
 export type MetersProps = {
   percentages: DerivedState["percentages"];
@@ -29,7 +28,6 @@ export default function Meters({ percentages }: MetersProps) {
       {METER_ROWS.map(({ key, label, emoji, hue }) => {
         const value = percentages[key];
         const low = value < CRITICAL_PERCENT;
-        const filled = Math.round((value / 100) * SEGMENTS);
         return (
           <li key={key} className="flex items-center gap-2.5 text-sm">
             <span aria-hidden="true" className={`w-6 text-center text-base ${low ? "animate-wiggle" : ""}`}>
@@ -43,22 +41,20 @@ export default function Meters({ percentages }: MetersProps) {
               aria-valuemax={100}
               aria-valuenow={value}
               aria-valuetext={`${value}%${low ? " — critically low" : ""}`}
-              className="flex flex-1 gap-[3px]"
+              className="relative h-4 flex-1 overflow-hidden rounded-full"
+              style={{
+                background: "rgba(0,0,0,0.35)",
+                boxShadow: "inset 0 1px 3px rgba(0,0,0,0.5), inset 0 -1px 0 rgba(255,255,255,0.06)",
+              }}
             >
-              {Array.from({ length: SEGMENTS }, (_, index) => {
-                const on = index < filled;
-                return (
-                  <span
-                    key={index}
-                    className="h-3.5 flex-1 rounded-[4px] transition-all duration-300"
-                    style={
-                      on
-                        ? { backgroundColor: hue, boxShadow: `0 0 6px ${hue}55` }
-                        : { backgroundColor: "rgba(255,255,255,0.06)" }
-                    }
-                  />
-                );
-              })}
+              <div
+                className="h-full rounded-full transition-[width] duration-500 ease-out"
+                style={{
+                  width: `${value}%`,
+                  background: `linear-gradient(180deg, ${hue}f0, ${hue}b8)`,
+                  boxShadow: `inset 0 1px 0 rgba(255,255,255,0.55), inset 0 -2px 3px rgba(0,0,0,0.25), 0 0 10px ${hue}44`,
+                }}
+              />
             </div>
             <span
               className={`w-13 shrink-0 text-right text-[13px] tabular-nums ${low ? "font-bold text-rose" : "text-muted"}`}
