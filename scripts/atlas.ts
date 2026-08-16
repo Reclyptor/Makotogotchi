@@ -77,7 +77,7 @@ const loadFrames = (): Frame[] => {
       .sort(collator.compare);
     for (const file of files) {
       const logical = file.endsWith("@1x.png");
-      const name = file.slice(0, logical ? -8 : -4);
+      const name = file.slice(0, logical ? -"@1x.png".length : -".png".length);
       if (!/^[a-zA-Z][a-zA-Z0-9]*$/.test(name)) {
         throw new Error(`art/${category}/${file}: frame names must be valid identifiers`);
       }
