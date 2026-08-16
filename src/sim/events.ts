@@ -53,6 +53,7 @@ export const MILESTONE_KINDS = [
   "RECOVERED",
   "CRITICAL",
   "DIED",
+  "AMBIENT", // detail carries the shared rare event's name (SPEC §21.5)
 ] as const;
 
 export const milestoneEventSchema = z.object({

@@ -25,7 +25,7 @@ import { reduce } from "@/sim/reduce";
 import { canPerform, type ValidationResult } from "@/sim/validate";
 import type { Generation, PetState, ProjectionContext } from "@/sim/model";
 import { TICKS_PER_DAY, TICK_SECONDS, type CareAction } from "@/sim/tuning";
-import type { Milestone, PetEvent } from "@/sim/events";
+import type { Milestone, MilestoneKind, PetEvent } from "@/sim/events";
 import {
   appendEvent,
   createGeneration,
@@ -283,6 +283,28 @@ export class PetEngine {
         }),
       };
     });
+    return result.state;
+  }
+
+  /**
+   * Append a milestone-class event the world produced rather than the fold:
+   * a shared rare moment, a completed quest, a funded room (SPEC §21.5,
+   * §21.7, §21.8). It carries no state effect — reduce treats it as an
+   * assertion — but it is in the log, so it replays and fans out like any
+   * other milestone.
+   */
+  async milestone(generation: Generation, kind: MilestoneKind, detail?: string): Promise<PetState> {
+    const result = await this.advance(generation, () => ({
+      kind: "event",
+      event: (seq, current): PetEvent => ({
+        type: "MILESTONE",
+        generationId: generation.id,
+        seq,
+        tick: current.tick,
+        kind,
+        ...(detail !== undefined ? { detail } : {}),
+      }),
+    }));
     return result.state;
   }
 

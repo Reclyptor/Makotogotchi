@@ -6,8 +6,9 @@ import { Atlas } from "../engine/atlas";
 import { Particles, type ParticleKind } from "../engine/particles";
 import { Toasts } from "./toasts";
 import { AnimationMachine } from "../anim/machine";
-import { WALK_CLIP, type OneShotName } from "../anim/clips";
+import { BUTTERFLY_CLIP, WALK_CLIP, type OneShotName } from "../anim/clips";
 import type { DerivedState } from "@/sim/derive";
+import type { AmbientEvent } from "@/sim/ambient";
 import type { CareAction } from "@/sim/tuning";
 
 export const ROOM_WIDTH = 260;
@@ -51,6 +52,12 @@ const CARE_PARTICLES: Record<CareAction, { kind: ParticleKind; count: number }> 
 /** How this generation feels about the meal it was just fed (SPEC §21.4). */
 export type FoodTaste = "favorite" | "disliked";
 
+// A shared rare moment holds the room for six seconds (SPEC §21.5).
+const AMBIENT_MS = 6000;
+const STAR_FLIGHT_MS = 1200;
+const STAR_INTERVAL_MS = 2000;
+const NOISE_DIM_MS = 700;
+
 export type RoomDecor = { decor: string[]; activeCosmetic: string | null };
 
 export class Room {
@@ -64,6 +71,7 @@ export class Room {
   private facingRight = false;
   private walking = false;
   private lastWanderMs: number | null = null;
+  private moment: { event: AmbientEvent; startedMs: number } | null = null;
   decor: RoomDecor = { decor: [], activeCosmetic: null };
 
   set reducedMotion(value: boolean) {
@@ -96,6 +104,21 @@ export class Room {
 
   onMilestone(label: string, nowMs: number): void {
     this.toasts.push(label, nowMs);
+  }
+
+  /**
+   * A shared rare moment (SPEC §21.5). Under reduced motion the feed entry
+   * carries it alone — nothing here runs.
+   */
+  ambient(event: AmbientEvent, nowMs: number): void {
+    if (this.reducedMotion) return;
+    this.moment = { event, startedMs: nowMs };
+    if (event === "coin-dig") {
+      this.machine.trigger("bathing", nowMs);
+      this.particles.spawn("sparkle", this.petX, PET_Y - 24, 16);
+    } else if (event === "mystery-noise") {
+      this.machine.trigger("startled", nowMs);
+    }
   }
 
   update(dtMs: number): void {
@@ -172,6 +195,7 @@ export class Room {
     }
 
     this.particles.render(ctx);
+    this.renderAmbient(ctx, nowMs);
 
     // Night dims the room without hiding it.
     if (this.asleep) {
@@ -180,6 +204,48 @@ export class Room {
     }
 
     this.toasts.render(ctx, nowMs, PET_X, PET_Y - 110);
+  }
+
+  /**
+   * The rare moment's six seconds of theatre: a streak across the night sky,
+   * a butterfly on a sine path, or a beat of darkness. The dig needs nothing
+   * here — its one-shot and sparkles say it already.
+   */
+  private renderAmbient(ctx: CanvasRenderingContext2D, nowMs: number): void {
+    const moment = this.moment;
+    if (!moment) return;
+    const age = nowMs - moment.startedMs;
+    if (age < 0 || age > AMBIENT_MS) {
+      this.moment = null;
+      return;
+    }
+    if (moment.event === "shooting-star") {
+      // Three streaks over the window, each falling left-to-right down the
+      // wall; they stay above the wainscot line so they read as sky.
+      const index = Math.floor(age / STAR_INTERVAL_MS);
+      const progress = (age - index * STAR_INTERVAL_MS) / STAR_FLIGHT_MS;
+      if (progress > 1) return;
+      const startX = 20 + index * 60;
+      const x = startX + progress * 150;
+      const y = 14 + index * 22 + progress * 40;
+      ctx.fillStyle = "#fff7d6";
+      ctx.fillRect(Math.round(x), Math.round(y), 2, 2);
+      ctx.globalAlpha = 0.5;
+      ctx.fillRect(Math.round(x - 5), Math.round(y - 2), 2, 2);
+      ctx.globalAlpha = 0.25;
+      ctx.fillRect(Math.round(x - 10), Math.round(y - 4), 2, 2);
+      ctx.globalAlpha = 1;
+    } else if (moment.event === "butterfly") {
+      const progress = age / AMBIENT_MS;
+      const x = 12 + progress * (ROOM_WIDTH - 24);
+      const y = 96 - Math.sin(progress * Math.PI * 3) * 22;
+      const frames = BUTTERFLY_CLIP.frames;
+      const frame = frames[Math.floor(nowMs / BUTTERFLY_CLIP.frameMs) % frames.length]!;
+      this.atlas.draw(ctx, frame, x, y);
+    } else if (moment.event === "mystery-noise" && age < NOISE_DIM_MS) {
+      ctx.fillStyle = "rgba(9, 8, 24, 0.10)";
+      ctx.fillRect(0, 0, ROOM_WIDTH, ROOM_HEIGHT);
+    }
   }
 
   /** Communal decor (SPEC §13.2), drawn procedurally in the room palette. */

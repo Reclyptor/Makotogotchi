@@ -8,6 +8,8 @@ export const RNG_PURPOSE = {
   quirkFavoriteFood: 2,
   quirkDislikedFood: 3,
   quirkFavoriteGame: 4,
+  ambientOdds: 5,
+  ambientPick: 6,
 } as const;
 
 export type RngPurpose = (typeof RNG_PURPOSE)[keyof typeof RNG_PURPOSE];

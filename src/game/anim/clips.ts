@@ -38,6 +38,7 @@ export const ONE_SHOT_NAMES = [
   "medicated",
   "greeting",
   "celebrating",
+  "startled",
 ] as const;
 export type OneShotName = (typeof ONE_SHOT_NAMES)[number];
 
@@ -53,6 +54,7 @@ export const ONE_SHOT_CLIPS: Record<OneShotName, Clip> = {
   medicated: clip(["drpepper1", "drpepper2", "drpepper1", "drpepper2"], 400, false),
   greeting: clip(["pekori", "idleFront1", "pekori"], 500, false),
   celebrating: clip(["cheer1", "cheer2", "cheer1", "cheer2", "heart1", "heart2"], 450, false),
+  startled: clip(["earTwitch", "idleSide1", "earTwitch"], 280, false),
 };
 
 /** Micro-idle flourishes: short interludes the machine sprinkles into the
@@ -63,6 +65,9 @@ export const IDLE_FLOURISH_CLIPS: readonly Clip[] = [
   clip(["groom1", "groom2", "groom1", "groom2"], 420, false),
   clip(["yawn1", "yawn2", "yawn2", "yawn1"], 480, false),
 ];
+
+/** The rare-moment butterfly's wingbeat (SPEC §21.5). */
+export const BUTTERFLY_CLIP: Clip = clip(["butterfly1", "butterfly2"], 130, true);
 
 /** The stride cycle the room plays while the pet wanders. */
 export const WALK_CLIP: Clip = clip(["walk1", "walk2", "walk3", "walk4"], 160, true);

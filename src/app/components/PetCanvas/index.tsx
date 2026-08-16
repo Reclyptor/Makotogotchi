@@ -7,6 +7,7 @@
 import { useEffect, useRef } from "react";
 import { derive } from "@/sim/derive";
 import { quirks } from "@/sim/quirks";
+import { isAmbientEvent } from "@/sim/ambient";
 import type { CareAction } from "@/sim/tuning";
 import { Room, ROOM_HEIGHT, ROOM_WIDTH, type FoodTaste } from "@/game/scene/room";
 import { startLoop } from "@/game/engine/loop";
@@ -121,6 +122,10 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
       room.onCare(notice.action, `${amount}${ACTION_EMOJI[notice.action]} ${who}`, performance.now(), taste);
     });
     const offMilestone = onMilestone((notice) => {
+      if (notice.kind === "AMBIENT" && isAmbientEvent(notice.detail)) {
+        room.ambient(notice.detail, performance.now());
+        return;
+      }
       const label = MILESTONE_LABELS[notice.kind];
       if (label) room.onMilestone(label, performance.now());
     });

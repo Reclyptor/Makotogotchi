@@ -19,7 +19,8 @@ import { anonymousName, nicknameMap } from "./social";
 import { PushDispatcher } from "./push/dispatcher";
 import { pushConfigured, webPushSender } from "./push/sender";
 import { TICK_SECONDS } from "@/sim/tuning";
-import type { Generation } from "@/sim/model";
+import { ambientAt } from "@/sim/ambient";
+import { isAlive, type Generation } from "@/sim/model";
 
 const GENERATION_TTL_MS = 10_000;
 const NAME_CACHE_TTL_MS = 30_000;
@@ -75,7 +76,13 @@ const boot = async (): Promise<Runtime> => {
 
   // The tick loop: advance under the leader lease, then let the lifecycle
   // inspect the result for hatches, seals, and rebirths.
+  //
+  // The shared rare moment (SPEC §21.5) is drawn here, from the tick the
+  // leader actually settled on, and recorded as a milestone so every client
+  // — and every future replay — sees the same instant. A tick index is drawn
+  // at most once: a clock that fails to advance must not roll twice.
   const lease = new Lease(redis(), key("tick-leader"), 15_000);
+  let lastAmbientTick = -1;
   setInterval(() => {
     void (async () => {
       if (!(await lease.acquire())) return;
@@ -83,6 +90,11 @@ const boot = async (): Promise<Runtime> => {
       const state = await engine.tick(current);
       const successor = await lifecycle.check(current, state);
       if (successor) cached = { generation: successor, at: Date.now() };
+      if (!successor && state.tick !== lastAmbientTick) {
+        lastAmbientTick = state.tick;
+        const moment = isAlive(state) ? ambientAt(current.seed, state.tick, state.asleep) : null;
+        if (moment) await engine.milestone(current, "AMBIENT", moment);
+      }
       await dispatcher?.observe(state);
       await lease.renew();
     })().catch((error: unknown) => {

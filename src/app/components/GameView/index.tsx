@@ -22,6 +22,7 @@ import PushToggle from "@/app/components/PushToggle";
 import ShopPanel from "@/app/components/ShopPanel";
 import MinigameShell from "@/app/components/minigames/Shell";
 import { isMinigameId, MINIGAME_IDS, MINIGAMES, type MinigameId } from "@/sim/minigames";
+import { isAmbientEvent, type AmbientEvent } from "@/sim/ambient";
 import { usePetStream } from "@/app/hooks/usePetStream";
 import type { FeedEntryPayload } from "@/app/api/feed/route";
 
@@ -63,6 +64,20 @@ const actionFeedText = (petName: string): Record<CareAction, string> => ({
   MEDICATE: `gave ${petName} medicine`,
 });
 
+const AMBIENT_ICONS: Record<AmbientEvent, string> = {
+  "shooting-star": "🌠",
+  butterfly: "🦋",
+  "coin-dig": "✨",
+  "mystery-noise": "👂",
+};
+
+const ambientFeedText = (petName: string): Record<AmbientEvent, string> => ({
+  "shooting-star": "A shooting star crossed the window.",
+  butterfly: "A butterfly drifted through the room.",
+  "coin-dig": `${petName} dug up something shiny!`,
+  "mystery-noise": "…did you hear that?",
+});
+
 const milestoneFeedText = (petName: string): Record<string, string> => ({
   HATCHED: `${petName} hatched!`,
   BECAME_SICK: `${petName} got sick!`,
@@ -73,6 +88,16 @@ const milestoneFeedText = (petName: string): Record<string, string> => ({
   EVOLVED: `${petName} evolved!`,
   CRITICAL: "A need is critically low!",
 });
+
+/** One feed line for a milestone, or null when it has nothing to say. */
+const milestoneLine = (kind: string, detail: string | undefined, petName: string): { icon: string; text: string } | null => {
+  if (kind === "AMBIENT") {
+    return isAmbientEvent(detail) ? { icon: AMBIENT_ICONS[detail], text: ambientFeedText(petName)[detail] } : null;
+  }
+  const name = kind === "HATCHED" && detail !== undefined ? detail : petName;
+  const text = milestoneFeedText(name)[kind];
+  return text === undefined ? null : { icon: MILESTONE_ICONS[kind] ?? "✨", text };
+};
 
 const clockTime = (date: Date): string => date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
@@ -154,26 +179,24 @@ export default function GameView() {
       if (!response?.ok) return;
       const body = (await response.json()) as { generationName: string | null; entries: FeedEntryPayload[] };
       const petName = body.generationName ?? "Makoto";
-      const seeded: FeedEntry[] = body.entries.map((entry) => {
+      const seeded: FeedEntry[] = body.entries.flatMap((entry): FeedEntry[] => {
         if (entry.type === "care") {
           const who = entry.caretakerId === caretakerId ? "You" : (entry.caretakerName ?? "A friend");
           const amount = (entry.applied ?? 0) >= 1000 ? ` (+${((entry.applied ?? 0) / 10_000).toFixed(1)}%)` : "";
-          return {
-            id: entry.seq,
-            icon: ACTION_EMOJI[entry.action as CareAction] ?? "✨",
-            text: `${who} ${actionFeedText(petName)[entry.action as CareAction]}${amount}`,
-            at: clockTime(new Date(entry.at)),
-          };
+          return [
+            {
+              id: entry.seq,
+              icon: ACTION_EMOJI[entry.action as CareAction] ?? "✨",
+              text: `${who} ${actionFeedText(petName)[entry.action as CareAction]}${amount}`,
+              at: clockTime(new Date(entry.at)),
+            },
+          ];
         }
-        const name = entry.kind === "HATCHED" && entry.detail ? entry.detail : petName;
-        return {
-          id: entry.seq,
-          icon: MILESTONE_ICONS[entry.kind ?? ""] ?? "✨",
-          text: milestoneFeedText(name)[entry.kind ?? ""] ?? (entry.kind ?? ""),
-          at: clockTime(new Date(entry.at)),
-        };
+        const line = milestoneLine(entry.kind ?? "", entry.detail, petName);
+        return line === null ? [] : [{ id: entry.seq, icon: line.icon, text: line.text, at: clockTime(new Date(entry.at)) }];
       });
-      if (seeded.length > 0) maxSeqRef.current = Math.max(maxSeqRef.current, seeded[seeded.length - 1]!.id as number);
+      const newestSeq = body.entries[body.entries.length - 1]?.seq;
+      if (newestSeq !== undefined) maxSeqRef.current = Math.max(maxSeqRef.current, newestSeq);
       setFeed((live) => [...seeded, ...live.filter((entry) => typeof entry.id === "string")]);
     })();
   }, [caretakerId]);
@@ -202,9 +225,8 @@ export default function GameView() {
     const offMilestone = onMilestone((notice) => {
       if (notice.seq <= maxSeqRef.current) return;
       maxSeqRef.current = notice.seq;
-      const name = notice.kind === "HATCHED" && notice.detail ? notice.detail : petNameRef.current;
-      const text = milestoneFeedText(name)[notice.kind];
-      if (text) pushFeed(MILESTONE_ICONS[notice.kind] ?? "✨", text, notice.seq);
+      const line = milestoneLine(notice.kind, notice.detail, petNameRef.current);
+      if (line) pushFeed(line.icon, line.text, notice.seq);
       if (notice.kind === "CRITICAL" || notice.kind === "BECAME_SICK" || notice.kind === "DIED") {
         audioRef.current?.playAlert();
       }

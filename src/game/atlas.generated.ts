@@ -30,6 +30,8 @@ export const SPRITE_FRAMES = {
   bored1: { x: 1031, y: 110, w: 138, h: 137 },
   bored2: { x: 1177, y: 110, w: 138, h: 137 },
   bored3: { x: 1323, y: 110, w: 138, h: 137 },
+  butterfly1: { x: 1469, y: 110, w: 39, h: 33 },
+  butterfly2: { x: 1516, y: 110, w: 39, h: 33 },
   cheer1: { x: 8, y: 305, w: 143, h: 143 },
   cheer2: { x: 159, y: 305, w: 143, h: 143 },
   clone1: { x: 310, y: 305, w: 137, h: 138 },

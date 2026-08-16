@@ -14,6 +14,7 @@ import { genesis } from "@/sim/genesis";
 import { project } from "@/sim/project";
 import { reduce } from "@/sim/reduce";
 import { scheduleFor } from "./schedule";
+import { ambientAt } from "@/sim/ambient";
 import type { Generation, PetState } from "@/sim/model";
 import { CARE_ACTIONS, TICK_SECONDS } from "@/sim/tuning";
 
@@ -96,6 +97,25 @@ describe("PetEngine", () => {
     // Kill the hot state and every other Redis key — cold cache only.
     await redis().flushall();
 
+    const recovered = await engine.recover(generation);
+    const ctx = { schedule: scheduleFor(generation.genesisEpochMs, recovered.state.tick, before.tick + 8640, "America/Chicago") };
+    expect(project(recovered.state, before.tick, ctx).state).toEqual(before);
+  });
+
+  it("records a shared rare moment that survives a cold restart (SPEC §21.5)", async () => {
+    advanceClockTicks(30);
+    const moment = ambientAt(generation.seed, 4242, false) ?? "butterfly";
+    const before = await engine.milestone(generation, "AMBIENT", moment);
+
+    const log = await eventsSince(await db(), generation.id, -1);
+    const recorded = log.filter((event) => event.type === "MILESTONE" && event.kind === "AMBIENT");
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({ type: "MILESTONE", kind: "AMBIENT", detail: moment });
+
+    // Losing Redis loses nothing: the moment is in the durable log, so the
+    // fold that rebuilds the pet replays it and lands on the same state — a
+    // milestone asserts what happened, it never mutates.
+    await redis().flushall();
     const recovered = await engine.recover(generation);
     const ctx = { schedule: scheduleFor(generation.genesisEpochMs, recovered.state.tick, before.tick + 8640, "America/Chicago") };
     expect(project(recovered.state, before.tick, ctx).state).toEqual(before);
