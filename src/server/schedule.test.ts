@@ -3,9 +3,9 @@
 // has to know these two days a year exist (SPEC §4.5).
 
 import { describe, expect, it } from "vitest";
-import { scheduleFor } from "./schedule";
+import { isoWeekKey, isoWeekKeyAtTick, scheduleFor } from "./schedule";
 import { phaseAt } from "@/sim/model";
-import { TICKS_PER_DAY, TICKS_PER_HOUR } from "@/sim/tuning";
+import { TICKS_PER_DAY, TICKS_PER_HOUR, TICK_SECONDS } from "@/sim/tuning";
 
 describe("scheduleFor", () => {
   // 2026-01-05 07:00:00 America/Chicago (CST, UTC-6) = 13:00 UTC.
@@ -59,5 +59,33 @@ describe("scheduleFor", () => {
     expect(nov1Wake).toBeDefined();
     const precedingSleep = [...schedule.boundaries].reverse().find((b) => b.phase === "SLEEP" && b.tick < nov1Wake!.tick);
     expect(nov1Wake!.tick - precedingSleep!.tick).toBe(10 * TICKS_PER_HOUR);
+  });
+});
+
+describe("isoWeekKey (SPEC §21.3)", () => {
+  it("numbers weeks Monday-first with the Thursday rule", () => {
+    // 2026-01-01 is a Thursday, so its whole week is 2026-W01 — including the
+    // Monday that still reads as December.
+    expect(isoWeekKey(Date.UTC(2025, 11, 29, 18), "UTC")).toBe("2026-W01");
+    expect(isoWeekKey(Date.UTC(2026, 0, 1, 18), "UTC")).toBe("2026-W01");
+    expect(isoWeekKey(Date.UTC(2026, 0, 4, 18), "UTC")).toBe("2026-W01"); // Sunday
+    expect(isoWeekKey(Date.UTC(2026, 0, 5, 18), "UTC")).toBe("2026-W02"); // Monday
+    // 2027-01-01 is a Friday, so it belongs to the last week of 2026.
+    expect(isoWeekKey(Date.UTC(2027, 0, 1, 18), "UTC")).toBe("2026-W53");
+  });
+
+  it("reads the pet's calendar, not the caller's", () => {
+    // 2026-01-05 01:00 UTC is still Sunday evening in Chicago — the previous
+    // ISO week — so the two zones disagree, and the pet's zone wins.
+    const instant = Date.UTC(2026, 0, 5, 1);
+    expect(isoWeekKey(instant, "UTC")).toBe("2026-W02");
+    expect(isoWeekKey(instant, "America/Chicago")).toBe("2026-W01");
+  });
+
+  it("advances with the pet's own tick clock", () => {
+    const genesis = Date.UTC(2026, 0, 5, 13); // Monday 07:00 Chicago
+    expect(isoWeekKeyAtTick(genesis, 0, "America/Chicago")).toBe("2026-W02");
+    expect(isoWeekKeyAtTick(genesis, 7 * TICKS_PER_DAY, "America/Chicago")).toBe("2026-W03");
+    expect(TICKS_PER_DAY * TICK_SECONDS).toBe(86_400);
   });
 });

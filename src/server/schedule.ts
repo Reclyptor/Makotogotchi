@@ -62,6 +62,27 @@ const localToEpoch = (wall: Omit<WallClock, "minute" | "second">, timeZone: stri
 };
 
 /**
+ * The ISO-8601 week (`YYYY-Www`) an instant falls in, read off the pet's own
+ * calendar. Weekly records roll over the moment this string changes — no job,
+ * no cleanup: a new week simply has no rows yet (SPEC §21.3).
+ */
+export const isoWeekKey = (epochMs: number, timeZone: string): string => {
+  const wall = wallClockAt(epochMs, timeZone);
+  const date = new Date(Date.UTC(wall.year, wall.month - 1, wall.day));
+  const isoDay = date.getUTCDay() === 0 ? 7 : date.getUTCDay(); // Monday = 1
+  // Step to the week's Thursday: the year that Thursday lands in IS the
+  // week-year, which is what makes late December and early January agree.
+  date.setUTCDate(date.getUTCDate() + 4 - isoDay);
+  const weekYear = date.getUTCFullYear();
+  const week = Math.floor((date.getTime() - Date.UTC(weekYear, 0, 1)) / (7 * DAY_MS)) + 1;
+  return `${weekYear}-W${String(week).padStart(2, "0")}`;
+};
+
+/** The same week, read off the pet's tick clock rather than the caller's. */
+export const isoWeekKeyAtTick = (genesisEpochMs: number, tick: number, timeZone: string): string =>
+  isoWeekKey(genesisEpochMs + tick * TICK_MS, timeZone);
+
+/**
  * The schedule covering [fromTick, toTick]: initial phase plus every
  * sleep/wake boundary in range, in tick units relative to genesisEpochMs.
  */

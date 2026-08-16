@@ -2,9 +2,13 @@
 // the shop gates on coins and reflects communal purchases, and the minigame
 // runs its full spectated arc — including the short-run (collision) path
 // that once returned "implausible".
+//
+// Every test that plays a minigame lives in THIS file. The pet is shared and
+// PLAY carries a global cooldown, so two spec files racing for a run would
+// refuse each other; keeping them in one serial file keeps that impossible.
 
 import { execFileSync } from "node:child_process";
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 
 const seedCoins = (caretakerId: string, coins: number): void => {
   execFileSync("docker", [
@@ -16,6 +20,34 @@ const seedCoins = (caretakerId: string, coins: number): void => {
     "--eval",
     `db.caretakers.updateOne({_id:"${caretakerId}"},{$set:{coins:${coins}}},{upsert:true})`,
   ]);
+};
+
+const RECORD_RUN_MS = 4000;
+const RECORD_RUN_SCORE = 7;
+
+/**
+ * One full Dust Dash run straight through the API. A run can be refused
+ * because someone else is mid-game or because PLAY is still on its global
+ * cooldown — both transient, so the caller retries.
+ */
+const playOnce = async (request: APIRequestContext): Promise<{ ok: boolean; status: number }> => {
+  const start = await request.post("/api/play", { data: { phase: "start", game: "dustdash" } });
+  if (!start.ok()) return { ok: false, status: start.status() };
+  await new Promise((resolve) => setTimeout(resolve, RECORD_RUN_MS));
+  const finish = await request.post("/api/play", {
+    data: { phase: "finish", score: RECORD_RUN_SCORE, inputs: RECORD_RUN_SCORE + 1 },
+  });
+  return { ok: finish.ok(), status: finish.status() };
+};
+
+const playUntilAccepted = async (request: APIRequestContext): Promise<void> => {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const outcome = await playOnce(request);
+    if (outcome.ok) return;
+    expect(outcome.status, "a refused run must be a transient conflict, not a rejection").toBe(409);
+    await new Promise((resolve) => setTimeout(resolve, 12_000));
+  }
+  throw new Error("the pet never accepted a minigame run");
 };
 
 test.describe("social and economy", () => {
@@ -96,5 +128,30 @@ test.describe("social and economy", () => {
 
     await player.close();
     await spectator.close();
+  });
+
+  test("a finished run takes the record board, and everyone hears it", async ({ browser }) => {
+    test.setTimeout(180_000);
+    const watcher = await browser.newContext();
+    const player = await browser.newContext();
+    const watcherPage = await watcher.newPage();
+    await watcherPage.goto("/");
+    await expect(watcherPage.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
+
+    await playUntilAccepted(player.request);
+
+    // The board reports the run…
+    const boards = (await (await watcherPage.request.get("/api/records")).json()) as {
+      games: { game: string; alltime: { score: number } | null; weekly: { score: number } | null }[];
+    };
+    const dustdash = boards.games.find((entry) => entry.game === "dustdash");
+    expect(dustdash?.alltime?.score).toBeGreaterThanOrEqual(RECORD_RUN_SCORE);
+    expect(dustdash?.weekly?.score).toBeGreaterThanOrEqual(RECORD_RUN_SCORE);
+
+    // …and the watcher heard about it without reloading.
+    await expect(watcherPage.getByText(/set the Dust Dash record/)).toBeVisible({ timeout: 15_000 });
+
+    await watcher.close();
+    await player.close();
   });
 });

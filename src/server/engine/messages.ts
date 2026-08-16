@@ -4,6 +4,8 @@
 
 import type { PetState } from "@/sim/model";
 import type { CareEvent, Milestone } from "@/sim/events";
+import type { MinigameId } from "@/sim/minigames";
+import type { RecordScope } from "../records";
 
 export type CareMessage = {
   type: "care";
@@ -50,6 +52,16 @@ export type MinigameMessage = {
   applied?: number;
 };
 
+/** A new per-game high score (SPEC §21.3) — pure broadcast, no state. */
+export type RecordMessage = {
+  type: "record";
+  game: MinigameId;
+  scope: RecordScope;
+  score: number;
+  caretakerId: string;
+  caretakerName: string;
+};
+
 /** Emoji reactions (SPEC §2.11) — pure broadcast, no state. */
 export type ReactMessage = {
   type: "react";
@@ -64,4 +76,5 @@ export type EngineMessage =
   | SnapshotMessage
   | PresenceMessage
   | MinigameMessage
+  | RecordMessage
   | ReactMessage;

@@ -86,7 +86,7 @@ const age = (state: PetState): string => {
 
 export default function GameView() {
   const stream = usePetStream();
-  const { projectNow, context, onCare, onMilestone, onMinigame, onReact, caretakerId, profile } = stream;
+  const { projectNow, context, onCare, onMilestone, onMinigame, onRecord, onReact, caretakerId, profile } = stream;
   const [ui, setUi] = useState<{ state: PetState; derived: DerivedState } | null>(null);
   // Play launches a random game from the roster; a ?game= query pins it —
   // handy for sharing a favourite and for deterministic e2e runs.
@@ -232,6 +232,13 @@ export default function GameView() {
         if (notice.score !== undefined) pushFeed("🏆", `${name} scored ${notice.score} at ${game}!`);
       }
     });
+    // A new high score is worth saying out loud (SPEC §21.3); the all-time
+    // board is the one that gets the shout when a run takes both.
+    const offRecord = onRecord((notice) => {
+      if (notice.scope !== "alltime") return;
+      const who = notice.caretakerId === caretakerRef.current ? "You" : notice.caretakerName;
+      pushFeed("🏅", `${who} set the ${MINIGAMES[notice.game].title} record — ${notice.score}!`);
+    });
     const offReact = onReact((notice) => {
       const who = notice.caretakerId === caretakerRef.current ? "You" : notice.caretakerName;
       pushFeed(notice.emoji, `${who} reacted ${notice.emoji}`);
@@ -240,10 +247,11 @@ export default function GameView() {
       offCare();
       offMilestone();
       offMinigame();
+      offRecord();
       offReact();
       if (spectateTimeout) clearTimeout(spectateTimeout);
     };
-  }, [onCare, onMilestone, onMinigame, onReact]);
+  }, [onCare, onMilestone, onMinigame, onRecord, onReact]);
 
   const toggleAudio = (): void => {
     const audio = audioRef.current;

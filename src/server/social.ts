@@ -7,6 +7,7 @@ import type { Collection, Db } from "mongodb";
 import { contributionScore, petDay } from "@/sim/score";
 import { NICKNAME_PATTERN } from "@/sim/events";
 import type { CareAction } from "@/sim/tuning";
+import { isDuplicateKeyError } from "./db/collections";
 
 export type CaretakerDoc = {
   _id: string;
@@ -89,14 +90,11 @@ export const setNickname = async (db: Db, caretakerId: string, raw: string): Pro
       { upsert: true },
     );
   } catch (error) {
-    if (isDuplicateKey(error)) return { ok: false, reason: "TAKEN" };
+    if (isDuplicateKeyError(error)) return { ok: false, reason: "TAKEN" };
     throw error;
   }
   return { ok: true, nickname };
 };
-
-const isDuplicateKey = (error: unknown): boolean =>
-  typeof error === "object" && error !== null && (error as { code?: number }).code === 11000;
 
 const emptyProfileFields = (): Omit<CaretakerDoc, "_id" | "nickname" | "nicknameLower" | "nicknameChangedAt"> => ({
   score: 0,

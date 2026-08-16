@@ -14,6 +14,9 @@ import { runtime } from "@/server/runtime";
 import { canPerform } from "@/sim/validate";
 import { MINIGAME_IDS, MINIGAMES, plausibleRun, type MinigameId } from "@/sim/minigames";
 import { anonymousName, creditCoins, nicknameMap, recordContribution } from "@/server/social";
+import { submitScore } from "@/server/records";
+import { isoWeekKeyAtTick } from "@/server/schedule";
+import { env } from "@/server/env";
 import { caretakerCookieHeader, resolveCaretaker } from "@/server/http";
 import type { EngineMessage } from "@/server/engine/messages";
 
@@ -146,6 +149,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     tick: outcome.state.tick,
   });
   await creditCoins(await db(), identity.caretakerId, coins);
+
+  // Records are offered after the coins are safely credited, so a board
+  // write can never cost someone their payout (SPEC §21.3).
+  const taken = await submitScore(await db(), {
+    gameId: sessionGame.id,
+    score,
+    caretakerId: identity.caretakerId,
+    weekKey: isoWeekKeyAtTick(current.genesisEpochMs, outcome.state.tick, env().PET_TIMEZONE),
+  });
+  if (taken.length > 0) {
+    const name = await caretakerName();
+    for (const scope of taken) {
+      await publish({ type: "record", game: sessionGame.id, scope, score, caretakerId: identity.caretakerId, caretakerName: name });
+    }
+  }
+
   await endSpectacle(score, outcome.applied);
   return withCookie(NextResponse.json({ applied: outcome.applied, coins: ledger.coins + coins, score }));
 }

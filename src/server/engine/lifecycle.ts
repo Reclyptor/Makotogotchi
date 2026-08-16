@@ -9,7 +9,7 @@
 import type { Db } from "mongodb";
 import type { Generation, PetState } from "@/sim/model";
 import { INCUBATION_TICKS, MOURNING_TICKS } from "@/sim/tuning";
-import { generations } from "../db/collections";
+import { generations, isDuplicateKeyError } from "../db/collections";
 import { createGeneration } from "../db/repository";
 import { generationRanking, incrementGenerationsSurvived } from "../social";
 import { resolveWinner } from "../votes";
@@ -84,9 +84,7 @@ export class Lifecycle {
       await createGeneration(this.db, generation);
     } catch (error) {
       // Unique ordinal index: another leader won the race — adopt theirs.
-      if (typeof error === "object" && error !== null && (error as { code?: number }).code === 11000) {
-        return this.rotate(previous);
-      }
+      if (isDuplicateKeyError(error)) return this.rotate(previous);
       throw error;
     }
     return generation;

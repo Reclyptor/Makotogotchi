@@ -21,6 +21,7 @@ import type {
   MinigameMessage,
   PresenceMessage,
   ReactMessage,
+  RecordMessage,
   SnapshotMessage,
 } from "@/server/engine/messages";
 
@@ -36,6 +37,7 @@ type Authoritative = {
 export type CareNotice = { seq: number; action: CareAction; caretakerId: string; caretakerName?: string; applied: number };
 export type MilestoneNotice = { seq: number; kind: string; detail?: string };
 export type MinigameNotice = Omit<MinigameMessage, "type">;
+export type RecordNotice = Omit<RecordMessage, "type">;
 export type ReactNotice = Omit<ReactMessage, "type">;
 export type CaretakerProfile = { nickname: string | null; streakDays: number; generationsSurvived: number };
 
@@ -57,6 +59,7 @@ export type PetStream = {
   onCare: (listener: (notice: CareNotice) => void) => () => void;
   onMilestone: (listener: (notice: MilestoneNotice) => void) => () => void;
   onMinigame: (listener: (notice: MinigameNotice) => void) => () => void;
+  onRecord: (listener: (notice: RecordNotice) => void) => () => void;
   onReact: (listener: (notice: ReactNotice) => void) => () => void;
 };
 
@@ -65,6 +68,7 @@ export const usePetStream = (): PetStream => {
   const careListeners = useRef(new Set<(notice: CareNotice) => void>());
   const milestoneListeners = useRef(new Set<(notice: MilestoneNotice) => void>());
   const minigameListeners = useRef(new Set<(notice: MinigameNotice) => void>());
+  const recordListeners = useRef(new Set<(notice: RecordNotice) => void>());
   const reactListeners = useRef(new Set<(notice: ReactNotice) => void>());
   const [room, setRoom] = useState<RoomView | null>(null);
   const [timeZone, setTimeZone] = useState<string | null>(null);
@@ -152,6 +156,11 @@ export const usePetStream = (): PetStream => {
       const { type: _type, ...notice } = message;
       for (const listener of minigameListeners.current) listener(notice);
     });
+    source.addEventListener("record", (event) => {
+      const message = JSON.parse((event as MessageEvent<string>).data) as RecordMessage;
+      const { type: _type, ...notice } = message;
+      for (const listener of recordListeners.current) listener(notice);
+    });
     source.addEventListener("react", (event) => {
       const message = JSON.parse((event as MessageEvent<string>).data) as ReactMessage;
       const { type: _type, ...notice } = message;
@@ -194,6 +203,11 @@ export const usePetStream = (): PetStream => {
     return () => minigameListeners.current.delete(listener);
   }, []);
 
+  const onRecord = useCallback((listener: (notice: RecordNotice) => void) => {
+    recordListeners.current.add(listener);
+    return () => recordListeners.current.delete(listener);
+  }, []);
+
   const onReact = useCallback((listener: (notice: ReactNotice) => void) => {
     reactListeners.current.add(listener);
     return () => reactListeners.current.delete(listener);
@@ -212,6 +226,7 @@ export const usePetStream = (): PetStream => {
     onCare,
     onMilestone,
     onMinigame,
+    onRecord,
     onReact,
   };
 };

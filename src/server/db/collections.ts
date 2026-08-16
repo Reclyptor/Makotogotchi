@@ -36,6 +36,10 @@ export type SnapshotDoc = {
   at: Date;
 };
 
+/** Mongo's unique-index violation — what every upsert race lands on. */
+export const isDuplicateKeyError = (error: unknown): boolean =>
+  typeof error === "object" && error !== null && (error as { code?: number }).code === 11000;
+
 export const generations = (database: Db): Collection<GenerationDoc> => database.collection("generations");
 export const events = (database: Db): Collection<EventDoc> => database.collection("events");
 export const snapshots = (database: Db): Collection<SnapshotDoc> => database.collection("snapshots");
