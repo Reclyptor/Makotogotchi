@@ -5,28 +5,44 @@
 // is nothing but a canvas and its mechanics. The chosen game is named at
 // start and pinned server-side; the Shell loads the sprite sheet before the
 // game mounts so no game ever renders an empty run.
+//
+// It also owns the crowd noise (SPEC §21.6): while a run is live, every
+// reaction the room sends floats up over the canvas. The overlay is plain
+// DOM sitting above the game — no game component ever learns it exists.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MINIGAMES, type MinigameId } from "@/sim/minigames";
 import { loadSpriteSheet } from "@/game/engine/atlas";
+import type { ReactNotice } from "@/app/hooks/usePetStream";
 import { GAMES } from "./registry";
 
 const SCORE_BROADCAST_MS = 2000;
+
+// Cheers float for this long, and never more than this many at once — past
+// the cap the extras drop silently rather than burying the game.
+const CHEER_LIFE_MS = 2500;
+const CHEER_CAP = 6;
+
+type Cheer = { id: number; emoji: string; leftPercent: number };
 
 type Result = { score: number; applied: number; coins: number } | { error: string };
 
 export type ShellProps = {
   gameId: MinigameId;
   onClose: (finished: boolean) => void;
+  /** The room's live reactions, which become crowd noise while playing. */
+  onReact: (listener: (notice: ReactNotice) => void) => () => void;
 };
 
-export default function Shell({ gameId, onClose }: ShellProps) {
+export default function Shell({ gameId, onClose, onReact }: ShellProps) {
   const def = MINIGAMES[gameId];
   const game = GAMES[gameId];
   const [phase, setPhase] = useState<"loading" | "playing" | "reporting" | "done" | "refused">("loading");
   const [result, setResult] = useState<Result | null>(null);
   const [sheet, setSheet] = useState<HTMLImageElement | null>(null);
+  const [cheers, setCheers] = useState<Cheer[]>([]);
   const scoreRef = useRef(0);
+  const cheerIdRef = useRef(0);
   const finishedRef = useRef(false);
 
   // Start the run and load the sheet together; play begins when both land.
@@ -66,6 +82,30 @@ export default function Shell({ gameId, onClose }: ShellProps) {
     }, SCORE_BROADCAST_MS);
     return () => clearInterval(interval);
   }, [phase]);
+
+  // Crowd noise only while there is a run to cheer for.
+  useEffect(() => {
+    if (phase !== "playing") return;
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+    const off = onReact((notice) => {
+      cheerIdRef.current += 1;
+      const id = cheerIdRef.current;
+      // Fan the floaters across the canvas by arrival order — no randomness
+      // needed, and consecutive cheers never stack on one another.
+      const cheer: Cheer = { id, emoji: notice.emoji, leftPercent: 6 + ((id * 37) % 82) };
+      setCheers((current) => (current.length >= CHEER_CAP ? current : [...current, cheer]));
+      const timer = setTimeout(() => {
+        timers.delete(timer);
+        setCheers((current) => current.filter((entry) => entry.id !== id));
+      }, CHEER_LIFE_MS);
+      timers.add(timer);
+    });
+    return () => {
+      off();
+      for (const timer of timers) clearTimeout(timer);
+      setCheers([]);
+    };
+  }, [phase, onReact]);
 
   const reportScore = useCallback((score: number) => {
     scoreRef.current = score;
@@ -125,11 +165,22 @@ export default function Shell({ gameId, onClose }: ShellProps) {
         )}
         {(phase === "playing" || phase === "loading" || phase === "reporting") && (
           <>
-            {phase === "playing" && sheet ? (
-              <Game sheet={sheet} reportScore={reportScore} finish={finish} />
-            ) : (
-              <p className="text-sm text-muted">{phase === "reporting" ? "Recording the result…" : "Warming up…"}</p>
-            )}
+            <div className="relative w-full">
+              {phase === "playing" && sheet ? (
+                <Game sheet={sheet} reportScore={reportScore} finish={finish} />
+              ) : (
+                <p className="text-sm text-muted">{phase === "reporting" ? "Recording the result…" : "Warming up…"}</p>
+              )}
+              {cheers.map((cheer) => (
+                <span
+                  key={cheer.id}
+                  className="animate-rise pointer-events-none absolute bottom-1 text-2xl drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]"
+                  style={{ left: `${cheer.leftPercent}%` }}
+                >
+                  {cheer.emoji}
+                </span>
+              ))}
+            </div>
             <p className="text-xs text-muted">{game.hint}</p>
           </>
         )}

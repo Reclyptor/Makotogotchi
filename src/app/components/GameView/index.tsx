@@ -406,7 +406,7 @@ export default function GameView() {
       </div>
 
       {shopOpen && <ShopPanel onClose={() => setShopOpen(false)} />}
-      {playing && <MinigameShell gameId={playing} onClose={() => setPlaying(null)} />}
+      {playing && <MinigameShell gameId={playing} onClose={() => setPlaying(null)} onReact={onReact} />}
 
       <FeedLog entries={feed} />
 

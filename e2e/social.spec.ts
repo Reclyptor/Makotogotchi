@@ -130,6 +130,36 @@ test.describe("social and economy", () => {
     await spectator.close();
   });
 
+  test("spectator reactions become crowd noise inside the live game", async ({ browser }) => {
+    test.setTimeout(150_000);
+    const player = await browser.newContext();
+    const fan = await browser.newContext();
+    const playerPage = await player.newPage();
+    const fanPage = await fan.newPage();
+    // Simon Squeaks waits on the player, so the run stays live while the
+    // spectator reacts — no race against a game that ends on its own.
+    await playerPage.goto("/?game=simon");
+    await fanPage.goto("/");
+    await expect(playerPage.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
+    await expect(fanPage.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
+
+    // The button greys itself out while PLAY is on its global cooldown, so
+    // waiting for it is waiting for the pet to be ready.
+    const play = playerPage.getByRole("button", { name: /^Play/ });
+    await expect(play).not.toHaveAttribute("aria-disabled", "true", { timeout: 90_000 });
+    await play.click();
+    const dialog = playerPage.getByRole("dialog", { name: /Simon Squeaks/ });
+    await expect(dialog.getByRole("button", { name: "Gold pad" })).toBeVisible({ timeout: 15_000 });
+
+    await fanPage.getByRole("button", { name: "React with 🎉" }).click();
+    await expect(dialog.getByText("🎉")).toBeVisible({ timeout: 10_000 });
+
+    // Hand the session back rather than letting it expire on its TTL.
+    await playerPage.request.post("/api/play", { data: { phase: "finish", score: 0, inputs: 0 } });
+    await player.close();
+    await fan.close();
+  });
+
   test("a finished run takes the record board, and everyone hears it", async ({ browser }) => {
     test.setTimeout(180_000);
     const watcher = await browser.newContext();
