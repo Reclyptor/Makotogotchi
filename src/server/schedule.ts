@@ -61,6 +61,29 @@ const localToEpoch = (wall: Omit<WallClock, "minute" | "second">, timeZone: stri
   return epoch;
 };
 
+/** Days since genesis on the pet's own calendar (SPEC §21.7). */
+export const localDayIndex = (genesisEpochMs: number, atMs: number, timeZone: string): number => {
+  const from = wallClockAt(genesisEpochMs, timeZone);
+  const to = wallClockAt(atMs, timeZone);
+  const days = Date.UTC(to.year, to.month - 1, to.day) - Date.UTC(from.year, from.month - 1, from.day);
+  return Math.round(days / DAY_MS);
+};
+
+/**
+ * The tick at a local wall-clock hour on the pet's Nth day. Day boundaries
+ * and the evening check both come from here, so a DST day is simply a day
+ * whose ticks are spaced unusually — nothing downstream has to know.
+ */
+export const localTickAt = (genesisEpochMs: number, dayIndex: number, hour: number, timeZone: string): number => {
+  const genesis = wallClockAt(genesisEpochMs, timeZone);
+  const date = new Date(Date.UTC(genesis.year, genesis.month - 1, genesis.day + dayIndex));
+  const epoch = localToEpoch(
+    { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate(), hour },
+    timeZone,
+  );
+  return Math.ceil((epoch - genesisEpochMs) / TICK_MS);
+};
+
 /**
  * The ISO-8601 week (`YYYY-Www`) an instant falls in, read off the pet's own
  * calendar. Weekly records roll over the moment this string changes — no job,

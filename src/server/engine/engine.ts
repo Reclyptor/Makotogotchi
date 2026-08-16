@@ -26,6 +26,7 @@ import { canPerform, type ValidationResult } from "@/sim/validate";
 import type { Generation, PetState, ProjectionContext } from "@/sim/model";
 import { TICKS_PER_DAY, TICK_SECONDS, type CareAction } from "@/sim/tuning";
 import type { Milestone, MilestoneKind, PetEvent } from "@/sim/events";
+import type { EventExtras } from "../db/collections";
 import {
   appendEvent,
   createGeneration,
@@ -61,7 +62,7 @@ type HotState = { state: PetState; lastEventSeq: number };
 
 /** What the caller wants applied once the lock is held and state is current. */
 type Prepared =
-  | { kind: "event"; event: (nextSeq: number, state: PetState) => PetEvent }
+  | { kind: "event"; event: (nextSeq: number, state: PetState) => PetEvent; extras?: EventExtras }
   | { kind: "reject"; rejection: Exclude<ValidationResult, { ok: true }> }
   | { kind: "skip" };
 
@@ -145,7 +146,7 @@ export class PetEngine {
       const projected = project(hot.state, nowTick, ctx);
       let state = projected.state;
       let seq = hot.lastEventSeq;
-      const toAppend: { event: PetEvent; applied?: number }[] = [];
+      const toAppend: { event: PetEvent; extras: EventExtras }[] = [];
       const toPublish: EngineMessage[] = [];
 
       // Projection milestones first — their ticks precede any input event's.
@@ -160,6 +161,7 @@ export class PetEngine {
             kind: milestone.kind,
             ...(milestone.detail !== undefined ? { detail: milestone.detail } : {}),
           },
+          extras: {},
         });
       };
       projected.milestones.forEach(recordMilestone);
@@ -176,14 +178,14 @@ export class PetEngine {
         const reduced = reduce(state, inputEvent, ctx);
         state = reduced.state;
         applied = reduced.applied;
-        toAppend.push({ event: inputEvent, applied });
+        toAppend.push({ event: inputEvent, extras: { applied, ...prepared.extras } });
         // Milestones produced by applying the event (RECOVERED, lullaby
         // SLEPT) share its tick and fold cleanly after it.
         reduced.milestones.forEach(recordMilestone);
       }
 
       for (const entry of toAppend) {
-        await appendEvent(this.deps.db, entry.event, entry.applied);
+        await appendEvent(this.deps.db, entry.event, entry.extras);
         if (entry.event.type === "MILESTONE") {
           toPublish.push({
             type: "milestone",
@@ -245,13 +247,16 @@ export class PetEngine {
     generation: Generation,
     action: CareAction,
     caretakerId: string,
-    options: { itemId?: string; performance?: number } = {},
+    options: { itemId?: string; performance?: number; minigameScore?: number } = {},
   ): Promise<CareOutcome> {
     const result = await this.advance(generation, (state, ctx) => {
       const verdict = canPerform(state, action, caretakerId, ctx, options.itemId);
       if (!verdict.ok) return { kind: "reject", rejection: verdict };
       return {
         kind: "event",
+        // The raw minigame score is denormalized onto the event doc, not the
+        // event: the fold has no use for it, but the daily quest counts it.
+        ...(options.minigameScore !== undefined ? { extras: { minigameScore: options.minigameScore } } : {}),
         event: (seq, current): PetEvent => ({
           type: "CARE",
           generationId: generation.id,

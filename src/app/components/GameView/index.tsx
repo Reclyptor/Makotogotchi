@@ -7,7 +7,7 @@
 // During incubation the naming vote takes the action bar's place; after
 // death, the memorial takes over.
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { derive, type DerivedState } from "@/sim/derive";
 import { stageAt, type PetState } from "@/sim/model";
 import { TICKS_PER_DAY, TICKS_PER_HOUR, type CareAction } from "@/sim/tuning";
@@ -20,6 +20,7 @@ import VotePanel from "@/app/components/VotePanel";
 import NicknameEditor from "@/app/components/NicknameEditor";
 import PushToggle from "@/app/components/PushToggle";
 import ShopPanel from "@/app/components/ShopPanel";
+import QuestBanner from "@/app/components/QuestBanner";
 import MinigameShell from "@/app/components/minigames/Shell";
 import { isMinigameId, MINIGAME_IDS, MINIGAMES, type MinigameId } from "@/sim/minigames";
 import { isAmbientEvent, type AmbientEvent } from "@/sim/ambient";
@@ -79,6 +80,7 @@ const ambientFeedText = (petName: string): Record<AmbientEvent, string> => ({
 });
 
 const milestoneFeedText = (petName: string): Record<string, string> => ({
+  QUEST_DONE: "Today's goal is done — +15 🪙 to everyone who helped!",
   HATCHED: `${petName} hatched!`,
   BECAME_SICK: `${petName} got sick!`,
   RECOVERED: `${petName} recovered!`,
@@ -121,6 +123,19 @@ export default function GameView() {
     return MINIGAME_IDS[Math.floor(Math.random() * MINIGAME_IDS.length)]!;
   };
   const [feed, setFeed] = useState<FeedEntry[]>([]);
+  // Care and milestones are the two things that can move today's goal; the
+  // banner debounces the refetch itself.
+  const questNudge = useCallback(
+    (listener: () => void) => {
+      const offCare = onCare(() => listener());
+      const offMilestone = onMilestone(() => listener());
+      return () => {
+        offCare();
+        offMilestone();
+      };
+    },
+    [onCare, onMilestone],
+  );
   const [muted, setMuted] = useState(true);
   const [shopOpen, setShopOpen] = useState(false);
   const [playing, setPlaying] = useState<MinigameId | null>(null);
@@ -367,6 +382,7 @@ export default function GameView() {
       )}
 
       {ui && !isEgg && <Meters percentages={ui.derived.percentages} />}
+      {ui && !isEgg && !isDead && <QuestBanner subscribe={questNudge} />}
       {isEgg && <VotePanel />}
       {ui && !isEgg && !isDead && ctx && caretakerId && (
         <ActionBar state={ui.state} ctx={ctx} caretakerId={caretakerId} petName={petName} onPlay={() => setPlaying(pickGame())} />

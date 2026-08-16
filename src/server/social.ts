@@ -204,9 +204,22 @@ export const nicknameMap = async (db: Db, ids: string[]): Promise<Map<string, st
 export const caretakerProfile = async (db: Db, caretakerId: string): Promise<CaretakerDoc | null> =>
   caretakers(db).findOne({ _id: caretakerId });
 
-/** Bonus coins outside the per-action formula (minigame score, SPEC §13.1). */
+/**
+ * Bonus coins outside the per-action formula: a minigame score (SPEC §13.1)
+ * or a share of the daily quest (SPEC §21.7). Upserts, because a reward must
+ * never evaporate just because its earner has no profile row yet.
+ */
 export const creditCoins = async (db: Db, caretakerId: string, amount: number): Promise<void> => {
-  if (amount > 0) await caretakers(db).updateOne({ _id: caretakerId }, { $inc: { coins: amount } });
+  if (amount <= 0) return;
+  const { coins: _coins, ...defaults } = emptyProfileFields();
+  await caretakers(db).updateOne(
+    { _id: caretakerId },
+    {
+      $inc: { coins: amount },
+      $setOnInsert: { ...defaults, nickname: null, nicknameLower: null, nicknameChangedAt: null },
+    },
+    { upsert: true },
+  );
 };
 
 /** Everyone who contributed to a generation gets survival tenure (SPEC §2.10). */

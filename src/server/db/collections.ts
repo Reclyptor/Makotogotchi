@@ -29,11 +29,19 @@ export type GenerationDoc = {
   } | null;
 };
 
-/** PetEvent plus denormalized display fields (SPEC §6.1) and a wall clock. */
-export type EventDoc = PetEvent & {
+/**
+ * Denormalized fields the fold does not need but the read paths do
+ * (SPEC §6.1): what a care action actually restored, and what a minigame
+ * finish scored — the quest's "game night" counts raw scores, which the
+ * PLAY event itself deliberately does not carry.
+ */
+export type EventExtras = {
   applied?: number;
-  at: Date;
+  minigameScore?: number;
 };
+
+/** PetEvent plus denormalized display fields and a wall clock. */
+export type EventDoc = PetEvent & EventExtras & { at: Date };
 
 export type SnapshotDoc = {
   generationId: string;
@@ -64,6 +72,8 @@ export const ensureIndexes = async (database: Db): Promise<void> => {
     // this index is the last line of defense if the write lock ever fails.
     events(database).createIndex({ generationId: 1, seq: 1 }, { unique: true }),
     events(database).createIndex({ at: -1 }),
+    // The daily quest scans one pet-day of a generation's events (SPEC §21.7).
+    events(database).createIndex({ generationId: 1, tick: 1 }),
     events(database).createIndex({ caretakerId: 1, at: -1 }),
     snapshots(database).createIndex({ generationId: 1, tick: -1 }),
   ]);

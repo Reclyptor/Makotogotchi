@@ -136,7 +136,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return withCookie(NextResponse.json({ error: "implausible" }, { status: 422 }));
   }
 
-  const outcome = await engine.care(current, "PLAY", identity.caretakerId, { performance: sessionGame.performance(score) });
+  const outcome = await engine.care(current, "PLAY", identity.caretakerId, {
+    performance: sessionGame.performance(score),
+    minigameScore: score,
+  });
   if (!outcome.ok) {
     await endSpectacle();
     return withCookie(NextResponse.json({ error: "not_now", reason: outcome.rejection.reason }, { status: 409 }));

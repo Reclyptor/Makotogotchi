@@ -4,7 +4,7 @@
 import type { Db } from "mongodb";
 import type { Generation, PetState } from "@/sim/model";
 import type { PetEvent } from "@/sim/events";
-import { ensureIndexes, events, generations, snapshots, type EventDoc, type GenerationDoc } from "./collections";
+import { ensureIndexes, events, generations, snapshots, type EventDoc, type EventExtras, type GenerationDoc } from "./collections";
 
 export const createGeneration = async (database: Db, generation: Generation): Promise<void> => {
   await ensureIndexes(database);
@@ -44,10 +44,9 @@ export const recordDeath = async (database: Db, state: PetState): Promise<void> 
  * computed from in-order state; the unique index turns any serialization
  * failure into a loud duplicate-key error instead of a corrupted fold order.
  */
-export const appendEvent = async (database: Db, event: PetEvent, applied?: number): Promise<void> => {
+export const appendEvent = async (database: Db, event: PetEvent, extras: EventExtras = {}): Promise<void> => {
   await ensureIndexes(database);
-  const doc: EventDoc = { ...event, at: new Date() };
-  if (applied !== undefined) doc.applied = applied;
+  const doc: EventDoc = { ...event, ...extras, at: new Date() };
   await events(database).insertOne(doc);
 };
 
@@ -57,7 +56,7 @@ export const eventsSince = async (database: Db, generationId: string, afterSeq: 
     .find({ generationId, seq: { $gt: afterSeq } })
     .sort({ seq: 1 })
     .toArray();
-  return docs.map(({ _id, at, applied, ...event }) => event as PetEvent);
+  return docs.map(({ _id, at, applied, minigameScore, ...event }) => event as PetEvent);
 };
 
 export const lastSeq = async (database: Db, generationId: string): Promise<number> => {

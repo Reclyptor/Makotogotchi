@@ -20,6 +20,7 @@ import { PushDispatcher } from "./push/dispatcher";
 import { pushConfigured, webPushSender } from "./push/sender";
 import { TICK_SECONDS } from "@/sim/tuning";
 import { ambientAt } from "@/sim/ambient";
+import { settleQuest } from "./quests";
 import { isAlive, type Generation } from "@/sim/model";
 
 const GENERATION_TTL_MS = 10_000;
@@ -94,6 +95,11 @@ const boot = async (): Promise<Runtime> => {
         lastAmbientTick = state.tick;
         const moment = isAlive(state) ? ambientAt(current.seed, state.tick, state.asleep) : null;
         if (moment) await engine.milestone(current, "AMBIENT", moment);
+      }
+      if (!successor) {
+        // The day's shared goal (SPEC §21.7): claimed once, then announced.
+        const settled = await settleQuest(database, current, state, env().PET_TIMEZONE, Date.now());
+        if (settled) await engine.milestone(current, "QUEST_DONE", settled.quest.id);
       }
       await dispatcher?.observe(state);
       await lease.renew();

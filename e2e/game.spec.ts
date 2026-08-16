@@ -13,6 +13,8 @@ test.describe("the shared pet", () => {
       await expect(page.getByRole("meter", { name: meter })).toBeVisible();
     }
     await expect(page.getByText(/Makoto/).first()).toBeVisible();
+    // The day's communal goal is part of the first paint (SPEC §21.7).
+    await expect(page.getByRole("region", { name: "Today's goal" })).toBeVisible({ timeout: 10_000 });
   });
 
   test("two visitors see each other's actions in realtime", async ({ browser }) => {

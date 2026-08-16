@@ -1,0 +1,32 @@
+// GET /api/quest — today's communal goal and how far the room has got
+// (SPEC §21.7). Progress is derived on every call from one pet-day of the
+// event log, so there is nothing to keep in sync and nothing to reset.
+
+import { NextResponse } from "next/server";
+import { db } from "@/server/db/client";
+import { runtime } from "@/server/runtime";
+import { questSettled, questView } from "@/server/quests";
+import { env } from "@/server/env";
+
+export const dynamic = "force-dynamic";
+
+export async function GET(): Promise<NextResponse> {
+  const { engine, generation } = await runtime();
+  const current = await generation();
+  const state = await engine.view(current);
+  const database = await db();
+  const view = await questView(database, current, state, env().PET_TIMEZONE, Date.now());
+  const settled = await questSettled(database, current.id, view.dayIndex);
+
+  return NextResponse.json(
+    {
+      dayIndex: view.dayIndex,
+      quest: { id: view.quest.id, title: view.quest.title, description: view.quest.description, unit: view.quest.unit },
+      current: view.current,
+      target: view.target,
+      settled,
+      helpers: view.contributors.length,
+    },
+    { headers: { "Cache-Control": "no-store" } },
+  );
+}
