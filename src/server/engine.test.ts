@@ -121,6 +121,25 @@ describe("PetEngine", () => {
     expect(project(recovered.state, before.tick, ctx).state).toEqual(before);
   });
 
+  it("records the community's size so a cold restart keeps the same difficulty (SPEC §23.2)", async () => {
+    const before = await engine.population(generation, 7);
+    expect(before.population).toBe(7);
+
+    const log = await eventsSince(await db(), generation.id, -1);
+    const recorded = log.filter((event) => event.type === "POPULATION");
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({ type: "POPULATION", count: 7 });
+
+    // Difficulty must survive the loss of the hot state: a pet that got
+    // harder because eight people showed up cannot quietly get easy again
+    // when a pod restarts.
+    await redis().flushall();
+    const recovered = await engine.recover(generation);
+    expect(recovered.state.population).toBe(7);
+    const ctx = { schedule: scheduleFor(generation.genesisEpochMs, recovered.state.tick, before.tick + 8640, "America/Chicago") };
+    expect(project(recovered.state, before.tick, ctx).state).toEqual(before);
+  });
+
   it("serializes concurrent care writes: unique contiguous seqs, replay-identical fold", async () => {
     advanceClockTicks(360); // give cooldowns room
     const caretakers = ["a1", "a2", "a3", "a4", "a5"];

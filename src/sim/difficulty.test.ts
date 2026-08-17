@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { project } from "./project";
 import { reduce } from "./reduce";
 import { canPerform } from "./validate";
-import { EventLog, hatchedState, projectImmortal, QUIET_SEED, testCtx, withSeed } from "./testkit";
+import { EventLog, hatchedState, projectImmortal, QUIET_SEED, replay, TEST_GENERATION, testCtx, withSeed } from "./testkit";
 import type { Generation, PetState, ProjectionContext } from "./model";
 import {
   CRITICAL_THRESHOLD,
@@ -133,6 +133,38 @@ describe("community difficulty (SPEC §23)", () => {
     const spent = (from: PetState, to: PetState): number =>
       NEED_KEYS.reduce((total, need) => total + (from.needs[need] - to.needs[need]), 0);
     expect(spent(populated, after)).toBeGreaterThan(spent(hatched, before) * 2);
+  });
+
+  it("resumes from a persisted snapshot across a POPULATION event, byte for byte", () => {
+    // The strongest determinism property (SPEC §4, §16.3): folding a log from
+    // genesis must equal folding it from a snapshot taken partway through —
+    // including the JSON round-trip through Mongo, which is where a field
+    // that the state carries but persistence drops would show up.
+    const log = new EventLog();
+    log.hatched(0);
+    log.care(TICKS_PER_HOUR, "FEED", "ana");
+    const populationEvent = {
+      type: "POPULATION" as const,
+      generationId: TEST_GENERATION.id,
+      seq: 900,
+      tick: 2 * TICKS_PER_HOUR,
+      count: 7,
+    };
+    log.events.push(populationEvent);
+    log.care(3 * TICKS_PER_HOUR, "PLAY", "bo");
+    const endTick = 2 * TICKS_PER_DAY;
+
+    const fromGenesis = project(replay(log.events, ctx), endTick, ctx).state;
+
+    // Snapshot immediately after the population is recorded, persist it the
+    // way the repository does, then fold only what follows.
+    const midpoint = replay(log.events.slice(0, 3), ctx);
+    const persisted = JSON.parse(JSON.stringify(midpoint)) as PetState;
+    expect(persisted.population).toBe(7);
+    let resumed = persisted;
+    for (const event of log.events.slice(3)) resumed = reduce(resumed, event, ctx).state;
+
+    expect(project(resumed, endTick, ctx).state).toEqual(fromGenesis);
   });
 
   it("replays a log containing a POPULATION event identically every time", () => {
