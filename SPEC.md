@@ -1585,12 +1585,156 @@ committed.
 
 ---
 
-## 22. Appendix: What the Original Got Wrong
+## 22. The Living Room
+
+The room is the second character in this app. Until now it was three flat
+rectangles and a rug; this section specifies it as a real place — one that
+tells you the hour, the weather, the season, and how Makoto is doing,
+before you read a single meter.
+
+Two constraints govern everything here. **It is shared**: every viewer,
+anywhere on earth, sees the same room in the same state at the same
+instant, so every input is either the pet's own clock or a seeded draw —
+never the viewer's local time or private randomness. **It is
+presentation**: none of this touches `PetState` or the event log. The
+backdrop is derived, exactly like the animation key is (§4.3).
+
+### 22.1 Atmosphere Inputs (pure)
+
+`src/sim/atmosphere.ts` is pure and unit-tested, and derives four values:
+
+| Input | Source | Notes |
+| --- | --- | --- |
+| **Day progress** | the pet's local wall clock (`PET_TIMEZONE`, already streamed to clients) | continuous `0..1` over the pet-day; drives the sky and the sun's arc |
+| **Segment** | day progress | `night · dawn · morning · midday · afternoon · dusk`, each with a transition window into the next |
+| **Weather** | `draw32(seed, dayIndex, RNG_PURPOSE.weather)`, season-weighted | one forecast per pet-day: `clear · cloudy · rain · snow` |
+| **Season** | the pet's local month | `spring · summer · autumn · winter` |
+
+Weather weights are season-dependent: snow only in winter, rain heaviest
+in spring and autumn, clear dominant in summer. A day's forecast is fixed
+the moment its `dayIndex` turns over, so two caretakers a continent apart
+discuss the same rain.
+
+### 22.2 The Sky
+
+The window is the room's light source and its clock. The sky is drawn as
+horizontal bands from a per-segment ramp of three hue-shifted colors
+(zenith, middle, horizon), and **transitions dither**: during the window
+between two segments, the outgoing and incoming ramps are mixed with an
+ordered Bayer threshold whose cutoff follows the transition's progress, so
+dawn arrives as a dissolve rather than a cross-fade. This is the one place
+in the codebase where dithering is correct — a large-area gradient, low
+contrast, adjacent ramp values only (§22.6).
+
+Above the bands sit, in order: stars (night only, positions seeded per
+generation, twinkle on a slow phase), the celestial body (sun by day, moon
+by night, both riding an arc across the pane whose position is day
+progress), clouds (drifting on wall-clock time; count and colour from the
+weather), and the weather overlay itself (§22.4).
+
+The sky is expensive to compose and changes slowly, so it renders to an
+offscreen canvas keyed by `(segment, transition step, weather, season,
+theme)` and is blitted per frame. Only the moving elements — clouds,
+twinkle, rain, snow — redraw each frame.
+
+### 22.3 Architecture of the Room
+
+Drawn back to front, all in the theme's palette (§22.5):
+
+1. **Wall** — a two-value hue-shifted ramp with a subtle vertical
+   wallpaper stripe, brightest near the window and falling off with
+   distance (the window is the light source; the wall is never flat).
+2. **Picture rail** and **wainscot panelling** below it, each a 1px
+   highlight over a darker body — the horizon line of the room.
+3. **Window** — frame, mullions, sill, and the sky behind it (§22.2). It
+   sits off-centre on the back wall so the light is directional.
+4. **Floorboards** — seams converging slightly toward the back wall for
+   depth, board widths varied so the pattern never reads as a grid.
+5. **Light pool** — a trapezoid of warmer floor cast from the window,
+   its length and intensity following the sun's height; at night the pool
+   is cool and faint, or warm if the room owns a lamp.
+6. **Rug** — a woven pattern with fringe, not a rectangle, centred under
+   the pet's wander band.
+7. Existing communal decor and grand items draw over the architecture as
+   they do today. `window_seat` no longer draws its own window: it
+   **upgrades** the room's window with a cushioned bench and a wider
+   frame.
+
+### 22.4 Weather and Season
+
+Weather renders inside the window and, sparingly, in the room:
+
+- **clear** — one or two small clouds; the light pool is at full strength.
+- **cloudy** — an overcast band across the upper pane, sky desaturated one
+  step, light pool dimmed.
+- **rain** — diagonal 1px streaks over the pane at a consistent angle,
+  overcast sky, and slow droplets tracking down the glass; the room takes
+  a cool tint.
+- **snow** — flakes drifting on sine paths, brightest sky of the four, and
+  a thin band of settled snow on the outside sill.
+
+Season sets what is visible beyond the glass: blossom pink in spring, deep
+green summer, ochre autumn with drifting leaves, bare branches and a
+lowered sun in winter. It also nudges the sky ramps — a summer midday sits
+higher and warmer than a winter one.
+
+### 22.5 Themes
+
+The room's palette and outside view come from a **theme**. The default
+theme (`cozy`) ships to everyone. Further themes are communal grand items
+in the shop (§21.8), funded together and switched by the room:
+
+| Theme | Price | Outside |
+| --- | --- | --- |
+| `cozy` | — | a town rooftop skyline |
+| `cabin` | 900 | pine forest and mountains |
+| `seaside` | 1100 | a beach and a horizon of water |
+
+A theme defines the wall, wainscot, floor, rug, and frame ramps plus the
+silhouette drawn beyond the glass. Sky ramps, weather, and the celestial
+arc are theme-independent — the hour of the day looks the same wherever
+Makoto lives. Once funded, a theme is owned forever; `roomState.activeTheme`
+selects among the owned ones and any caretaker may switch it, which is
+broadcast so every room changes together.
+
+### 22.6 Craft Rules
+
+The backdrop obeys the same pixel-art discipline as the sprites, and these
+are testable claims, not taste:
+
+- Every colour comes from a named theme ramp; nothing is a literal in the
+  renderer.
+- Ramps are hue-shifted — shadows cooler, lights warmer — never a value
+  slide of one hue.
+- Dithering appears only in the sky's large gradients and only between
+  adjacent ramp values.
+- No banding: the wall falloff, floorboards, and light pool vary their
+  band widths rather than running parallel edges.
+- The pet must stay readable against every state of the room; the sky's
+  darkest and lightest extremes are checked against the pet's outline
+  value.
+- Reduced motion freezes clouds, weather, twinkle, and transitions,
+  holding the room at its current segment.
+
+### 22.7 Delivery Phases
+
+| # | Phase | Deliverable | Done when |
+| --- | --- | --- | --- |
+| **B1** | Atmosphere core | `src/sim/atmosphere.ts` + tests | segment, weather, and season are pure, deterministic, and season-weighted |
+| **B2** | Room and sky | Full architecture rebuild + dithered dynamic sky, sun/moon/stars/clouds | the room reads as a place at every hour; sky cache invalidates correctly |
+| **B3** | Weather and season | Rain, snow, overcast, seasonal views | each forecast renders distinctly and the room tints with it |
+| **B4** | Condition | Room warmth and dimming from derived state | a critical pet is visibly rough on the room before the meters are read |
+| **B5** | Themes | Theme registry, `cabin` and `seaside` as grand items, switching | two caretakers fund a theme, switch to it, and both rooms change |
+
+
+---
+
+## 23. Appendix: What the Original Got Wrong
 
 Recorded so the rebuild is measured against real defects rather than vague
 dissatisfaction. Source: `~/Projects/makotogotchi_old` at `master`.
 
-### 22.1 Architectural
+### 23.1 Architectural
 
 1. **No server.** State lived in `localStorage`. Every visitor had a private
    pet. The premise of a shared global pet was unimplementable on that
@@ -1604,7 +1748,7 @@ dissatisfaction. Source: `~/Projects/makotogotchi_old` at `master`.
    the simulation unreproducible. There were no tests, and none could have
    been written without heavy mocking.
 
-### 22.2 Simulation Bugs
+### 23.2 Simulation Bugs
 
 4. **`status()` read pre-tick state**, so every derived status lagged one tick
    behind the values it was derived from.
@@ -1622,7 +1766,7 @@ dissatisfaction. Source: `~/Projects/makotogotchi_old` at `master`.
     and the reconstruction silently dropped `ANGRY` from the array — so any
     angry state that had been set would vanish on the next tick.
 
-### 22.3 Structural
+### 23.3 Structural
 
 11. **Presentation stored as game state.** `Status.CLONE1..4` were animation
     frames living in the state enum.
