@@ -698,7 +698,7 @@ so the prefix is what actually prevents collision and must never be relaxed.
 | `mgc:state` | string (JSON) | Hot snapshot of current `PetState`. Read path for SSE connects. |
 | `mgc:events` | pub/sub channel | Cross-pod fanout. |
 | `mgc:tick-leader` | string w/ PX | Leader lease (§3.3). |
-| `mgc:presence` | sorted set | `caretakerId → lastSeen`. Pruned by score on read. |
+| `mgc:presence` | sorted set | `caretakerId\|connectionId → lastSeen`. Pruned by score on read, then counted unique by caretaker. Keyed per open stream, not per caretaker: one caretaker holds several at once (a refresh overlaps two, a second tab is ordinary), and a caretaker-keyed set lets the first stream to close evict someone who is still watching. |
 | `mgc:rl:{scope}:{id}` | string w/ TTL | Token buckets. |
 | `mgc:cd:{action}` | string w/ TTL | Global action cooldowns. |
 | `mgc:cd:{caretaker}:{action}` | string w/ TTL | Per-caretaker cooldowns. |
@@ -727,7 +727,7 @@ nothing for the cost of a custom server.
 
 | Event | Payload | When |
 | --- | --- | --- |
-| `hello` | `{ caretakerId, nickname, serverNowMs, tickSeconds, genesisEpochMs, phaseSchedule }` | On connect. Lets the client align its clock and project locally (§4.5). |
+| `hello` | `{ caretakerId, nickname, serverNowMs, tickSeconds, genesisEpochMs, phaseSchedule, presence }` | On connect. Lets the client align its clock and project locally (§4.5), and hands it the presence count its own connect produced (§7.4). |
 | `snapshot` | Full `PetState` + generation metadata + `phaseSchedule` refresh | On connect, and every 30s as reconciliation. |
 | `care` | `{ action, caretaker, applied, needsAfter, tick }` | Every care action, by anyone. Drives the attributed toast. |
 | `milestone` | `{ kind, detail }` — `HATCHED` (detail carries the voted name), `EVOLVED`, `BECAME_SICK`, `RECOVERED`, `CRITICAL`, `SLEPT`, `WOKE`, `DIED` | System events. |
@@ -773,6 +773,15 @@ Every time-driven part of the UI reads that one corrected clock, in fractional
 ticks: the local projection floors it, cooldown bars use it whole. A component
 must not re-derive the current tick from `Date.now()` and `genesisEpochMs` on
 its own — a second clock is a second answer.
+
+Presence follows the same rule as state: a client's opening view arrives with
+its own connect, in `hello`, computed after that stream has joined the
+presence set. The `presence` broadcast is throttled to one message per 2s
+across all pods and is *dropped* rather than deferred when it loses that
+window, so a connect that relied on it to learn the count would show zero
+until some later join, leave, or 15s heartbeat happened to win — which is
+exactly what a refresh does, since the reload and the old stream's teardown
+race inside the same window.
 
 ---
 

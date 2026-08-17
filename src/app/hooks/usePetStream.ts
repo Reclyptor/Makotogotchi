@@ -20,6 +20,7 @@ import type {
   MilestoneMessage,
   MinigameMessage,
   PresenceMessage,
+  PresenceView,
   ReactMessage,
   FundedMessage,
   RecordMessage,
@@ -105,6 +106,11 @@ export const usePetStream = (): PetStream => {
   useEffect(() => {
     const source = new EventSource("/api/stream");
 
+    const acceptPresence = (view: PresenceView): void => {
+      setPresenceCount(view.count);
+      setPresenceNames(view.caretakers.map((caretaker) => caretaker.name));
+    };
+
     const acceptSnapshot = (payload: SnapshotPayload): void => {
       const current = authRef.current;
       const sameGeneration = current?.state.generation.id === payload.state.generation.id;
@@ -143,8 +149,13 @@ export const usePetStream = (): PetStream => {
         nickname: string | null;
         streakDays: number;
         generationsSurvived: number;
+        presence: PresenceView;
       };
       setCaretakerId(payload.caretakerId);
+      // The opening count comes with the connect. Waiting for a `presence`
+      // broadcast instead leaves the badge reading zero whenever the connect's
+      // own broadcast loses the throttle (SPEC §7.4).
+      acceptPresence(payload.presence);
       setProfile({
         nickname: payload.nickname,
         streakDays: payload.streakDays,
@@ -201,9 +212,7 @@ export const usePetStream = (): PetStream => {
       for (const listener of reactListeners.current) listener(notice);
     });
     source.addEventListener("presence", (event) => {
-      const message = JSON.parse((event as MessageEvent<string>).data) as PresenceMessage;
-      setPresenceCount(message.count);
-      setPresenceNames(message.caretakers.map((caretaker) => caretaker.name));
+      acceptPresence(JSON.parse((event as MessageEvent<string>).data) as PresenceMessage);
     });
 
     return () => source.close();

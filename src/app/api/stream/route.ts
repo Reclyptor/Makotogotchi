@@ -3,6 +3,7 @@
 // intermediaries from reaping idle streams; a 30s snapshot cadence
 // reconciles client prediction drift.
 
+import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { runtime } from "@/server/runtime";
 import { db } from "@/server/db/client";
@@ -12,7 +13,7 @@ import { dropPresence, listPresence, shouldBroadcastPresence, touchPresence } fr
 import { anonymousName, caretakerProfile, nicknameMap } from "@/server/social";
 import { snapshotPayload } from "@/server/snapshot";
 import { caretakerCookieHeader, clientIp, resolveCaretaker } from "@/server/http";
-import type { EngineMessage } from "@/server/engine/messages";
+import type { EngineMessage, PresenceView } from "@/server/engine/messages";
 
 export const dynamic = "force-dynamic";
 
@@ -30,15 +31,15 @@ const streamCounts = (): Map<string, number> => {
   return holder[GLOBAL_KEY];
 };
 
-const broadcastPresence = async (): Promise<void> => {
-  if (!(await shouldBroadcastPresence(redis(), key("presence-guard")))) return;
+const presenceView = async (): Promise<PresenceView> => {
   const ids = await listPresence(redis(), key("presence"));
   const names = await nicknameMap(await db(), ids);
-  const message: EngineMessage = {
-    type: "presence",
-    count: ids.length,
-    caretakers: ids.map((id) => ({ id, name: names.get(id) ?? anonymousName(id) })),
-  };
+  return { count: ids.length, caretakers: ids.map((id) => ({ id, name: names.get(id) ?? anonymousName(id) })) };
+};
+
+const broadcastPresence = async (): Promise<void> => {
+  if (!(await shouldBroadcastPresence(redis(), key("presence-guard")))) return;
+  const message: EngineMessage = { type: "presence", ...(await presenceView()) };
   await redis().publish(key("events"), JSON.stringify(message));
 };
 
@@ -51,6 +52,10 @@ export async function GET(request: NextRequest): Promise<Response> {
     return new Response("too many streams", { status: 429 });
   }
   counts.set(ip, (counts.get(ip) ?? 0) + 1);
+
+  // This stream's own identity in the presence set — a caretaker can hold
+  // several at once, and each must come and go on its own.
+  const connectionId = randomUUID();
 
   const { engine, generation } = await runtime();
   const current = await generation();
@@ -80,6 +85,11 @@ export async function GET(request: NextRequest): Promise<Response> {
         }
       };
 
+      // Register this stream before the hello that reports on it, so the
+      // client's opening count includes itself and never depends on winning
+      // the broadcast throttle (SPEC §7.4).
+      await touchPresence(redis(), key("presence"), identity.caretakerId, connectionId);
+
       const state = await engine.view(current);
       const payload = await snapshotPayload(state, current);
       send("hello", {
@@ -87,6 +97,7 @@ export async function GET(request: NextRequest): Promise<Response> {
         nickname: profile?.nickname ?? null,
         streakDays: profile?.streakDays ?? 0,
         generationsSurvived: profile?.generationsSurvived ?? 0,
+        presence: await presenceView(),
         ...payload,
       });
       send("snapshot", payload);
@@ -96,7 +107,6 @@ export async function GET(request: NextRequest): Promise<Response> {
         send(message.type, message);
       });
 
-      await touchPresence(redis(), key("presence"), identity.caretakerId);
       await broadcastPresence();
 
       pingTimer = setInterval(() => {
@@ -104,7 +114,7 @@ export async function GET(request: NextRequest): Promise<Response> {
         // Touch, then re-attempt a broadcast: a join or leave whose
         // broadcast lost the 2s guard race would otherwise never be
         // reflected anywhere. This bounds presence staleness at one ping.
-        void touchPresence(redis(), key("presence"), identity.caretakerId).then(() => broadcastPresence());
+        void touchPresence(redis(), key("presence"), identity.caretakerId, connectionId).then(() => broadcastPresence());
       }, PING_INTERVAL_MS);
 
       snapshotTimer = setInterval(() => {
@@ -128,7 +138,7 @@ export async function GET(request: NextRequest): Promise<Response> {
       const remaining = (streamCounts().get(ip) ?? 1) - 1;
       if (remaining <= 0) streamCounts().delete(ip);
       else streamCounts().set(ip, remaining);
-      void dropPresence(redis(), key("presence"), identity.caretakerId).then(() => broadcastPresence());
+      void dropPresence(redis(), key("presence"), identity.caretakerId, connectionId).then(() => broadcastPresence());
     },
   });
 

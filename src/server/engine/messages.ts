@@ -36,11 +36,17 @@ export type SnapshotMessage = {
   state: PetState;
 };
 
-export type PresenceMessage = {
-  type: "presence";
+/**
+ * Who is watching. It rides the `hello` payload as well as the `presence`
+ * message: a client's first count must come from its own connect, not from
+ * whichever broadcast happens to win the throttle next (SPEC §7.4).
+ */
+export type PresenceView = {
   count: number;
   caretakers: { id: string; name: string }[];
 };
+
+export type PresenceMessage = PresenceView & { type: "presence" };
 
 /** Live minigame spectacle (SPEC §13.3): everyone watches the run. */
 export type MinigameMessage = {
