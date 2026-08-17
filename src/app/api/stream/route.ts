@@ -9,7 +9,7 @@ import { runtime } from "@/server/runtime";
 import { db } from "@/server/db/client";
 import { key, redis } from "@/server/redis/client";
 import { subscribeToEvents } from "@/server/stream/hub";
-import { dropPresence, listPresence, shouldBroadcastPresence, touchPresence } from "@/server/presence";
+import { dropPresence, listPresence, PresenceBroadcaster, shouldBroadcastPresence, touchPresence } from "@/server/presence";
 import { anonymousName, caretakerProfile, nicknameMap } from "@/server/social";
 import { snapshotPayload } from "@/server/snapshot";
 import { caretakerCookieHeader, clientIp, resolveCaretaker } from "@/server/http";
@@ -37,10 +37,21 @@ const presenceView = async (): Promise<PresenceView> => {
   return { count: ids.length, caretakers: ids.map((id) => ({ id, name: names.get(id) ?? anonymousName(id) })) };
 };
 
-const broadcastPresence = async (): Promise<void> => {
-  if (!(await shouldBroadcastPresence(redis(), key("presence-guard")))) return;
+const publishPresence = async (): Promise<void> => {
   const message: EngineMessage = { type: "presence", ...(await presenceView()) };
   await redis().publish(key("events"), JSON.stringify(message));
+};
+
+// One throttle per pod, shared by every stream it serves: the payload is read
+// fresh at publish time, so coalescing a join wave into one message loses
+// nothing (SPEC §7.4).
+let broadcaster: PresenceBroadcaster | null = null;
+const broadcastPresence = async (): Promise<void> => {
+  broadcaster ??= new PresenceBroadcaster(
+    () => shouldBroadcastPresence(redis(), key("presence-guard")),
+    publishPresence,
+  );
+  await broadcaster.request();
 };
 
 export async function GET(request: NextRequest): Promise<Response> {

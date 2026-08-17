@@ -4,7 +4,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeRedis, key, redis } from "./redis/client";
-import { dropPresence, listPresence, shouldBroadcastPresence, touchPresence } from "./presence";
+import { dropPresence, listPresence, PresenceBroadcaster, shouldBroadcastPresence, touchPresence } from "./presence";
 import { startTestInfra, type TestInfra } from "./testsetup";
 
 let infra: TestInfra;
@@ -64,5 +64,81 @@ describe("presence", () => {
     await redis().del(guard);
     const winners = await Promise.all(Array.from({ length: 5 }, () => shouldBroadcastPresence(redis(), guard)));
     expect(winners.filter(Boolean)).toHaveLength(1);
+  });
+});
+
+// The throttle's timing is tested against a stub window rather than the real
+// 2s Redis guard: the guard itself is covered above, and a unit that waits
+// two real windows per case is a unit nobody runs.
+describe("the presence broadcast throttle", () => {
+  const WINDOW = 40;
+  const settle = (windows = 2): Promise<void> => new Promise((resolve) => setTimeout(resolve, WINDOW * windows + 20));
+
+  /** `SET guard PX WINDOW NX`: claiming holds the window for its full term. */
+  const stubWindow = () => {
+    let heldUntil = 0;
+    return async (): Promise<boolean> => {
+      if (Date.now() < heldUntil) return false;
+      heldUntil = Date.now() + WINDOW;
+      return true;
+    };
+  };
+
+  it("publishes the first request immediately", async () => {
+    let published = 0;
+    const broadcaster = new PresenceBroadcaster(stubWindow(), async () => void published++, WINDOW);
+    await broadcaster.request();
+    expect(published).toBe(1);
+    broadcaster.cancel();
+  });
+
+  it("publishes once more after the window closes, however many were dropped", async () => {
+    let published = 0;
+    const broadcaster = new PresenceBroadcaster(stubWindow(), async () => void published++, WINDOW);
+    await broadcaster.request(); // leading — the room's first join
+    expect(published).toBe(1);
+    // A burst of joins and leaves, all inside the same window.
+    await broadcaster.request();
+    await broadcaster.request();
+    await broadcaster.request();
+    expect(published).toBe(1);
+
+    await settle();
+    // Exactly one trailing publish: the burst folded into a single message,
+    // and the last state of the window still reached every screen.
+    expect(published).toBe(2);
+    broadcaster.cancel();
+  });
+
+  it("goes quiet once the last change has been published", async () => {
+    let published = 0;
+    const broadcaster = new PresenceBroadcaster(stubWindow(), async () => void published++, WINDOW);
+    await broadcaster.request();
+    await broadcaster.request();
+    await settle();
+    expect(published).toBe(2);
+    // Nothing further happened, so nothing further is published.
+    await settle(3);
+    expect(published).toBe(2);
+    broadcaster.cancel();
+  });
+
+  it("keeps trying instead of giving up while another pod holds the window", async () => {
+    let free = false;
+    let published = 0;
+    const broadcaster = new PresenceBroadcaster(
+      async () => free,
+      async () => void published++,
+      WINDOW,
+    );
+    await broadcaster.request();
+    expect(published).toBe(0);
+    await settle();
+    expect(published).toBe(0);
+    // The moment the window frees up, the change everyone is missing lands.
+    free = true;
+    await settle(2);
+    expect(published).toBe(1);
+    broadcaster.cancel();
   });
 });

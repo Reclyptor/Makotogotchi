@@ -732,7 +732,7 @@ nothing for the cost of a custom server.
 | `care` | `{ action, caretaker, applied, needsAfter, tick }` | Every care action, by anyone. Drives the attributed toast. |
 | `milestone` | `{ kind, detail }` — `HATCHED` (detail carries the voted name), `EVOLVED`, `BECAME_SICK`, `RECOVERED`, `CRITICAL`, `SLEPT`, `WOKE`, `DIED` | System events. |
 | `minigame` | `{ phase: start\|score\|finish, caretakerName, score?, applied? }` | The live Dust Dash spectacle (SPEC §13.3). |
-| `presence` | `{ count, caretakers[] }` | Throttled to at most once per 2s. |
+| `presence` | `{ count, caretakers[] }` | Throttled to at most once per 2s, leading **and** trailing (§7.4). |
 | `react` | `{ emoji, caretaker }` | Emoji reactions. |
 | `:ping` | comment frame | Every 15s. Keeps intermediaries from reaping an idle stream. |
 
@@ -776,12 +776,21 @@ its own — a second clock is a second answer.
 
 Presence follows the same rule as state: a client's opening view arrives with
 its own connect, in `hello`, computed after that stream has joined the
-presence set. The `presence` broadcast is throttled to one message per 2s
-across all pods and is *dropped* rather than deferred when it loses that
-window, so a connect that relied on it to learn the count would show zero
-until some later join, leave, or 15s heartbeat happened to win — which is
-exactly what a refresh does, since the reload and the old stream's teardown
-race inside the same window.
+presence set. It must never be learned from a broadcast instead — a connect
+that waited for one would show zero whenever it lost the throttle window,
+which is exactly what a refresh does, since the reload and the old stream's
+teardown race inside the same window.
+
+The `presence` broadcast is throttled to one message per 2s across all pods,
+**leading and trailing**. The first change in a window publishes at once; the
+rest fold into a single publish when the window closes. Leading-only
+throttling drops the losers outright, and since a burst always *ends* on a
+loser, the final count — the true one — is the one guaranteed not to be sent,
+leaving every other screen stale until some later change or 15s heartbeat
+happens to win. The payload is read fresh from Redis at publish time, so
+nothing is queued but the fact that something changed, and a coalesced burst
+loses no information. The trailing timer runs a full window rather than the
+guard's remaining TTL, which bounds staleness at two windows.
 
 ---
 
