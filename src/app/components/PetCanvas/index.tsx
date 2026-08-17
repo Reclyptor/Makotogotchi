@@ -11,6 +11,7 @@ import { isAmbientEvent } from "@/sim/ambient";
 import type { CareAction } from "@/sim/tuning";
 import { SPRITE_SHEET_URL } from "@/game/atlas.generated";
 import { Room, ROOM_HEIGHT, ROOM_WIDTH, type FoodTaste } from "@/game/scene/room";
+import { petClock } from "@/game/scene/backdrop";
 import { startLoop } from "@/game/engine/loop";
 import type { PetStream } from "@/app/hooks/usePetStream";
 
@@ -179,6 +180,20 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
       update: (dt) => room.update(dt),
       render: (now) => {
         const state = projectNow();
+        const zone = timeZoneRef.current;
+        // The room dresses itself for the pet's hour, weather and season
+        // (SPEC §22.1) — all of it derived from the shared clock and seed.
+        if (state && zone) {
+          const clock = petClock(zone);
+          room.syncAtmosphere({
+            hour: clock.hour,
+            minute: clock.minute,
+            month: clock.month,
+            dayIndex: clock.dayIndex,
+            seed: state.generation.seed,
+            themeId: null,
+          });
+        }
         if (state) {
           room.syncDerived(derive(state), state.asleep, now);
           maybeGreet(state.bornAtTick !== null && state.diedAtTick === null && !state.asleep, now);

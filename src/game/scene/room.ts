@@ -7,14 +7,33 @@ import { Particles, type ParticleKind } from "../engine/particles";
 import { Toasts } from "./toasts";
 import { AnimationMachine } from "../anim/machine";
 import { BUTTERFLY_CLIP, WALK_CLIP, type OneShotName } from "../anim/clips";
+import { Backdrop, ROOM_HEIGHT, ROOM_WIDTH, type BackdropKey, type Condition } from "./backdrop";
+import { celestialAt, seasonFor, skyMomentAt, weatherFor, type Celestial } from "@/sim/atmosphere";
 import type { DerivedState } from "@/sim/derive";
 import type { AmbientEvent } from "@/sim/ambient";
 import type { CareAction, LifeStage } from "@/sim/tuning";
 
-export const ROOM_WIDTH = 260;
-export const ROOM_HEIGHT = 200;
+export { ROOM_WIDTH, ROOM_HEIGHT } from "./backdrop";
 const PET_X = ROOM_WIDTH / 2;
 const PET_Y = 172;
+
+/** What the room needs from the pet's own calendar to dress itself (§22.1). */
+export type AtmosphereInput = {
+  hour: number;
+  minute: number;
+  /** 1-based month in the pet's timezone, for the season. */
+  month: number;
+  /** Days since genesis in the pet's timezone, which fixes the weather. */
+  dayIndex: number;
+  seed: number;
+  themeId: string | null;
+};
+
+const ALERT_CONDITION: Record<DerivedState["alert"], Condition> = {
+  OK: "well",
+  WARN: "poor",
+  CRITICAL: "critical",
+};
 
 // Idle wander: every slot the pet picks a spot on the rug band and strolls
 // there with the walk cycle. Slots hash wall-clock time, so every open tab
@@ -83,6 +102,21 @@ export class Room {
   readonly machine = new AnimationMachine();
   private readonly particles = new Particles();
   private readonly toasts = new Toasts();
+  private readonly backdrop = new Backdrop();
+  private condition: Condition = "well";
+  private seed = 0;
+  // Until the first sync lands, the room holds an ordinary clear midday.
+  private backdropKey: BackdropKey = {
+    themeId: "cozy",
+    segment: "midday",
+    next: "midday",
+    blend: 0,
+    weather: "clear",
+    season: "summer",
+    sunStep: 8,
+    condition: "well",
+  };
+  private celestial: Celestial = celestialAt(13, 0);
   private asleep = false;
   private stage: LifeStage = "EGG";
   private ambientMs = 0;
@@ -105,6 +139,29 @@ export class Room {
     this.machine.setBase(derived.animation, nowMs);
     this.asleep = asleep;
     this.stage = derived.stage;
+    this.condition = ALERT_CONDITION[derived.alert];
+  }
+
+  /**
+   * Dress the room for the pet's own hour, weather and season (SPEC §22.1).
+   * Everything here is derived from the shared clock and the generation
+   * seed, so no two caretakers ever see different rooms.
+   */
+  syncAtmosphere(input: AtmosphereInput): void {
+    const moment = skyMomentAt(input.hour, input.minute);
+    const season = seasonFor(input.month);
+    this.seed = input.seed;
+    this.celestial = celestialAt(input.hour, input.minute);
+    this.backdropKey = {
+      themeId: input.themeId ?? "cozy",
+      segment: moment.segment,
+      next: moment.next,
+      blend: moment.blend,
+      weather: weatherFor(input.seed, input.dayIndex, season),
+      season,
+      sunStep: Math.round(moment.sunHeight * 8),
+      condition: this.condition,
+    };
   }
 
   /** The draw scale the pet's life stage calls for right now. */
@@ -185,18 +242,15 @@ export class Room {
   render(ctx: CanvasRenderingContext2D, nowMs: number): void {
     ctx.imageSmoothingEnabled = false;
 
-    // Backdrop: wall, wainscot line, floor.
-    ctx.fillStyle = "#2a2333";
-    ctx.fillRect(0, 0, ROOM_WIDTH, ROOM_HEIGHT);
-    ctx.fillStyle = "#231d2b";
-    ctx.fillRect(0, 118, ROOM_WIDTH, 4);
-    ctx.fillStyle = "#3a3145";
-    ctx.fillRect(0, 122, ROOM_WIDTH, ROOM_HEIGHT - 122);
-    // Rug under the pet.
-    ctx.fillStyle = "#4a3d5c";
-    ctx.fillRect(PET_X - 64, PET_Y - 10, 128, 14);
-    ctx.fillStyle = "#5b4b71";
-    ctx.fillRect(PET_X - 58, PET_Y - 8, 116, 10);
+    // The room itself: architecture, sky, weather (SPEC §22).
+    this.backdrop.render(
+      ctx,
+      { ...this.backdropKey, condition: this.condition },
+      this.celestial,
+      this.seed,
+      nowMs,
+      this.reducedMotion,
+    );
 
     this.renderDecor(ctx, nowMs);
 
@@ -225,7 +279,7 @@ export class Room {
 
     // Night dims the room without hiding it.
     if (this.asleep) {
-      ctx.fillStyle = "rgba(9, 8, 24, 0.45)";
+      ctx.fillStyle = "rgba(9, 8, 24, 0.22)";
       ctx.fillRect(0, 0, ROOM_WIDTH, ROOM_HEIGHT);
     }
 
@@ -287,9 +341,9 @@ export class Room {
       px(30, 132, 8, 8, "#4f9a4f");
     }
     if (this.decor.decor.includes("picture")) {
-      px(96, 40, 30, 24, "#6a5a3b"); // frame
-      px(99, 43, 24, 18, "#8fb3d9"); // sky
-      px(99, 55, 24, 6, "#5b7a4a"); // hills
+      px(40, 40, 30, 24, "#6a5a3b"); // frame
+      px(43, 43, 24, 18, "#8fb3d9"); // sky
+      px(43, 55, 24, 6, "#5b7a4a"); // hills
     }
     if (this.decor.decor.includes("lamp")) {
       px(226, 96, 4, 66, "#57492f"); // pole
@@ -303,14 +357,13 @@ export class Room {
     // under reduced motion like everything else in the room.
     const beat = this.reducedMotion ? 0 : nowMs;
     if (this.decor.decor.includes("window_seat")) {
-      px(148, 30, 50, 50, "#6a5a3b"); // frame
-      px(152, 34, 42, 42, "#8fb3d9"); // sky
-      px(152, 58, 42, 6, "#5b7a4a"); // hills
-      px(172, 34, 2, 42, "#6a5a3b"); // mullion
-      px(144, 108, 58, 12, "#7a5f8a"); // bench
-      px(148, 104, 50, 6, "#9b7fae"); // cushion
-      ctx.globalAlpha = 0.10;
-      px(150, 80, 46, 40, "#ffe9a3"); // daylight spilling in
+      // The room already has its window (§22.3); the grand item furnishes it.
+      px(146, 104, 76, 6, "#9b7fae"); // cushion
+      px(146, 110, 76, 10, "#7a5f8a"); // bench
+      px(150, 120, 6, 6, "#5f4a70"); // legs
+      px(212, 120, 6, 6, "#5f4a70");
+      ctx.globalAlpha = 0.1;
+      px(150, 72, 68, 32, "#ffe9a3"); // daylight spilling over the seat
       ctx.globalAlpha = 1;
     }
     if (this.decor.decor.includes("aquarium")) {
