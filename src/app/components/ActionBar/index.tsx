@@ -9,7 +9,7 @@
 
 import { useCallback, useState } from "react";
 import { canPerform } from "@/sim/validate";
-import { CARE_ACTIONS, COOLDOWNS, TICK_SECONDS, type CareAction } from "@/sim/tuning";
+import { CARE_ACTIONS, TICK_SECONDS, type CareAction } from "@/sim/tuning";
 import type { PetState, ProjectionContext } from "@/sim/model";
 
 const ACTION_META: Record<CareAction, { label: string; emoji: string }> = {
@@ -31,16 +31,22 @@ const REASON_TEXT = (petName: string): Record<string, string> => ({
 });
 
 /**
- * How far a cooldown has left to run, 1 just after the action to 0 when it
- * is ready again. The sim's tick is a whole number that only moves every ten
- * seconds, so a bar driven by it lurches; this takes the caller's wall clock
- * and measures the remainder in fractional ticks, which drains smoothly
- * between ticks (SPEC §11.2).
+ * How far a cooldown has left to run, 1 just after the action to 0 when it is
+ * ready again. The sim's tick is a whole number that only moves every ten
+ * seconds, so a bar driven by it lurches; this measures the remainder in
+ * fractional ticks against the corrected clock, which drains smoothly between
+ * ticks (SPEC §11.2).
+ *
+ * The span is the whole window the action is held for — armed to ready — not
+ * the nominal length of one of the two overlapping cooldowns. Measuring
+ * against a cooldown that ends before the action frees up is what made the
+ * bar empty and then refill.
  */
-export const cooldownProgress = (retryAtTick: number, totalTicks: number, nowTickExact: number): number => {
-  if (totalTicks <= 0) return 0;
-  const remaining = Math.max(0, retryAtTick - nowTickExact);
-  return Math.min(1, remaining / totalTicks);
+export const cooldownProgress = (sinceTick: number, readyAtTick: number, nowTickExact: number): number => {
+  const span = readyAtTick - sinceTick;
+  if (span <= 0) return 0;
+  const remaining = Math.max(0, readyAtTick - nowTickExact);
+  return Math.min(1, remaining / span);
 };
 
 /** Whole seconds still to wait, for the label under the button. */
@@ -53,19 +59,18 @@ export type ActionBarProps = {
   caretakerId: string;
   petName: string;
   /**
-   * The wall clock at the caller's last projection. It arrives as a prop so
-   * this component stays pure across renders — and so the cooldown bars move
-   * on the same 250ms cadence the meters do.
+   * The corrected clock in fractional ticks, sampled at the caller's last
+   * projection. It arrives as a prop so this component stays pure across
+   * renders, so the bars move on the same 250ms cadence the meters do, and so
+   * a bar empties on exactly the tick canPerform() starts saying yes.
    */
-  nowMs: number;
+  nowTickExact: number;
   /** PLAY launches the minigame (SPEC §13.3) instead of posting directly. */
   onPlay: () => void;
 };
 
-export default function ActionBar({ state, ctx, caretakerId, petName, nowMs, onPlay }: ActionBarProps) {
+export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExact, onPlay }: ActionBarProps) {
   const [notice, setNotice] = useState<string | null>(null);
-  // Where the pet's clock stands right now, tick and fraction (SPEC §4.5).
-  const nowTickExact = (nowMs - state.generation.genesisEpochMs) / (TICK_SECONDS * 1000);
 
   const act = useCallback(
     async (action: CareAction) => {
@@ -103,10 +108,8 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowMs, onP
           let hint: string | null = null;
           let cooldownFraction = 0; // 0 = ready, 1 = just used
           if (!verdict.ok) {
-            if (verdict.retryAtTick !== undefined) {
-              const totalTicks =
-                verdict.reason === "COOLDOWN_GLOBAL" ? COOLDOWNS[action].global : COOLDOWNS[action].caretaker;
-              cooldownFraction = cooldownProgress(verdict.retryAtTick, totalTicks, nowTickExact);
+            if (verdict.retryAtTick !== undefined && verdict.sinceTick !== undefined) {
+              cooldownFraction = cooldownProgress(verdict.sinceTick, verdict.retryAtTick, nowTickExact);
               const seconds = cooldownSeconds(verdict.retryAtTick, nowTickExact);
               hint =
                 verdict.reason === "COOLDOWN_GLOBAL"

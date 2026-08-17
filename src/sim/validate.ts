@@ -19,10 +19,48 @@ export type RejectionReason =
   | "NOT_SICK" // MEDICATE without illness
   | "NOT_SLEEPY"; // LULLABY needs night or low energy
 
-export type ValidationResult = { ok: true } | { ok: false; reason: RejectionReason; retryAtTick?: number };
+export type ValidationResult =
+  | { ok: true }
+  | { ok: false; reason: RejectionReason; retryAtTick?: number; sinceTick?: number };
 
-const reject = (reason: RejectionReason, retryAtTick?: number): ValidationResult =>
-  retryAtTick === undefined ? { ok: false, reason } : { ok: false, reason, retryAtTick };
+const reject = (reason: RejectionReason, window?: CooldownWindow): ValidationResult =>
+  window === undefined
+    ? { ok: false, reason }
+    : { ok: false, reason, retryAtTick: window.readyAtTick, sinceTick: window.sinceTick };
+
+/**
+ * The one span an action is held for: from the tick that armed it to the tick
+ * it frees up again.
+ *
+ * Both cooldowns run at once, so the binding one is whichever ends *last* —
+ * reporting the global cooldown while a longer caretaker cooldown is still
+ * running would tell the UI the action is nearly ready and then hold it for
+ * minutes more (SPEC §11.2). Ties go to the global one: "the pet is busy"
+ * reads better than "catch your breath" when both are true.
+ */
+export type CooldownWindow = { reason: RejectionReason; sinceTick: number; readyAtTick: number };
+
+export const cooldownWindow = (
+  state: PetState,
+  action: CareAction,
+  caretakerId: string,
+): CooldownWindow | null => {
+  const cooldown = COOLDOWNS[action];
+  const lastGlobal = state.lastActionTick[action];
+  const lastOwn = state.caretakers.find((entry) => entry.id === caretakerId)?.lastActionTick[action];
+  const windows: CooldownWindow[] = [];
+  if (lastGlobal !== undefined) {
+    windows.push({ reason: "COOLDOWN_GLOBAL", sinceTick: lastGlobal, readyAtTick: lastGlobal + cooldown.global });
+  }
+  if (lastOwn !== undefined) {
+    windows.push({ reason: "COOLDOWN_CARETAKER", sinceTick: lastOwn, readyAtTick: lastOwn + cooldown.caretaker });
+  }
+  let binding: CooldownWindow | null = null;
+  for (const window of windows) {
+    if (binding === null || window.readyAtTick > binding.readyAtTick) binding = window;
+  }
+  return binding;
+};
 
 export const canPerform = (
   state: PetState,
@@ -37,16 +75,8 @@ export const canPerform = (
   // Emergency medicine cures instantly — cooldowns are bypassed (SPEC §13.2).
   const bypassCooldowns = action === "MEDICATE" && medicineItem(itemId) !== null;
   if (!bypassCooldowns) {
-    const cooldown = COOLDOWNS[action];
-    const lastGlobal = state.lastActionTick[action];
-    if (lastGlobal !== undefined && state.tick - lastGlobal < cooldown.global) {
-      return reject("COOLDOWN_GLOBAL", lastGlobal + cooldown.global);
-    }
-    const record = state.caretakers.find((entry) => entry.id === caretakerId);
-    const lastOwn = record?.lastActionTick[action];
-    if (lastOwn !== undefined && state.tick - lastOwn < cooldown.caretaker) {
-      return reject("COOLDOWN_CARETAKER", lastOwn + cooldown.caretaker);
-    }
+    const window = cooldownWindow(state, action, caretakerId);
+    if (window !== null && state.tick < window.readyAtTick) return reject(window.reason, window);
   }
 
   switch (action) {

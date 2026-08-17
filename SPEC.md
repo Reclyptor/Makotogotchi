@@ -727,7 +727,7 @@ nothing for the cost of a custom server.
 
 | Event | Payload | When |
 | --- | --- | --- |
-| `hello` | `{ caretakerId, nickname, serverTick, tickSeconds, genesisEpochMs, phaseSchedule }` | On connect. Lets the client align its clock and project locally (§4.5). |
+| `hello` | `{ caretakerId, nickname, serverNowMs, tickSeconds, genesisEpochMs, phaseSchedule }` | On connect. Lets the client align its clock and project locally (§4.5). |
 | `snapshot` | Full `PetState` + generation metadata + `phaseSchedule` refresh | On connect, and every 30s as reconciliation. |
 | `care` | `{ action, caretaker, applied, needsAfter, tick }` | Every care action, by anyone. Drives the attributed toast. |
 | `milestone` | `{ kind, detail }` — `HATCHED` (detail carries the voted name), `EVOLVED`, `BECAME_SICK`, `RECOVERED`, `CRITICAL`, `SLEPT`, `WOKE`, `DIED` | System events. |
@@ -760,8 +760,19 @@ optimistically and are corrected by the next non-stale snapshot if the server
 disagreed. Hard resets happen only on non-stale snapshots.
 
 Clock skew is handled by tracking the offset between the local clock and the
-`serverTick` in `hello`, refreshed on every snapshot. The client never trusts
+`serverNowMs` in `hello`, refreshed on every snapshot. The client never trusts
 its own wall clock in absolute terms.
+
+Alignment is against the server's *wall clock*, never against `serverTick`. A
+tick index is floored, so the instant a tick begins and the instant a snapshot
+is cut are up to a whole tick apart; treating the two as the same moment puts
+the corrected clock up to ten seconds behind the server, which is enough to
+hold a button locked after its cooldown bar has visibly emptied.
+
+Every time-driven part of the UI reads that one corrected clock, in fractional
+ticks: the local projection floors it, cooldown bars use it whole. A component
+must not re-derive the current tick from `Date.now()` and `genesisEpochMs` on
+its own — a second clock is a second answer.
 
 ---
 
@@ -953,6 +964,14 @@ conveys is also present as semantic HTML (§11.3).
 - Action buttons show live cooldowns and disable with a *reason* on hover and
   in an accessible label: "Makoto is still eating (23s)", "Makoto is asleep",
   "Makoto isn't sick".
+- An action carries two cooldowns at once (§2.5) — the pet's and the
+  caretaker's — but it gets **one** bar, spanning the single window from the
+  tick that armed it to the tick it frees up. That window is whichever of the
+  two ends *last*; reporting the shorter one drains the bar to empty and then
+  refills it when the longer one takes over. `cooldownWindow()` in
+  `validate.ts` is the one place that decides it, and `canPerform()` gates on
+  the same value, so the bar reaches empty on exactly the tick the button
+  starts accepting clicks.
 - Meters animate continuously via client-side projection, not in server-push
   jumps.
 - The action feed is both a visual toast in the canvas and an entry in an

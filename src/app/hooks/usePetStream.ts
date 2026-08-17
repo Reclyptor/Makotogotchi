@@ -31,7 +31,7 @@ type Authoritative = {
   schedule: PhaseSchedule;
   genesisEpochMs: number;
   tickMs: number;
-  /** localNowMs − serverNowMs, estimated from snapshots. */
+  /** localNowMs − serverNowMs, measured on every snapshot. */
   clockOffsetMs: number;
 };
 
@@ -51,6 +51,16 @@ export type FundedNotice = Omit<FundedMessage, "type">;
 export type ReactNotice = Omit<ReactMessage, "type">;
 export type CaretakerProfile = { nickname: string | null; streakDays: number; generationsSurvived: number };
 
+/**
+ * Where the pet's clock stands right now, tick and fraction, on the server's
+ * timeline rather than the browser's (SPEC §4.5). Everything time-driven in
+ * the UI reads from here: the projection floors it, cooldown bars use it
+ * whole. Sharing one clock is what keeps a bar from emptying while the button
+ * it belongs to is still refusing the click.
+ */
+const exactTick = (auth: Authoritative): number =>
+  Math.max(auth.state.tick, (Date.now() - auth.clockOffsetMs - auth.genesisEpochMs) / auth.tickMs);
+
 export type PetStream = {
   connected: boolean;
   caretakerId: string | null;
@@ -64,6 +74,8 @@ export type PetStream = {
   timeZone: string | null;
   /** Authoritative state projected to the corrected current tick. */
   projectNow: () => PetState | null;
+  /** The corrected clock in fractional ticks — see exactTick. */
+  nowTickExact: () => number | null;
   /** The projection context (phase schedule) for validate/derive callers. */
   context: () => ProjectionContext | null;
   onCare: (listener: (notice: CareNotice) => void) => () => void;
@@ -105,7 +117,7 @@ export const usePetStream = (): PetStream => {
         schedule: payload.phaseSchedule,
         genesisEpochMs: payload.genesisEpochMs,
         tickMs: payload.tickSeconds * 1000,
-        clockOffsetMs: Date.now() - (payload.genesisEpochMs + payload.serverTick * payload.tickSeconds * 1000),
+        clockOffsetMs: Date.now() - payload.serverNowMs,
       };
       setRoom(payload.room);
       setTimeZone(payload.timeZone);
@@ -200,9 +212,12 @@ export const usePetStream = (): PetStream => {
   const projectNow = useCallback((): PetState | null => {
     const auth = authRef.current;
     if (!auth) return null;
-    const correctedNow = Date.now() - auth.clockOffsetMs;
-    const tickNow = Math.max(auth.state.tick, Math.floor((correctedNow - auth.genesisEpochMs) / auth.tickMs));
-    return project(auth.state, tickNow, { schedule: auth.schedule }).state;
+    return project(auth.state, Math.floor(exactTick(auth)), { schedule: auth.schedule }).state;
+  }, []);
+
+  const nowTickExact = useCallback((): number | null => {
+    const auth = authRef.current;
+    return auth ? exactTick(auth) : null;
   }, []);
 
   const context = useCallback((): ProjectionContext | null => {
@@ -249,6 +264,7 @@ export const usePetStream = (): PetStream => {
     room,
     timeZone,
     projectNow,
+    nowTickExact,
     context,
     onCare,
     onMilestone,

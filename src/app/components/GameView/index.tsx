@@ -122,8 +122,9 @@ const age = (state: PetState): string => {
 
 export default function GameView() {
   const stream = usePetStream();
-  const { projectNow, context, onCare, onMilestone, onMinigame, onRecord, onFunded, onReact, caretakerId, profile } = stream;
-  const [ui, setUi] = useState<{ state: PetState; derived: DerivedState; nowMs: number } | null>(null);
+  const { projectNow, nowTickExact, context, onCare, onMilestone, onMinigame, onRecord, onFunded, onReact, caretakerId, profile } =
+    stream;
+  const [ui, setUi] = useState<{ state: PetState; derived: DerivedState; nowTickExact: number } | null>(null);
   // Play launches a random game from the roster; a ?game= query pins it —
   // handy for sharing a favourite and for deterministic e2e runs.
   const pickGame = (): MinigameId => {
@@ -171,15 +172,16 @@ export default function GameView() {
   useEffect(() => {
     const tick = (): void => {
       const state = projectNow();
-      if (state) {
+      const exact = nowTickExact();
+      if (state && exact !== null) {
         petNameRef.current = state.generation.name ?? "Makoto";
-        setUi({ state, derived: derive(state), nowMs: Date.now() });
+        setUi({ state, derived: derive(state), nowTickExact: exact });
       }
     };
     tick();
     const timer = setInterval(tick, 250);
     return () => clearInterval(timer);
-  }, [projectNow]);
+  }, [projectNow, nowTickExact]);
 
   const pushFeed = (icon: string, text: string, id?: number | string, at?: Date): void => {
     localId.current += 1;
@@ -413,7 +415,7 @@ export default function GameView() {
           ctx={ctx}
           caretakerId={caretakerId}
           petName={petName}
-          nowMs={ui.nowMs}
+          nowTickExact={ui.nowTickExact}
           onPlay={() => setPlaying(pickGame())}
         />
       )}

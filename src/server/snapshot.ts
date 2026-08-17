@@ -16,7 +16,12 @@ import { roomState, type RoomView } from "./shop";
 export type SnapshotPayload = {
   state: PetState;
   derived: DerivedState;
-  serverTick: number;
+  /**
+   * The server's wall clock as the payload was assembled. Clients align to
+   * this, never to `state.tick`: a tick index is floored, so aligning to it
+   * puts the client anywhere up to a whole tick behind the server (SPEC §7.4).
+   */
+  serverNowMs: number;
   tickSeconds: number;
   genesisEpochMs: number;
   generation: { id: string; ordinal: number; name: string | null };
@@ -50,7 +55,7 @@ const cachedRoom = async (): Promise<RoomView> => {
 export const snapshotPayload = async (state: PetState, generation: Generation): Promise<SnapshotPayload> => ({
   state,
   derived: derive(state),
-  serverTick: state.tick,
+  serverNowMs: Date.now(),
   tickSeconds: TICK_SECONDS,
   genesisEpochMs: generation.genesisEpochMs,
   generation: { id: generation.id, ordinal: generation.ordinal, name: state.generation.name },
