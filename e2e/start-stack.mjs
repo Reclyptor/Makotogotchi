@@ -15,20 +15,28 @@ for (const name of ["mgc-e2e-mongo", "mgc-e2e-redis"]) {
 }
 
 const mongoId = run(["run", "-d", "--rm", "--name", "mgc-e2e-mongo", "-p", "127.0.0.1:27227:27017", "mongo:8"]);
-run(["run", "-d", "--rm", "--name", "mgc-e2e-redis", "-p", "127.0.0.1:6579:6379", "redis:8-alpine"]);
+const redisId = run(["run", "-d", "--rm", "--name", "mgc-e2e-redis", "-p", "127.0.0.1:6579:6379", "redis:8-alpine"]);
 
-const deadline = Date.now() + 30_000;
-for (;;) {
-  try {
-    execFileSync("docker", ["exec", mongoId, "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 })"], {
-      stdio: "ignore",
-    });
-    break;
-  } catch {
-    if (Date.now() > deadline) throw new Error("mongo container did not become ready");
+/** Ping a container until it answers, rather than sleeping a guessed duration. */
+const waitFor = (label, command, expected) => {
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    try {
+      const output = run(["exec", ...command]);
+      if (expected === undefined || output.includes(expected)) return;
+    } catch {
+      // Not up yet — the container may not even be accepting exec.
+    }
+    if (Date.now() > deadline) throw new Error(`${label} container did not become ready`);
     execFileSync("sleep", ["0.25"]);
   }
-}
+};
+
+waitFor("mongo", [mongoId, "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 })"]);
+// Redis was started and never waited on, unlike Mongo. ioredis retries, so
+// the app does recover on its own — but handing it a socket that is already
+// listening costs nothing and takes one race out of the harness.
+waitFor("redis", [redisId, "redis-cli", "ping"], "PONG");
 
 // Pin the pet's timezone so "now" is always midday LOCAL time: the sim
 // sleeps 22:00–07:00 in its zone, and a CI run during that window would
