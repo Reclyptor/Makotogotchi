@@ -73,6 +73,13 @@ export type FundedMessage = {
   contributors: { name: string; amount: number }[];
 };
 
+/** The room changed its style (SPEC §22.5): every room changes together. */
+export type ThemeMessage = {
+  type: "theme";
+  themeId: string;
+  caretakerName: string;
+};
+
 /** Emoji reactions (SPEC §2.11) — pure broadcast, no state. */
 export type ReactMessage = {
   type: "react";
@@ -89,4 +96,5 @@ export type EngineMessage =
   | MinigameMessage
   | RecordMessage
   | FundedMessage
+  | ThemeMessage
   | ReactMessage;

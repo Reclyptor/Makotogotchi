@@ -182,6 +182,14 @@ const townLightAt = (gx: number, gy: number, height: number): boolean => {
   return (block * 31 + column * 17 + fromBottom * 7) % 5 < 3;
 };
 
+/** The strip of land at the foot of the view, which is what carries season. */
+const SEASON_GROUND: Record<Season, RGB> = {
+  spring: [96, 140, 86],
+  summer: [72, 124, 70],
+  autumn: [150, 104, 52],
+  winter: [206, 214, 228],
+};
+
 // ── condition ───────────────────────────────────────────────────────────────
 
 /**
@@ -259,6 +267,12 @@ export const composeBackdrop = (key: BackdropKey): Uint8ClampedArray => {
           // Water catches the sky: alternating rows of two values.
           color = fromBottom % 3 === 0 ? mix(horizon, [12, 30, 60], 0.35) : color;
         }
+      }
+      // The ground at the foot of the view carries the season.
+      if (fromBottom < 2 && theme.outside !== "sea") color = SEASON_GROUND[key.season];
+      // Winter caps every roofline with a pixel of snow.
+      if (key.season === "winter" && theme.outside !== "sea" && fromBottom === height - 1) {
+        color = [226, 232, 244];
       }
       // A ledge of settled snow along the outside of the pane.
       if (key.weather === "snow" && fromBottom < 2) color = [222, 230, 242];

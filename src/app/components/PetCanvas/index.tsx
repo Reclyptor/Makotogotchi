@@ -191,7 +191,7 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
             month: clock.month,
             dayIndex: clock.dayIndex,
             seed: state.generation.seed,
-            themeId: null,
+            themeId: roomViewRef.current?.activeTheme ?? null,
           });
         }
         if (state) {

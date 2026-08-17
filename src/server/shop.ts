@@ -12,6 +12,7 @@ import type { Collection, Db } from "mongodb";
 import { FOOD_ITEMS, MEDICINE_ITEMS, TOY_ITEMS } from "@/sim/economy";
 import { isDuplicateKeyError } from "./db/collections";
 import { caretakerProfile, caretakers, creditCoins } from "./social";
+import { invalidateRoomCache } from "./snapshot";
 
 export const COSMETIC_ITEMS = {
   bow: { kind: "cosmetic", price: 300, label: "Ribbon Bow" },
@@ -29,7 +30,15 @@ export const GRAND_ITEMS = {
   window_seat: { kind: "grand", price: 500, label: "Window Seat" },
   aquarium: { kind: "grand", price: 650, label: "Aquarium" },
   kotatsu: { kind: "grand", price: 800, label: "Kotatsu" },
+  // Room styles (SPEC §22.5). Funding one buys the whole room a new palette
+  // and a new view out of the window, for everyone, forever.
+  theme_cabin: { kind: "grand", price: 900, label: "Log Cabin Walls" },
+  theme_seaside: { kind: "grand", price: 1100, label: "Seaside Walls" },
 } as const;
+
+/** The style every room starts with and can always return to. */
+export const DEFAULT_THEME = "cozy";
+const THEME_PREFIX = "theme_";
 
 export type CosmeticId = keyof typeof COSMETIC_ITEMS;
 export type DecorId = keyof typeof DECOR_ITEMS;
@@ -42,15 +51,58 @@ export type RoomStateDoc = {
   cosmetics: string[]; // owned, cross-generation
   activeCosmetic: string | null;
   decor: string[];
+  /** The room style in use; absent means the default (SPEC §22.5). */
+  activeTheme?: string | null;
 };
 
 const roomCollection = (db: Db): Collection<RoomStateDoc> => db.collection("roomState");
 
-export type RoomView = { decor: string[]; activeCosmetic: string | null; cosmetics: string[] };
+export type RoomView = {
+  decor: string[];
+  activeCosmetic: string | null;
+  cosmetics: string[];
+  /** The style the room is wearing, and every style it may wear. */
+  activeTheme: string;
+  themes: string[];
+};
+
+/** A funded style is owned forever; the default is owned from the start. */
+export const ownedThemes = (decor: string[]): string[] => [
+  DEFAULT_THEME,
+  ...decor.filter((item) => item.startsWith(THEME_PREFIX)).map((item) => item.slice(THEME_PREFIX.length)),
+];
 
 export const roomState = async (db: Db): Promise<RoomView> => {
   const doc = await roomCollection(db).findOne({ _id: "room" });
-  return { decor: doc?.decor ?? [], activeCosmetic: doc?.activeCosmetic ?? null, cosmetics: doc?.cosmetics ?? [] };
+  const decor = doc?.decor ?? [];
+  const themes = ownedThemes(decor);
+  const active = doc?.activeTheme ?? DEFAULT_THEME;
+  return {
+    decor,
+    activeCosmetic: doc?.activeCosmetic ?? null,
+    cosmetics: doc?.cosmetics ?? [],
+    // A style the room no longer owns cannot be worn — fall back rather than
+    // render a palette nobody paid for.
+    activeTheme: themes.includes(active) ? active : DEFAULT_THEME,
+    themes,
+  };
+};
+
+/**
+ * Switch the room's style (SPEC §22.5). Any caretaker may change it among
+ * the styles the room owns — it is a shared space, and the change lands for
+ * everyone at once.
+ */
+export const setActiveTheme = async (db: Db, themeId: string): Promise<boolean> => {
+  const doc = await roomCollection(db).findOne({ _id: "room" });
+  if (!ownedThemes(doc?.decor ?? []).includes(themeId)) return false;
+  await roomCollection(db).updateOne(
+    { _id: "room" },
+    { $set: { activeTheme: themeId }, $setOnInsert: { cosmetics: [], activeCosmetic: null, decor: [] } },
+    { upsert: true },
+  );
+  invalidateRoomCache();
+  return true;
 };
 
 /** All purchasable items with prices, for the shop UI. */
@@ -130,9 +182,11 @@ export const purchase = async (
 export const wearCosmetic = async (db: Db, itemId: string | null): Promise<boolean> => {
   if (itemId === null) {
     await roomCollection(db).updateOne({ _id: "room" }, { $set: { activeCosmetic: null } });
+    invalidateRoomCache();
     return true;
   }
   const result = await roomCollection(db).updateOne({ _id: "room", cosmetics: itemId }, { $set: { activeCosmetic: itemId } });
+  if (result.modifiedCount === 1) invalidateRoomCache();
   return result.modifiedCount === 1;
 };
 
@@ -273,4 +327,5 @@ const placeCommunalDecor = async (db: Db, itemId: string): Promise<void> => {
     // already there, because $addToSet on the winner's document ran first.
     if (!isDuplicateKeyError(error)) throw error;
   }
+  invalidateRoomCache();
 };

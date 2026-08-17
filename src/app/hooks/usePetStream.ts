@@ -174,6 +174,10 @@ export const usePetStream = (): PetStream => {
       const { type: _type, ...notice } = message;
       for (const listener of recordListeners.current) listener(notice);
     });
+    source.addEventListener("theme", (event) => {
+      const notice = JSON.parse((event as MessageEvent<string>).data) as { themeId: string };
+      setRoom((current) => (current ? { ...current, activeTheme: notice.themeId } : current));
+    });
     source.addEventListener("funded", (event) => {
       const message = JSON.parse((event as MessageEvent<string>).data) as FundedMessage;
       const { type: _type, ...notice } = message;

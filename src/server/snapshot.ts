@@ -31,6 +31,15 @@ export type SnapshotPayload = {
 let roomCache: { room: RoomView; at: number } | null = null;
 const ROOM_TTL_MS = 10_000;
 
+/**
+ * Drop the cached room the moment it actually changes. Without this, a
+ * client connecting just after a redecoration is handed the old room and
+ * sits there looking at furniture nobody owns any more (SPEC §22.5).
+ */
+export const invalidateRoomCache = (): void => {
+  roomCache = null;
+};
+
 const cachedRoom = async (): Promise<RoomView> => {
   if (roomCache && Date.now() - roomCache.at < ROOM_TTL_MS) return roomCache.room;
   const room = await roomState(await db());

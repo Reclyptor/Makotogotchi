@@ -9,6 +9,8 @@
 // right — so labels, prices, and badges align across all sections.
 
 import { useCallback, useEffect, useState } from "react";
+import { THEMES } from "@/game/scene/backdrop";
+import type { RoomView } from "@/server/shop";
 
 type Catalog = {
   food: Record<string, { label: string; price: number; scalePercent: number; joyBonus: number }>;
@@ -26,7 +28,7 @@ type ShopState = {
   catalog: Catalog;
   coins: number;
   inventory: Partial<Record<string, number>>;
-  room: { cosmetics: string[]; activeCosmetic: string | null; decor: string[] };
+  room: RoomView;
   toys: string[];
   funding: Funding[];
 };
@@ -169,6 +171,17 @@ export default function ShopPanel({ onClose }: ShopPanelProps) {
     await refresh();
   };
 
+  // Changing the room's style changes it for everyone (SPEC §22.5).
+  const switchTheme = async (themeId: string): Promise<void> => {
+    await fetch("/api/shop", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme: themeId }),
+    }).catch(() => null);
+    setNotice("The room changes for everyone.");
+    await refresh();
+  };
+
   const priceButton = (itemId: string, price: number) => (
     <button
       type="button"
@@ -264,6 +277,22 @@ export default function ShopPanel({ onClose }: ShopPanelProps) {
             action={shop.room.decor.includes(itemId) ? <Badge>Placed</Badge> : priceButton(itemId, item.price)}
           />
         ))}
+        <SectionHeading>Room Style · Everyone Sees</SectionHeading>
+        {shop.room.themes.map((themeId) => (
+          <Row
+            key={themeId}
+            name={THEMES[themeId]?.label ?? themeId}
+            detail={themeId === shop.room.activeTheme ? "In use now" : "Owned by the room"}
+            action={
+              themeId === shop.room.activeTheme ? (
+                <Badge>In Use</Badge>
+              ) : (
+                smallButton("Use", () => void switchTheme(themeId))
+              )
+            }
+          />
+        ))}
+
         <SectionHeading>Together · Funded by Everyone</SectionHeading>
         {shop.funding.map((pool) => (
           <Row
