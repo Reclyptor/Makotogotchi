@@ -41,6 +41,14 @@ export default function AboutPage() {
           </Link>
           .
         </p>
+
+        <h2 id="credits" className="mt-2 scroll-mt-4 font-semibold">
+          Credits
+        </h2>
+        <p>
+          The original sprites are the work of <strong>Jingles</strong> — her art is the heart of this project, and
+          Makotogotchi wouldn&apos;t exist without her. Thank you, Jingles. 🩷
+        </p>
       </div>
     </main>
   );

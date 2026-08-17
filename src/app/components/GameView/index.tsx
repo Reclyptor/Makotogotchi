@@ -455,6 +455,9 @@ export default function GameView() {
           <a href="/about" className="transition-colors hover:text-foreground">
             about
           </a>
+          <a href="/about#credits" className="transition-colors hover:text-foreground">
+            original sprites by Jingles 🩷
+          </a>
         </nav>
       </footer>
     </div>
