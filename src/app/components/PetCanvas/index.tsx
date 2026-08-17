@@ -9,6 +9,7 @@ import { derive } from "@/sim/derive";
 import { quirks } from "@/sim/quirks";
 import { isAmbientEvent } from "@/sim/ambient";
 import type { CareAction } from "@/sim/tuning";
+import { SPRITE_SHEET_URL } from "@/game/atlas.generated";
 import { Room, ROOM_HEIGHT, ROOM_WIDTH, type FoodTaste } from "@/game/scene/room";
 import { startLoop } from "@/game/engine/loop";
 import type { PetStream } from "@/app/hooks/usePetStream";
@@ -92,7 +93,7 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
 
     const room = new Room();
     roomRef.current = room;
-    void room.atlas.load("/sprites.png");
+    void room.atlas.load(SPRITE_SHEET_URL);
 
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
     room.reducedMotion = media.matches;

@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MINIGAMES, type MinigameId } from "@/sim/minigames";
 import { loadSpriteSheet } from "@/game/engine/atlas";
+import { SPRITE_SHEET_URL } from "@/game/atlas.generated";
 import type { ReactNotice } from "@/app/hooks/usePetStream";
 import { GAMES } from "./registry";
 
@@ -55,7 +56,7 @@ export default function Shell({ gameId, onClose, onReact }: ShellProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ phase: "start", game: gameId }),
         }).catch(() => null),
-        loadSpriteSheet("/sprites.png"),
+        loadSpriteSheet(SPRITE_SHEET_URL),
       ]);
       if (disposed) return;
       if (!response?.ok || !image) {
