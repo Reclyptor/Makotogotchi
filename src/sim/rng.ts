@@ -11,6 +11,7 @@ export const RNG_PURPOSE = {
   ambientOdds: 5,
   ambientPick: 6,
   questPick: 7,
+  weather: 8,
 } as const;
 
 export type RngPurpose = (typeof RNG_PURPOSE)[keyof typeof RNG_PURPOSE];
