@@ -1745,9 +1745,18 @@ caring for the pet.
 ### 23.1 The Rule
 
 Let **P** be the number of distinct caretakers who performed at least one
-care action within the last `BUDGET_WINDOW_DAYS` (7) pet-days — the same
-window the caretaker budget uses, because the people who supply care are
-exactly the people who should set the demand. Need decay is then multiplied
+care action within the last `BUDGET_WINDOW_DAYS` (7) pet-days, because the
+people who supply care are exactly the people who should set the demand.
+
+That window is **bucketed by pet-day rather than continuous**: it holds seven
+day buckets and advances one at each pet-midnight, so the effective lookback
+oscillates between six and seven days and a cohort ages out together. This is
+not an approximation of a smoother rule — it is the same arithmetic
+`budgetRemaining` (§2.5) applies to each caretaker's allowance
+(`day - (BUDGET_WINDOW_DAYS - 1)`), so supply and demand share their
+boundaries and step in phase instead of drifting apart. A consequence worth
+naming: difficulty can fall at a pet-midnight when a cohort ages out, and
+never mid-day. It only ever falls that way, so no one can be stranded by it. Need decay is then multiplied
 by:
 
 ```
