@@ -7,7 +7,7 @@ import { Particles, type ParticleKind } from "../engine/particles";
 import { Toasts } from "./toasts";
 import { AnimationMachine } from "../anim/machine";
 import { BUTTERFLY_CLIP, WALK_CLIP, type OneShotName } from "../anim/clips";
-import { Backdrop, ROOM_HEIGHT, ROOM_WIDTH, type BackdropKey, type Condition } from "./backdrop";
+import { Backdrop, ROOM_HEIGHT, ROOM_WIDTH, RUG, type BackdropKey, type Condition } from "./backdrop";
 import { celestialAt, seasonFor, skyMomentAt, weatherFor, type Celestial } from "@/sim/atmosphere";
 import type { DerivedState } from "@/sim/derive";
 import type { AmbientEvent } from "@/sim/ambient";
@@ -35,19 +35,48 @@ const ALERT_CONDITION: Record<DerivedState["alert"], Condition> = {
   CRITICAL: "critical",
 };
 
-// Idle wander: every slot the pet picks a spot on the rug band and strolls
-// there with the walk cycle. Slots hash wall-clock time, so every open tab
+// Idle wander: every slot the pet picks a spot on the rug and strolls there
+// with the walk cycle. Slots hash wall-clock time, so every open tab
 // converges on the same destination — the shared pet stands in the same
 // corner for everyone.
-const WANDER_MIN_X = 66;
-const WANDER_MAX_X = 194;
 const WANDER_PERIOD_MS = 9000;
 const WANDER_SPEED_PX_MS = 26 / 1000;
-const wanderTargetAt = (wallMs: number): number => {
+
+// The pet is more than half the room wide, so the band it strolls through is
+// not the rug's own span: a pet centred on the rug's edge stands half off it,
+// and one centred near the room's edge is drawn clean through the wall.
+// Both numbers below are the pet's own, measured from the sheet at full size:
+// how far the silhouette reaches from its centre line, and how far the outer
+// foot of the idle pose reaches. A mid-stride frame plants a foot a few
+// pixels further — a stepping foot leaving the rug is what walking looks
+// like, so the band is set by where the pet comes to rest.
+const PET_HALF_WIDTH = 69;
+const PET_FOOT_REACH = 42;
+/** Bare floor left between the pet's silhouette and the wall it stands by. */
+const ROOM_EDGE_MARGIN = 2;
+
+export type WanderBand = { min: number; max: number };
+
+/**
+ * Where the pet may stand at this stage (SPEC §21.9 scales it): on the rug,
+ * and inside the room. A pet too big for its own rug gets the rug's centre
+ * rather than a band that runs backwards.
+ */
+export const wanderBand = (scale: number): WanderBand => {
+  const foot = PET_FOOT_REACH * scale;
+  const half = PET_HALF_WIDTH * scale;
+  const min = Math.max(RUG.x + foot, half + ROOM_EDGE_MARGIN);
+  const max = Math.min(RUG.x + RUG.w - foot, ROOM_WIDTH - half - ROOM_EDGE_MARGIN);
+  return min <= max ? { min, max } : { min: PET_X, max: PET_X };
+};
+
+const wanderTargetAt = (wallMs: number, band: WanderBand): number => {
+  const span = Math.floor(band.max - band.min);
+  if (span <= 0) return band.min;
   const slot = Math.floor(wallMs / WANDER_PERIOD_MS);
   let h = Math.imul(slot ^ 0x85ebca6b, 2654435761);
   h ^= h >>> 13;
-  return WANDER_MIN_X + ((h >>> 0) % (WANDER_MAX_X - WANDER_MIN_X));
+  return band.min + ((h >>> 0) % span);
 };
 
 const CARE_ONE_SHOTS: Record<CareAction, OneShotName> = {
@@ -221,6 +250,10 @@ export class Room {
   private updateWander(nowMs: number): void {
     const dt = Math.min(nowMs - (this.lastWanderMs ?? nowMs), 100);
     this.lastWanderMs = nowMs;
+    // Growing narrows the band, so a pet that just evolved can find itself
+    // standing outside it. Walk it back in rather than leaving it clipped.
+    const band = wanderBand(this.petScale);
+    this.petX = Math.min(band.max, Math.max(band.min, this.petX));
     const key = this.machine.baseKey;
     const wanderable =
       !this.reducedMotion && !this.asleep && this.machine.activeOneShot(nowMs) === null && (key === "idle" || key === "bored");
@@ -228,7 +261,7 @@ export class Room {
       this.walking = false;
       return;
     }
-    const target = wanderTargetAt(Date.now());
+    const target = wanderTargetAt(Date.now(), band);
     const delta = target - this.petX;
     if (Math.abs(delta) <= 2) {
       this.walking = false;

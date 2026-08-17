@@ -1673,7 +1673,13 @@ Drawn back to front, all in the theme's palette (§22.5):
    its length and intensity following the sun's height; at night the pool
    is cool and faint, or warm if the room owns a lamp.
 6. **Rug** — a woven pattern with fringe, not a rectangle, centred under
-   the pet's wander band.
+   the pet's wander band. The band is a range of *centres*, and the pet is
+   more than half the room wide, so the band is the rug inset on both sides
+   by how far the pet's feet reach from its centre line, and then clamped so
+   the silhouette cannot cross the room's edge. Both insets scale with the
+   life stage (§21.9): a hatchling roams further than an adult. Setting the
+   band to the rug's own span instead puts the pet half off the rug — which
+   reads as a rug torn in two — and its silhouette through the wall.
 7. Existing communal decor and grand items draw over the architecture as
    they do today. `window_seat` no longer draws its own window: it
    **upgrades** the room's window with a cushioned bench and a wider

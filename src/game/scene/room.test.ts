@@ -3,7 +3,8 @@
 // tested directly rather than through a canvas.
 
 import { describe, expect, it } from "vitest";
-import { Room, STAGE_SCALE, stageScale } from "./room";
+import { Room, ROOM_WIDTH, STAGE_SCALE, stageScale, wanderBand } from "./room";
+import { RUG } from "./backdrop";
 import { drawRect } from "../engine/atlas";
 import { SPRITE_FRAMES } from "../atlas.generated";
 import { derive } from "@/sim/derive";
@@ -50,5 +51,48 @@ describe("stage scale", () => {
     // Same floor, same centre line: only the silhouette changes.
     expect(hatchling.dy + hatchling.dh).toBe(172);
     expect(hatchling.dx + hatchling.dw / 2).toBeCloseTo(130, 0);
+  });
+});
+
+// The pet is 137px wide in a 260px room. The wander band used to be the
+// rug's own span, which is a range of *centres* — so at either end the pet
+// stood half off the rug with its silhouette running through the wall.
+describe("the wander band", () => {
+  // The widest pet frame, and how far the idle pose's outer foot reaches
+  // from the centre line — both read off the sheet, so the band's promises
+  // are checked against the art rather than against its own constants.
+  const halfWidth = SPRITE_FRAMES.walk1.w / 2;
+  const footReach = SPRITE_FRAMES.idleSide1.w / 2 - 27;
+
+  it("keeps the whole pet inside the room at every stage", () => {
+    for (const scale of Object.values(STAGE_SCALE)) {
+      const band = wanderBand(scale);
+      expect(band.min).toBeLessThanOrEqual(band.max);
+      expect(band.min - halfWidth * scale).toBeGreaterThanOrEqual(0);
+      expect(band.max + halfWidth * scale).toBeLessThanOrEqual(ROOM_WIDTH);
+    }
+  });
+
+  it("keeps the pet standing on the rug at every stage", () => {
+    for (const scale of Object.values(STAGE_SCALE)) {
+      const band = wanderBand(scale);
+      expect(band.min - footReach * scale).toBeGreaterThanOrEqual(RUG.x);
+      expect(band.max + footReach * scale).toBeLessThanOrEqual(RUG.x + RUG.w);
+    }
+  });
+
+  it("stays centred on the rug, and a smaller pet gets more room to roam", () => {
+    const centre = RUG.x + RUG.w / 2;
+    const adult = wanderBand(1);
+    const hatchling = wanderBand(STAGE_SCALE.HATCHLING);
+    expect((adult.min + adult.max) / 2).toBeCloseTo(centre, 5);
+    expect((hatchling.min + hatchling.max) / 2).toBeCloseTo(centre, 5);
+    expect(hatchling.max - hatchling.min).toBeGreaterThan(adult.max - adult.min);
+  });
+
+  it("collapses to a fixed spot rather than inverting when the pet outgrows the rug", () => {
+    const band = wanderBand(4);
+    expect(band.min).toBe(band.max);
+    expect(band.min).toBe(ROOM_WIDTH / 2);
   });
 });
