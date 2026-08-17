@@ -313,6 +313,25 @@ export class PetEngine {
     return result.state;
   }
 
+  /**
+   * Record the size of the caring community (SPEC §23.2). Difficulty may not
+   * read a live count at projection time without breaking replay, so it
+   * enters the log the way everything else does.
+   */
+  async population(generation: Generation, count: number): Promise<PetState> {
+    const result = await this.advance(generation, () => ({
+      kind: "event",
+      event: (seq, current): PetEvent => ({
+        type: "POPULATION",
+        generationId: generation.id,
+        seq,
+        tick: current.tick,
+        count,
+      }),
+    }));
+    return result.state;
+  }
+
   /** Hatch the egg — driven by the naming vote (SPEC §2.10). */
   async hatch(generation: Generation, name: string): Promise<PetState> {
     const result = await this.advance(generation, (state) => {

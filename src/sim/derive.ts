@@ -3,6 +3,7 @@
 // no field capable of holding one — the class of bug where animation frames
 // leak into game state is structurally impossible.
 
+import { careMultiplier, DIFFICULTY_BASELINE } from "./difficulty";
 import { isAlive, stageAt, type PetState } from "./model";
 import {
   AILMENT_THRESHOLDS,
@@ -25,6 +26,10 @@ export type DerivedState = {
   alert: AlertLevel;
   /** Needs as display percentages, 0–100. */
   percentages: Record<NeedKey, number> & { health: number };
+  /** Caretakers the difficulty is currently set for (SPEC §23.3). */
+  population: number;
+  /** What their number multiplies need decay by, e.g. 2.28. */
+  careMultiplier: number;
 };
 
 const HEALTH_CRITICAL = HEALTH_MAX / 4; // 25% — the strongest push trigger
@@ -68,5 +73,13 @@ export const derive = (state: PetState): DerivedState => {
     health: Math.floor(state.healthRaw / (HEALTH_MAX / 100)),
   };
 
-  return { stage, ailments, animation, alert, percentages };
+  return {
+    stage,
+    ailments,
+    animation,
+    alert,
+    percentages,
+    population: state.population ?? DIFFICULTY_BASELINE,
+    careMultiplier: careMultiplier(state.population),
+  };
 };

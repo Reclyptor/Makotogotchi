@@ -63,6 +63,12 @@ export type PetState = {
   caretakers: CaretakerRecord[];
   /** Communal toys installed this generation, sorted (SPEC §13.2). */
   toys: string[];
+  /**
+   * Active caretakers as last recorded by a POPULATION event, which sets how
+   * fast needs decay (SPEC §23). Absent in histories written before that
+   * section, where it reads as the baseline and replays unchanged.
+   */
+  population?: number;
 };
 
 /** Pure function of hatch time — never stored (SPEC §4.3). */

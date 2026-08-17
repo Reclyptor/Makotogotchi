@@ -55,6 +55,13 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       // A record of what projection already determined — no state effect.
       return { state, milestones, applied: 0 };
 
+    case "POPULATION": {
+      // Difficulty changes from this tick forward; the ticks already
+      // projected above kept the rate they were lived at.
+      state.population = event.count;
+      return { state, milestones, applied: 0 };
+    }
+
     case "TOY_ADDED": {
       if (!state.toys.includes(event.itemId)) {
         state.toys.push(event.itemId);

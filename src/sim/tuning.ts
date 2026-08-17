@@ -99,10 +99,21 @@ export const DECAY_TABLE: ReadonlyMap<string, DecayRates> = new Map(
   ),
 );
 
-export const decayRates = (stage: Exclude<LifeStage, "EGG">, form: AdultForm | null, phase: SleepPhase): DecayRates => {
+export const decayRates = (
+  stage: Exclude<LifeStage, "EGG">,
+  form: AdultForm | null,
+  phase: SleepPhase,
+  /** Community difficulty in per-mille (SPEC §23); 1000 leaves the table as-is. */
+  multiplierPermille = 1000,
+): DecayRates => {
   const rates = DECAY_TABLE.get(`${stage}|${form ?? "-"}|${phase}`);
   if (!rates) throw new Error(`no decay rates for ${stage}/${form}/${phase}`);
-  return rates;
+  if (multiplierPermille === 1000) return rates;
+  // Integer arithmetic throughout, so a scaled rate is as exactly reproducible
+  // as the table it came from.
+  const scaled = {} as DecayRates;
+  for (const need of NEED_KEYS) scaled[need] = Math.round((rates[need] * multiplierPermille) / 1000);
+  return scaled;
 };
 
 // ── Actions ─────────────────────────────────────────────────────────────────

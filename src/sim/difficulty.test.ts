@@ -53,6 +53,106 @@ const botChoose = (state: PetState, caretakerId: string, context: ProjectionCont
   return null;
 };
 
+describe("community difficulty (SPEC §23)", () => {
+  /** The same abandoned pet, but with a crowd's worth of recorded caretakers. */
+  const abandonedWith = (population: number | undefined) => {
+    const start = { ...fullPup(withSeed(QUIET_SEED)), ...(population === undefined ? {} : { population }) };
+    const { state: dead } = project(start, start.tick + 8 * TICKS_PER_DAY, ctx);
+    return { start, dead };
+  };
+
+  it("brings the first critical need forward sharply as the crowd grows", () => {
+    // The number people actually feel: how long a full pet stays comfortable.
+    const criticalHours = (population: number): number => {
+      const start = { ...fullPup(withSeed(QUIET_SEED)), population };
+      const { milestones } = project(start, start.tick + 8 * TICKS_PER_DAY, ctx);
+      const critical = milestones.find((m) => m.kind === "CRITICAL");
+      expect(critical).toBeDefined();
+      return (critical!.tick - start.tick) / TICKS_PER_HOUR;
+    };
+    expect(criticalHours(2)).toBeGreaterThanOrEqual(28);
+    expect(criticalHours(4)).toBeLessThanOrEqual(17);
+    expect(criticalHours(9)).toBeLessThanOrEqual(10);
+    // Monotone: a bigger community is never gentler.
+    const ramp = [2, 3, 4, 5, 6, 7, 8, 9].map(criticalHours);
+    for (let i = 1; i < ramp.length; i++) expect(ramp[i]!).toBeLessThanOrEqual(ramp[i - 1]!);
+  });
+
+  it("kills a crowded pet far sooner than a quiet one", () => {
+    const quiet = abandonedWith(2);
+    const crowded = abandonedWith(8);
+    expect(quiet.dead.diedAtTick).not.toBeNull();
+    expect(crowded.dead.diedAtTick).not.toBeNull();
+
+    const hours = (run: ReturnType<typeof abandonedWith>): number =>
+      (run.dead.diedAtTick! - run.start.tick) / TICKS_PER_HOUR;
+    // §23.1's table: ~46h at the baseline against ~20h at 2.83×. Death
+    // compresses less than decay because the health drain is deficit-driven.
+    expect(hours(quiet)).toBeGreaterThan(hours(crowded) * 2);
+    expect(hours(crowded)).toBeGreaterThanOrEqual(17);
+    expect(hours(crowded)).toBeLessThanOrEqual(23);
+  });
+
+  it("leaves histories with no recorded population exactly as they were", () => {
+    // The guarantee that lets §23 ship over a live generation: an old log,
+    // which carries no POPULATION event, must project byte-identically.
+    const legacy = abandonedWith(undefined);
+    const baseline = abandonedWith(2);
+    expect(legacy.dead).toEqual({ ...baseline.dead, population: undefined });
+    expect(legacy.dead.diedAtTick).toBe(baseline.dead.diedAtTick);
+  });
+
+  it("never makes a small community easier than the baseline", () => {
+    const baselineHours = (() => {
+      const run = abandonedWith(2);
+      return run.dead.diedAtTick! - run.start.tick;
+    })();
+    for (const population of [0, 1]) {
+      const run = abandonedWith(population);
+      expect(run.dead.diedAtTick! - run.start.tick).toBe(baselineHours);
+    }
+  });
+
+  it("folds a POPULATION event and speeds decay from that moment on", () => {
+    const log = new EventLog();
+    log.hatched(0);
+    const hatched = reduce(hatchedState(ctx), log.events[0]!, ctx).state;
+
+    // A day in, the community is measured at eight.
+    const eventTick = hatched.tick + TICKS_PER_DAY;
+    const populated = reduce(
+      hatched,
+      { type: "POPULATION", generationId: hatched.generation.id, seq: 1, tick: eventTick, count: 8 },
+      ctx,
+    ).state;
+    expect(populated.population).toBe(8);
+
+    // An hour of decay after the event outruns an hour before it.
+    const before = project(hatched, hatched.tick + TICKS_PER_HOUR, ctx).state;
+    const after = project(populated, populated.tick + TICKS_PER_HOUR, ctx).state;
+    const spent = (from: PetState, to: PetState): number =>
+      NEED_KEYS.reduce((total, need) => total + (from.needs[need] - to.needs[need]), 0);
+    expect(spent(populated, after)).toBeGreaterThan(spent(hatched, before) * 2);
+  });
+
+  it("replays a log containing a POPULATION event identically every time", () => {
+    const build = (): PetState => {
+      const log = new EventLog();
+      log.hatched(0);
+      log.care(TICKS_PER_HOUR, "FEED");
+      let state = hatchedState(ctx);
+      for (const event of log.events) state = reduce(state, event, ctx).state;
+      state = reduce(
+        state,
+        { type: "POPULATION", generationId: state.generation.id, seq: 99, tick: 2 * TICKS_PER_HOUR, count: 6 },
+        ctx,
+      ).state;
+      return project(state, state.tick + TICKS_PER_DAY, ctx).state;
+    };
+    expect(build()).toEqual(build());
+  });
+});
+
 describe("the difficulty dial (SPEC §16.2)", () => {
   it("pure neglect: a full pet untouched from 07:00 goes hunger-critical in 28–32h and starves in 42–52h", () => {
     // QUIET_SEED draws no sickness inside the horizon, isolating the

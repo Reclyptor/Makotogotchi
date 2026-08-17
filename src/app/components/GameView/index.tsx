@@ -397,7 +397,14 @@ export default function GameView() {
         </p>
       )}
 
-      {ui && !isEgg && <Meters percentages={ui.derived.percentages} />}
+      {ui && !isEgg && (
+        <Meters
+          percentages={ui.derived.percentages}
+          population={ui.derived.population}
+          careMultiplier={ui.derived.careMultiplier}
+          petName={petName}
+        />
+      )}
       {ui && !isEgg && !isDead && <QuestBanner subscribe={questNudge} />}
       {isEgg && <VotePanel />}
       {ui && !isEgg && !isDead && ctx && caretakerId && (

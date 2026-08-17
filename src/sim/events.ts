@@ -65,17 +65,30 @@ export const milestoneEventSchema = z.object({
   detail: z.string().optional(),
 });
 
+/**
+ * The measured size of the caring community (SPEC §23.2). Difficulty cannot
+ * read a live count at projection time without breaking replay, so the
+ * leader records it here whenever it moves the multiplier a step.
+ */
+export const populationEventSchema = z.object({
+  ...eventBase,
+  type: z.literal("POPULATION"),
+  count: z.number().int().min(0).max(1_000_000),
+});
+
 export const petEventSchema = z.discriminatedUnion("type", [
   careEventSchema,
   hatchedEventSchema,
   toyAddedEventSchema,
   milestoneEventSchema,
+  populationEventSchema,
 ]);
 
 export type CareEvent = z.infer<typeof careEventSchema>;
 export type HatchedEvent = z.infer<typeof hatchedEventSchema>;
 export type ToyAddedEvent = z.infer<typeof toyAddedEventSchema>;
 export type MilestoneEvent = z.infer<typeof milestoneEventSchema>;
+export type PopulationEvent = z.infer<typeof populationEventSchema>;
 export type PetEvent = z.infer<typeof petEventSchema>;
 
 export type MilestoneKind = (typeof MILESTONE_KINDS)[number];

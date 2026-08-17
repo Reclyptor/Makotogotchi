@@ -18,8 +18,10 @@ import { latestGeneration } from "./db/repository";
 import { anonymousName, nicknameMap } from "./social";
 import { PushDispatcher } from "./push/dispatcher";
 import { pushConfigured, webPushSender } from "./push/sender";
-import { TICK_SECONDS } from "@/sim/tuning";
+import { TICK_SECONDS, TICKS_PER_HOUR } from "@/sim/tuning";
 import { ambientAt } from "@/sim/ambient";
+import { worthRecording } from "@/sim/difficulty";
+import { activeCaretakers } from "./population";
 import { settleQuest } from "./quests";
 import { isAlive, type Generation } from "@/sim/model";
 
@@ -84,6 +86,10 @@ const boot = async (): Promise<Runtime> => {
   // at most once: a clock that fails to advance must not roll twice.
   const lease = new Lease(redis(), key("tick-leader"), 15_000);
   let lastAmbientTick = -1;
+  // Difficulty is re-measured on the hour rather than every tick: the count
+  // is a Mongo query, and the log should record changes in difficulty, not a
+  // heartbeat (SPEC §23.2).
+  let lastPopulationTick = -Infinity;
   setInterval(() => {
     void (async () => {
       if (!(await lease.acquire())) return;
@@ -100,6 +106,11 @@ const boot = async (): Promise<Runtime> => {
         // The day's shared goal (SPEC §21.7): claimed once, then announced.
         const settled = await settleQuest(database, current, state, env().PET_TIMEZONE, Date.now());
         if (settled) await engine.milestone(current, "QUEST_DONE", settled.quest.id);
+      }
+      if (!successor && isAlive(state) && state.tick - lastPopulationTick >= TICKS_PER_HOUR) {
+        lastPopulationTick = state.tick;
+        const measured = await activeCaretakers(database, state.tick);
+        if (worthRecording(state.population, measured)) await engine.population(current, measured);
       }
       await dispatcher?.observe(state);
       await lease.renew();

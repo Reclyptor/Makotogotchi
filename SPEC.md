@@ -1754,13 +1754,24 @@ by:
 careMultiplier(P) = clamp( (max(P, 2) / 2) ^ 0.75 , 1 , 3 )
 ```
 
+These are the measured consequences, taken from the §16.2 abandonment
+scenario rather than estimated:
+
 | Caretakers | Decay | Full → first critical need | Abandoned → dead |
 | --- | --- | --- | --- |
-| ≤ 2 | 1.00× | ~25h | ~45h |
-| 4 | 1.68× | ~15h | ~27h |
-| 6 | 2.28× | ~11h | ~20h |
-| 8 | 2.83× | ~9h | ~16h |
-| ≥ 9 | 3.00× | ~8h | ~15h |
+| ≤ 2 | 1.00× | ~30h | ~46h |
+| 3 | 1.36× | ~23h | ~37h |
+| 4 | 1.68× | ~15h | ~30h |
+| 6 | 2.28× | ~11h | ~23h |
+| 8 | 2.83× | ~9h | ~20h |
+| ≥ 9 | 3.00× | ~8h | ~19h |
+
+Death compresses less than decay does, and deliberately so: once the needs
+bottom out, health drains at a rate set by the size of the deficit, not by
+how fast the pet got there. A crowded pet therefore reaches its first
+critical need almost four times sooner but still leaves the better part of a
+day to answer the alarm. A missed night is survivable at every community
+size; a missed day is not.
 
 Three properties are deliberate:
 

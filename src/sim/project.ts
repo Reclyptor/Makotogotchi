@@ -17,6 +17,7 @@
 //   8. health drain / regeneration, death check
 
 import { isAlive, stageAt, type CauseOfDeath, type PetState, type ProjectionContext } from "./model";
+import { careMultiplierPermille } from "./difficulty";
 import { draw32, RNG_PURPOSE } from "./rng";
 import {
   CRITICAL_THRESHOLD,
@@ -68,6 +69,10 @@ export const project = (input: PetState, toTick: number, ctx: ProjectionContext)
   }
 
   let stage = stageAt(bornAtTick, state.tick);
+  // How hard the community has made the pet (SPEC §23). It is fixed for the
+  // whole projection: only a POPULATION event changes it, and events are
+  // folded between projections, never during one.
+  const difficultyPermille = careMultiplierPermille(state.population);
 
   for (let tick = state.tick + 1; tick <= toTick; tick++) {
     // 1. Stage evolution.
@@ -109,7 +114,12 @@ export const project = (input: PetState, toTick: number, ctx: ProjectionContext)
     }
 
     // 3. Decay / recovery. EGG never reaches here, so stage is post-hatch.
-    const rates = decayRates(stage as Exclude<LifeStage, "EGG">, state.form, state.asleep ? "SLEEP" : "WAKE");
+    const rates = decayRates(
+      stage as Exclude<LifeStage, "EGG">,
+      state.form,
+      state.asleep ? "SLEEP" : "WAKE",
+      difficultyPermille,
+    );
     const before = { ...state.needs };
     for (const need of NEED_KEYS) {
       state.needs[need] = clampNeed(state.needs[need] - rates[need], NEED_MAX);
