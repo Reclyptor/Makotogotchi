@@ -2,7 +2,7 @@
 // after any change under art/ and review the contact sheet.
 
 /** The packed sheet these frame rectangles index — hashed together, stale never. */
-export const SPRITE_SHEET_URL = "/sprites.563d458a93.png";
+export const SPRITE_SHEET_URL = "/sprites.827b50a1e8.png";
 
 export type SpriteFrame = { x: number; y: number; w: number; h: number };
 
@@ -86,19 +86,19 @@ export const SPRITE_FRAMES = {
   sleep1: { x: 580, y: 915, w: 137, h: 132 },
   sleep2: { x: 725, y: 915, w: 137, h: 132 },
   sneeze1: { x: 870, y: 915, w: 138, h: 143 },
-  sneeze2: { x: 1016, y: 915, w: 138, h: 143 },
-  tea1: { x: 1162, y: 915, w: 138, h: 121 },
-  tea2: { x: 1308, y: 915, w: 138, h: 121 },
-  tired1: { x: 1454, y: 915, w: 137, h: 138 },
-  tired2: { x: 8, y: 1066, w: 137, h: 138 },
-  unhappyEat1: { x: 153, y: 1066, w: 126, h: 132 },
-  unhappyEat2: { x: 287, y: 1066, w: 126, h: 132 },
-  walk1: { x: 421, y: 1066, w: 138, h: 143 },
-  walk2: { x: 567, y: 1066, w: 138, h: 149 },
-  walk3: { x: 713, y: 1066, w: 138, h: 143 },
-  walk4: { x: 859, y: 1066, w: 138, h: 143 },
-  yawn1: { x: 1005, y: 1066, w: 138, h: 143 },
-  yawn2: { x: 1151, y: 1066, w: 138, h: 143 },
+  sneeze2: { x: 1016, y: 915, w: 149, h: 143 },
+  tea1: { x: 1173, y: 915, w: 138, h: 121 },
+  tea2: { x: 1319, y: 915, w: 138, h: 121 },
+  tired1: { x: 8, y: 1066, w: 137, h: 138 },
+  tired2: { x: 153, y: 1066, w: 137, h: 138 },
+  unhappyEat1: { x: 298, y: 1066, w: 126, h: 132 },
+  unhappyEat2: { x: 432, y: 1066, w: 126, h: 132 },
+  walk1: { x: 566, y: 1066, w: 138, h: 143 },
+  walk2: { x: 712, y: 1066, w: 138, h: 149 },
+  walk3: { x: 858, y: 1066, w: 138, h: 143 },
+  walk4: { x: 1004, y: 1066, w: 138, h: 143 },
+  yawn1: { x: 1150, y: 1066, w: 138, h: 143 },
+  yawn2: { x: 1296, y: 1066, w: 138, h: 143 },
 } as const satisfies Record<string, SpriteFrame>;
 
 export type FrameName = keyof typeof SPRITE_FRAMES;
