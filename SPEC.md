@@ -1729,12 +1729,94 @@ are testable claims, not taste:
 
 ---
 
-## 23. Appendix: What the Original Got Wrong
+## 23. Dynamic Difficulty
+
+The pet is balanced for a small group. Each caretaker may restore at most
+`CARETAKER_WEEKLY_BUDGET_DAYS` (4) days of decay per need per rolling week
+(§2.5), while the pet spends 7 days of decay in that week — so two committed
+caretakers sit just above water and the game has tension. A crowd breaks
+that: ten caretakers can supply forty days against a demand of seven, and
+Makoto simply sits at 100% forever. Nothing is at stake, so nothing means
+anything.
+
+Difficulty therefore follows the size of the community that is actually
+caring for the pet.
+
+### 23.1 The Rule
+
+Let **P** be the number of distinct caretakers who performed at least one
+care action within the last `BUDGET_WINDOW_DAYS` (7) pet-days — the same
+window the caretaker budget uses, because the people who supply care are
+exactly the people who should set the demand. Need decay is then multiplied
+by:
+
+```
+careMultiplier(P) = clamp( (max(P, 2) / 2) ^ 0.75 , 1 , 3 )
+```
+
+| Caretakers | Decay | Full → first critical need | Abandoned → dead |
+| --- | --- | --- | --- |
+| ≤ 2 | 1.00× | ~25h | ~45h |
+| 4 | 1.68× | ~15h | ~27h |
+| 6 | 2.28× | ~11h | ~20h |
+| 8 | 2.83× | ~9h | ~16h |
+| ≥ 9 | 3.00× | ~8h | ~15h |
+
+Three properties are deliberate:
+
+- **A floor of 1×.** A shrinking community never gets an *easier* pet than
+  the baseline. §2.5's premise — that one person cannot carry a week alone —
+  survives at every population.
+- **A ceiling of 3×.** Past nine active caretakers the pet stops getting
+  harder. Without a cap, a popular week would demand literal round-the-clock
+  cover and punish the very success that produced it.
+- **A sub-linear curve.** Holding the two-caretaker tension exactly would
+  mean scaling decay linearly with P; the 0.75 exponent keeps real pressure
+  while leaving a margin that a distributed group can actually cover.
+
+The multiplier scales **need decay only**. Energy recovery during sleep,
+health regeneration, and each caretaker's weekly budget are untouched — the
+budget must stay fixed per person, because a larger community supplying more
+total care is the entire point.
+
+### 23.2 Determinism
+
+`state(t) = project(fold(reduce, snapshot, events), t)` (§4). A live
+population read at projection time would break that outright: replaying the
+same log tomorrow would find a different number of caretakers and produce a
+different pet. So the population enters the simulation the only way anything
+does — **as an event**.
+
+- `PetState.population` holds the figure the simulation is currently using.
+  It is absent in histories recorded before this section and reads as the
+  baseline (2), so every existing generation replays byte-identically.
+- The leader re-evaluates the active-caretaker count **hourly** and appends a
+  `POPULATION` event only when the resulting multiplier moves by at least
+  `DIFFICULTY_STEP` (0.1×). The log records *changes in difficulty*, not a
+  heartbeat.
+- `careMultiplier` is a **hardcoded integer table** in per-mille, not a call
+  to `Math.pow` at runtime: ECMA-262 leaves `Math.pow` implementation
+  approximated, and a one-ULP difference between engines is exactly the kind
+  of drift §4.4 exists to forbid. Decay scales by integer arithmetic
+  (`round(rate × permille / 1000)`).
+
+### 23.3 Visibility
+
+Rising difficulty must never feel like a silent nerf. The derived state
+exposes both the population and the multiplier, and the UI states them
+plainly beneath the meters — *"9 caretakers this week · Makoto needs 3.0× the
+care"* — so a needier pet reads as a bigger community rather than a bug.
+When the multiplier is 1.00× the line simply names the community size.
+
+
+---
+
+## 24. Appendix: What the Original Got Wrong
 
 Recorded so the rebuild is measured against real defects rather than vague
 dissatisfaction. Source: `~/Projects/makotogotchi_old` at `master`.
 
-### 23.1 Architectural
+### 24.1 Architectural
 
 1. **No server.** State lived in `localStorage`. Every visitor had a private
    pet. The premise of a shared global pet was unimplementable on that
@@ -1748,7 +1830,7 @@ dissatisfaction. Source: `~/Projects/makotogotchi_old` at `master`.
    the simulation unreproducible. There were no tests, and none could have
    been written without heavy mocking.
 
-### 23.2 Simulation Bugs
+### 24.2 Simulation Bugs
 
 4. **`status()` read pre-tick state**, so every derived status lagged one tick
    behind the values it was derived from.
@@ -1766,7 +1848,7 @@ dissatisfaction. Source: `~/Projects/makotogotchi_old` at `master`.
     and the reconstruction silently dropped `ANGRY` from the array — so any
     angry state that had been set would vanish on the next tick.
 
-### 23.3 Structural
+### 24.3 Structural
 
 11. **Presentation stored as game state.** `Status.CLONE1..4` were animation
     frames living in the state enum.
