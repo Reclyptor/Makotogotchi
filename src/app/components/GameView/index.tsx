@@ -341,12 +341,17 @@ export default function GameView() {
           MAKOTOGOTCHI
         </span>
         <div className="flex items-center gap-2">
+          {/* "👥 7 watching", as §11.2 draws it. A bare count read out as
+              "busts in silhouette, 2" says nothing, and the emoji-and-a-digit
+              shape is ambiguous besides — the meters carry a "👥 N caretakers
+              this week" line that looks the same (SPEC §11.3). */}
           <span
             className="panel !rounded-full px-2.5 py-1 text-xs text-muted"
             aria-live="polite"
             title={stream.presenceNames.length > 0 ? stream.presenceNames.join(", ") : undefined}
           >
-            👥 {stream.presenceCount}
+            <span aria-hidden="true">👥 </span>
+            {stream.presenceCount} watching
           </span>
           <button
             type="button"

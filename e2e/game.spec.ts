@@ -34,8 +34,11 @@ test.describe("the shared pet", () => {
     await expect(pageA.getByText(/Friend \w{4} petted Makoto/)).toBeVisible({ timeout: 10_000 });
     await expect(pageB.getByText(/You petted Makoto/)).toBeVisible({ timeout: 10_000 });
 
-    // Presence counts both watchers on both screens.
-    await expect(pageA.getByText(/👥 [2-9]/)).toBeVisible({ timeout: 20_000 });
+    // Presence counts both watchers on both screens. Match the whole badge:
+    // the meters carry a "👥 N caretakers this week" line that a bare
+    // emoji-and-a-digit pattern matches too.
+    await expect(pageA.getByText(/👥 [2-9] watching/)).toBeVisible({ timeout: 20_000 });
+    await expect(pageB.getByText(/👥 [2-9] watching/)).toBeVisible({ timeout: 20_000 });
 
     await contextA.close();
     await contextB.close();
