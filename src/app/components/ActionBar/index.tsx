@@ -30,17 +30,42 @@ const REASON_TEXT = (petName: string): Record<string, string> => ({
   NOT_SLEEPY: `${petName} isn't sleepy`,
 });
 
+/**
+ * How far a cooldown has left to run, 1 just after the action to 0 when it
+ * is ready again. The sim's tick is a whole number that only moves every ten
+ * seconds, so a bar driven by it lurches; this takes the caller's wall clock
+ * and measures the remainder in fractional ticks, which drains smoothly
+ * between ticks (SPEC §11.2).
+ */
+export const cooldownProgress = (retryAtTick: number, totalTicks: number, nowTickExact: number): number => {
+  if (totalTicks <= 0) return 0;
+  const remaining = Math.max(0, retryAtTick - nowTickExact);
+  return Math.min(1, remaining / totalTicks);
+};
+
+/** Whole seconds still to wait, for the label under the button. */
+export const cooldownSeconds = (retryAtTick: number, nowTickExact: number): number =>
+  Math.max(1, Math.ceil(Math.max(0, retryAtTick - nowTickExact) * TICK_SECONDS));
+
 export type ActionBarProps = {
   state: PetState;
   ctx: ProjectionContext;
   caretakerId: string;
   petName: string;
+  /**
+   * The wall clock at the caller's last projection. It arrives as a prop so
+   * this component stays pure across renders — and so the cooldown bars move
+   * on the same 250ms cadence the meters do.
+   */
+  nowMs: number;
   /** PLAY launches the minigame (SPEC §13.3) instead of posting directly. */
   onPlay: () => void;
 };
 
-export default function ActionBar({ state, ctx, caretakerId, petName, onPlay }: ActionBarProps) {
+export default function ActionBar({ state, ctx, caretakerId, petName, nowMs, onPlay }: ActionBarProps) {
   const [notice, setNotice] = useState<string | null>(null);
+  // Where the pet's clock stands right now, tick and fraction (SPEC §4.5).
+  const nowTickExact = (nowMs - state.generation.genesisEpochMs) / (TICK_SECONDS * 1000);
 
   const act = useCallback(
     async (action: CareAction) => {
@@ -79,11 +104,10 @@ export default function ActionBar({ state, ctx, caretakerId, petName, onPlay }: 
           let cooldownFraction = 0; // 0 = ready, 1 = just used
           if (!verdict.ok) {
             if (verdict.retryAtTick !== undefined) {
-              const remainingTicks = Math.max(0, verdict.retryAtTick - state.tick);
               const totalTicks =
                 verdict.reason === "COOLDOWN_GLOBAL" ? COOLDOWNS[action].global : COOLDOWNS[action].caretaker;
-              cooldownFraction = Math.min(1, remainingTicks / totalTicks);
-              const seconds = Math.max(1, remainingTicks * TICK_SECONDS);
+              cooldownFraction = cooldownProgress(verdict.retryAtTick, totalTicks, nowTickExact);
+              const seconds = cooldownSeconds(verdict.retryAtTick, nowTickExact);
               hint =
                 verdict.reason === "COOLDOWN_GLOBAL"
                   ? `${petName} is busy (${seconds}s)`
@@ -118,7 +142,7 @@ export default function ActionBar({ state, ctx, caretakerId, petName, onPlay }: 
               {/* Cooldown drain track along the bottom edge. */}
               <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[3px] bg-white/5">
                 <span
-                  className="block h-full rounded-r-full bg-accent transition-[width] duration-500 ease-linear"
+                  className="block h-full rounded-r-full bg-accent transition-[width] duration-200 ease-linear"
                   style={{ width: `${cooldownFraction * 100}%` }}
                 />
               </span>

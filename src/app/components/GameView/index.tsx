@@ -123,7 +123,7 @@ const age = (state: PetState): string => {
 export default function GameView() {
   const stream = usePetStream();
   const { projectNow, context, onCare, onMilestone, onMinigame, onRecord, onFunded, onReact, caretakerId, profile } = stream;
-  const [ui, setUi] = useState<{ state: PetState; derived: DerivedState } | null>(null);
+  const [ui, setUi] = useState<{ state: PetState; derived: DerivedState; nowMs: number } | null>(null);
   // Play launches a random game from the roster; a ?game= query pins it —
   // handy for sharing a favourite and for deterministic e2e runs.
   const pickGame = (): MinigameId => {
@@ -173,7 +173,7 @@ export default function GameView() {
       const state = projectNow();
       if (state) {
         petNameRef.current = state.generation.name ?? "Makoto";
-        setUi({ state, derived: derive(state) });
+        setUi({ state, derived: derive(state), nowMs: Date.now() });
       }
     };
     tick();
@@ -401,7 +401,14 @@ export default function GameView() {
       {ui && !isEgg && !isDead && <QuestBanner subscribe={questNudge} />}
       {isEgg && <VotePanel />}
       {ui && !isEgg && !isDead && ctx && caretakerId && (
-        <ActionBar state={ui.state} ctx={ctx} caretakerId={caretakerId} petName={petName} onPlay={() => setPlaying(pickGame())} />
+        <ActionBar
+          state={ui.state}
+          ctx={ctx}
+          caretakerId={caretakerId}
+          petName={petName}
+          nowMs={ui.nowMs}
+          onPlay={() => setPlaying(pickGame())}
+        />
       )}
 
       {/* Reactions + shop in one strip (SPEC §2.11, §13.2) */}
