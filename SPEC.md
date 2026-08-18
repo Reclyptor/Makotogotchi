@@ -895,6 +895,23 @@ need, and it is fully unit-testable.
 | `scene/room.ts` | Composes the scene from state. |
 | `scene/toasts.ts` | Floating attributed action toasts. |
 
+Two rules the scene lives by, both learned the hard way:
+
+**A clip may start after the frame that draws it.** Care arrives over the
+stream and is stamped with `performance.now()` in the event handler; the scene
+renders with the `requestAnimationFrame` timestamp, which is sampled when the
+frame begins — before that handler ran. So an action taken during a frame
+lands a few milliseconds in that frame's future, and elapsed time goes
+negative. Anything measuring "how long has this been running" clamps at zero.
+Unclamped, a frame index reaches -1 and the clip names no frame at all.
+
+**`render()` starts from an identity transform.** The loop deliberately
+swallows a throwing frame so one bad frame cannot freeze the scene
+(`engine/loop.ts`), which means a throw between `save()` and `restore()` would
+leak that frame's transform into every frame after it — permanently, and
+compounding. Resetting at the top of `render()` bounds the damage to the frame
+that failed.
+
 ### 10.2 The Atlas
 
 The original `configuration.ts` contains hand-typed sprite rectangles that do

@@ -12,6 +12,20 @@ import type { FrameName } from "../atlas.generated";
 // picks a micro-idle (blink, ear twitch, groom, yawn) or nothing. Pure
 // arithmetic on nowMs — no RNG state, so it stays exactly testable.
 const FLOURISH_PERIOD_MS = 6500;
+
+/**
+ * How long a clip has been running, never negative.
+ *
+ * A clip can legitimately be started *after* the frame that first draws it.
+ * Care arrives over the stream and is stamped with performance.now() in the
+ * event handler; the scene renders with the requestAnimationFrame timestamp,
+ * which is sampled when the frame begins — before that handler ran. So an
+ * action taken in the same frame lands a few milliseconds in that frame's
+ * future. Left unclamped the elapsed time goes negative, the frame index goes
+ * to -1, and the clip yields undefined: an animation state machine that
+ * returns no animation, which the renderer then throws on.
+ */
+const since = (nowMs: number, startMs: number): number => Math.max(0, nowMs - startMs);
 const slotHash = (slot: number): number => {
   let h = Math.imul(slot ^ 0x9e3779b9, 2654435761);
   h ^= h >>> 15;
@@ -45,7 +59,7 @@ export class AnimationMachine {
   frameAt(nowMs: number): FrameName {
     if (this.oneShot) {
       const clip = ONE_SHOT_CLIPS[this.oneShot];
-      const elapsed = nowMs - this.oneShotStartMs;
+      const elapsed = since(nowMs, this.oneShotStartMs);
       if (elapsed < durationMs(clip)) {
         if (this.reducedMotion) return clip.frames[0]!;
         return clip.frames[Math.floor(elapsed / clip.frameMs)]!;
@@ -55,7 +69,7 @@ export class AnimationMachine {
     const clip = BASE_CLIPS[this.base];
     if (this.reducedMotion) return clip.frames[0]!;
     if (this.base === "idle") {
-      const sinceBase = nowMs - this.baseStartMs;
+      const sinceBase = since(nowMs, this.baseStartMs);
       const slot = Math.floor(sinceBase / FLOURISH_PERIOD_MS);
       if (slot > 0) {
         // Two in three slots flourish; the rest stay plain idle.
@@ -70,13 +84,13 @@ export class AnimationMachine {
         }
       }
     }
-    const step = Math.floor((nowMs - this.baseStartMs) / clip.frameMs);
+    const step = Math.floor(since(nowMs, this.baseStartMs) / clip.frameMs);
     return clip.frames[step % clip.frames.length]!;
   }
 
   /** The active one-shot, if any — lets the scene sync particles to it. */
   activeOneShot(nowMs: number): OneShotName | null {
-    if (this.oneShot && nowMs - this.oneShotStartMs < durationMs(ONE_SHOT_CLIPS[this.oneShot])) {
+    if (this.oneShot && since(nowMs, this.oneShotStartMs) < durationMs(ONE_SHOT_CLIPS[this.oneShot])) {
       return this.oneShot;
     }
     return null;

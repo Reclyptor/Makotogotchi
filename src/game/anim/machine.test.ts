@@ -79,6 +79,31 @@ describe("AnimationMachine", () => {
     expect(machine.frameAt(500)).toBe(ONE_SHOT_CLIPS.petted.frames[0]);
   });
 
+  // Care is stamped with performance.now() in the stream handler; the scene
+  // renders with the requestAnimationFrame timestamp, sampled when the frame
+  // began. Petting during a frame therefore starts a clip in that frame's
+  // future, and the machine still has to name a frame.
+  it("names a frame when a clip starts after the frame drawing it", () => {
+    const machine = new AnimationMachine();
+    machine.setBase("idle", 0);
+    machine.trigger("petted", 1000);
+    for (const now of [1000, 999, 990, 950, 900, 0]) {
+      const frame = machine.frameAt(now);
+      expect(frame, `frameAt(${now})`).toBe(ONE_SHOT_CLIPS.petted.frames[0]);
+      expect(SPRITE_FRAMES[frame], `frameAt(${now}) is a real sprite`).toBeDefined();
+    }
+    // …and it still counts as running, so the scene holds off wandering.
+    expect(machine.activeOneShot(990)).toBe("petted");
+  });
+
+  it("names a frame when the base state starts after the frame drawing it", () => {
+    const machine = new AnimationMachine();
+    machine.setBase("idle", 1000);
+    for (const now of [1000, 999, 900, 0]) {
+      expect(SPRITE_FRAMES[machine.frameAt(now)], `frameAt(${now})`).toBeDefined();
+    }
+  });
+
   it("reduced motion pins every state to a single frame", () => {
     const machine = new AnimationMachine();
     machine.reducedMotion = true;

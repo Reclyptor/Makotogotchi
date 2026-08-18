@@ -291,6 +291,12 @@ export class Room {
 
   render(ctx: CanvasRenderingContext2D, nowMs: number): void {
     ctx.imageSmoothingEnabled = false;
+    // Start from a known transform. The loop swallows a throwing frame to keep
+    // the scene alive (engine/loop.ts), so a throw between save() and
+    // restore() below would otherwise leak that frame's mirror into every
+    // frame after it — the pet, and then the room itself, walking off the
+    // canvas and never coming back.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
 
     // The room itself: architecture, sky, weather (SPEC §22).
     this.backdrop.render(

@@ -1,6 +1,7 @@
-// Visible growth (SPEC §21.9). The scene's only job here is arithmetic — a
-// stage picks a scale, and a scale picks a rectangle — so both halves are
-// tested directly rather than through a canvas.
+// The scene's geometry: a stage picks a scale, a scale picks a rectangle
+// (SPEC §21.9), and the wander band keeps whatever is drawn inside the room.
+// Mostly arithmetic, tested directly; the one case that needs a canvas gets a
+// recording stub rather than a real one.
 
 import { describe, expect, it } from "vitest";
 import { Room, ROOM_WIDTH, STAGE_SCALE, stageScale, wanderBand } from "./room";
@@ -10,7 +11,7 @@ import { BASE_CLIPS, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP } from "../a
 import { SPRITE_FRAMES, type FrameName } from "../atlas.generated";
 import { derive } from "@/sim/derive";
 import { hatchedState, projectImmortal, testCtx } from "@/sim/testkit";
-import { STAGE_STARTS, TICKS_PER_DAY, type LifeStage } from "@/sim/tuning";
+import { HEALTH_MAX, NEED_MAX, STAGE_STARTS, TICKS_PER_DAY, type LifeStage } from "@/sim/tuning";
 
 const ctx = testCtx();
 const RAMP: LifeStage[] = ["HATCHLING", "PUP", "JUVENILE", "ADULT", "ELDER"];
@@ -55,9 +56,100 @@ describe("stage scale", () => {
   });
 });
 
-// The pet is 137px wide in a 260px room. The wander band used to be the
-// rug's own span, which is a range of *centres* — so at either end the pet
-// stood half off the rug with its silhouette running through the wall.
+// Petting shifted the whole room off to the left, sometimes, and stayed that
+// way. Two faults in series: care is stamped with performance.now() in the
+// stream handler while the scene renders with the requestAnimationFrame
+// timestamp — sampled earlier in the same frame — so the clip started in the
+// frame's future and named no frame at all; and the resulting throw escaped
+// the mirrored draw before its restore(), leaking that mirror into every
+// frame after it.
+describe("rendering a pet that was just petted", () => {
+  /** Records where sprites land, with the current transform applied. */
+  const recordingContext = () => {
+    const drawn: { x0: number; x1: number }[] = [];
+    let matrix = { a: 1, d: 1, e: 0, f: 0 };
+    const stack: (typeof matrix)[] = [];
+    const noop = (): void => {};
+    const ctx = {
+      imageSmoothingEnabled: false,
+      globalAlpha: 1,
+      fillStyle: "",
+      font: "",
+      textAlign: "",
+      setTransform: (a: number, _b: number, _c: number, d: number, e: number, f: number) => {
+        matrix = { a, d, e, f };
+        stack.length = 0;
+      },
+      save: () => void stack.push({ ...matrix }),
+      restore: () => {
+        matrix = stack.pop() ?? matrix;
+      },
+      translate: (x: number, y: number) => {
+        matrix.e += matrix.a * x;
+        matrix.f += matrix.d * y;
+      },
+      scale: (x: number, y: number) => {
+        matrix.a *= x;
+        matrix.d *= y;
+      },
+      beginPath: noop,
+      rect: noop,
+      clip: noop,
+      fillRect: noop,
+      fillText: noop,
+      drawImage: (...args: number[]) => {
+        // The 9-argument form: the last four are the destination rectangle.
+        const [dx, , dw] = args.slice(5);
+        const a = matrix.e + matrix.a * dx!;
+        const b = matrix.e + matrix.a * (dx! + dw!);
+        drawn.push({ x0: Math.min(a, b), x1: Math.max(a, b) });
+      },
+    };
+    return { ctx: ctx as unknown as CanvasRenderingContext2D, drawn };
+  };
+
+  const contentedRoom = () => {
+    const room = new Room();
+    // No image loads in a test; a stand-in makes the atlas draw.
+    (room.atlas as unknown as { image: unknown }).image = {};
+    const born = hatchedState(ctx);
+    const settled = projectImmortal(born, TICKS_PER_DAY, ctx);
+    const contented = {
+      ...settled,
+      needs: { hunger: NEED_MAX, energy: NEED_MAX, hygiene: NEED_MAX, joy: NEED_MAX },
+      healthRaw: HEALTH_MAX,
+      sick: false,
+      asleep: false,
+    };
+    room.syncAtmosphere({ hour: 13, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null });
+    return { room, derived: derive(contented) };
+  };
+
+  it("stays inside the room when the pet is stamped ahead of the frame clock", () => {
+    const { ctx: canvas, drawn } = recordingContext();
+    const { room, derived } = contentedRoom();
+    expect(derived.animation).toBe("idle");
+
+    for (let frame = 0; frame < 600; frame++) {
+      const now = frame * 16;
+      // The race: the handler's clock is a few ms ahead of this frame's.
+      if (frame % 37 === 0) room.onCare("PET", "💛 you", now + 8);
+      room.syncDerived(derived, false, now);
+      room.update(16);
+      drawn.length = 0;
+      expect(() => room.render(canvas, now), `frame ${frame}`).not.toThrow();
+      for (const { x0, x1 } of drawn) {
+        expect.soft(x0, `frame ${frame} crosses the left wall`).toBeGreaterThanOrEqual(0);
+        expect.soft(x1, `frame ${frame} crosses the right wall`).toBeLessThanOrEqual(ROOM_WIDTH);
+      }
+    }
+    expect(drawn.length).toBeGreaterThan(0);
+  });
+});
+
+// The pet is 137px wide in a 260px room. The wander band used to be the rug's
+// own span, which is a range of *centres* — so at either end the pet stood
+// half off the rug with its silhouette running through the wall.
 describe("the wander band", () => {
   // The widest pet frame, and how far the idle pose's outer foot reaches
   // from the centre line — both read off the sheet, so the band's promises
