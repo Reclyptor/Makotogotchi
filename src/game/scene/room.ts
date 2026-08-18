@@ -6,7 +6,8 @@ import { Atlas } from "../engine/atlas";
 import { Particles, type ParticleKind } from "../engine/particles";
 import { Toasts } from "./toasts";
 import { AnimationMachine } from "../anim/machine";
-import { BUTTERFLY_CLIP, WALK_CLIP, type OneShotName } from "../anim/clips";
+import { BASE_CLIPS, BUTTERFLY_CLIP, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP, type OneShotName } from "../anim/clips";
+import { SPRITE_FRAMES } from "../atlas.generated";
 import { Backdrop, ROOM_HEIGHT, ROOM_WIDTH, RUG, type BackdropKey, type Condition } from "./backdrop";
 import { celestialAt, seasonFor, skyMomentAt, weatherFor, type Celestial } from "@/sim/atmosphere";
 import type { DerivedState } from "@/sim/derive";
@@ -45,12 +46,28 @@ const WANDER_SPEED_PX_MS = 26 / 1000;
 // The pet is more than half the room wide, so the band it strolls through is
 // not the rug's own span: a pet centred on the rug's edge stands half off it,
 // and one centred near the room's edge is drawn clean through the wall.
-// Both numbers below are the pet's own, measured from the sheet at full size:
-// how far the silhouette reaches from its centre line, and how far the outer
-// foot of the idle pose reaches. A mid-stride frame plants a foot a few
-// pixels further — a stepping foot leaving the rug is what walking looks
-// like, so the band is set by where the pet comes to rest.
-const PET_HALF_WIDTH = 69;
+
+/**
+ * Half the widest frame the room can ever draw the pet at. Derived from the
+ * clips rather than measured off the sheet: reactions are not all the same
+ * size as the idle pose — a sneeze throws an arm out, a cheer both — and a
+ * hand-copied number silently stops covering the pet the day someone draws a
+ * wider one.
+ */
+const PET_HALF_WIDTH =
+  Math.max(
+    ...[...Object.values(BASE_CLIPS), ...Object.values(ONE_SHOT_CLIPS), ...IDLE_FLOURISH_CLIPS, WALK_CLIP]
+      .flatMap((clip) => clip.frames)
+      .map((name) => SPRITE_FRAMES[name].w),
+  ) / 2;
+
+/**
+ * How far the outer foot of the idle pose reaches from the centre line,
+ * measured from the sheet — the art has to be looked at to know it. A
+ * mid-stride frame plants a foot a few pixels further; a stepping foot
+ * leaving the rug is what walking looks like, so the band is set by where the
+ * pet comes to rest.
+ */
 const PET_FOOT_REACH = 42;
 /** Bare floor left between the pet's silhouette and the wall it stands by. */
 const ROOM_EDGE_MARGIN = 2;

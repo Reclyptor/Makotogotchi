@@ -6,7 +6,8 @@ import { describe, expect, it } from "vitest";
 import { Room, ROOM_WIDTH, STAGE_SCALE, stageScale, wanderBand } from "./room";
 import { RUG } from "./backdrop";
 import { drawRect } from "../engine/atlas";
-import { SPRITE_FRAMES } from "../atlas.generated";
+import { BASE_CLIPS, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP } from "../anim/clips";
+import { SPRITE_FRAMES, type FrameName } from "../atlas.generated";
 import { derive } from "@/sim/derive";
 import { hatchedState, projectImmortal, testCtx } from "@/sim/testkit";
 import { STAGE_STARTS, TICKS_PER_DAY, type LifeStage } from "@/sim/tuning";
@@ -88,6 +89,29 @@ describe("the wander band", () => {
     expect((adult.min + adult.max) / 2).toBeCloseTo(centre, 5);
     expect((hatchling.min + hatchling.max) / 2).toBeCloseTo(centre, 5);
     expect(hatchling.max - hatchling.min).toBeGreaterThan(adult.max - adult.min);
+  });
+
+  // Not just the idle pose: whatever the pet is doing when it comes to rest —
+  // sneezing, cheering, asleep in its bed — is drawn at wherever the band left
+  // it, and reactions are not all the idle frame's size.
+  it("keeps every frame it can draw inside the room, at every stage", () => {
+    const frames = new Set<FrameName>();
+    for (const clip of Object.values(BASE_CLIPS)) clip.frames.forEach((frame) => frames.add(frame));
+    for (const clip of Object.values(ONE_SHOT_CLIPS)) clip.frames.forEach((frame) => frames.add(frame));
+    for (const clip of IDLE_FLOURISH_CLIPS) clip.frames.forEach((frame) => frames.add(frame));
+    WALK_CLIP.frames.forEach((frame) => frames.add(frame));
+    expect(frames.size).toBeGreaterThan(20);
+
+    for (const scale of Object.values(STAGE_SCALE)) {
+      const band = wanderBand(scale);
+      for (const name of frames) {
+        for (const petX of [band.min, band.max]) {
+          const { dx, dw } = drawRect(SPRITE_FRAMES[name], Math.round(petX), 172, scale);
+          expect.soft(dx, `${name} at ${scale}× crosses the left wall`).toBeGreaterThanOrEqual(0);
+          expect.soft(dx + dw, `${name} at ${scale}× crosses the right wall`).toBeLessThanOrEqual(ROOM_WIDTH);
+        }
+      }
+    }
   });
 
   it("collapses to a fixed spot rather than inverting when the pet outgrows the rug", () => {
