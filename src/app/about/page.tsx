@@ -49,6 +49,23 @@ export default function AboutPage() {
           The original sprites are the work of <strong>Jingles</strong> — her art is the heart of this project, and
           Makotogotchi wouldn&apos;t exist without her. Thank you, Jingles. 🩷
         </p>
+        <p className="text-muted">
+          The code is{" "}
+          <a
+            href="https://github.com/Reclyptor/Makotogotchi/blob/master/LICENSE"
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            MIT licensed
+          </a>
+          , and the sprites are{" "}
+          <a
+            href="https://github.com/Reclyptor/Makotogotchi/blob/master/LICENSE-ART"
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            CC BY 4.0
+          </a>
+          . Take either — just credit Jingles for the sprites.
+        </p>
       </div>
     </main>
   );

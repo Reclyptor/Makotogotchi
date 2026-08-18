@@ -32,3 +32,24 @@ Built into a standalone Docker image by GitHub Actions
 (`ghcr.io/reclyptor/makotogotchi`), deployed to a k3s cluster via Flux, and
 served through a Cloudflare tunnel at makotogotchi.com and
 makotogotchi.reclyptor.com. See SPEC.md §17–§19.
+
+## License
+
+Two licenses, split by what the file is:
+
+| | License | |
+| --- | --- | --- |
+| Code | [MIT](./LICENSE) | do what you like |
+| Sprites | [CC BY 4.0](./LICENSE-ART) | do what you like, **credit Jingles** |
+
+Everything in
+[`art/original/jingles-sprites.png`](./art/original/jingles-sprites.png) is
+Jingles' work.
+
+The chinchilla is Jingles' design and Jingles' linework — she drew it, and
+this project exists because of it. Fork the code freely; if you take the
+sprites with you, or adapt them, say where they came from:
+
+> Chinchilla sprites by Jingles, from
+> [Makotogotchi](https://github.com/Reclyptor/Makotogotchi), licensed under
+> CC BY 4.0.
