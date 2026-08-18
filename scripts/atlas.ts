@@ -33,6 +33,8 @@ import { PNG } from "pngjs";
 
 const ART = new URL("../art/", import.meta.url);
 const PUBLIC = new URL("../public/", import.meta.url);
+/** Provenance record, not a frame source — see loadFrames. */
+const ORIGINAL_DIR = "original";
 const GENERATED = new URL("../src/game/atlas.generated.ts", import.meta.url);
 const CONTACT = new URL("./atlas-contact.png", import.meta.url);
 
@@ -74,6 +76,10 @@ const loadFrames = (): Frame[] => {
   const seen = new Map<string, string>();
   const categories = readdirSync(ART, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
+    // art/original holds Jingles' delivered sheet as the provenance record
+    // (art/PROVENANCE.md), not frames to pack. It is one 1485×1100 image and
+    // would otherwise be packed as a single enormous "sprite".
+    .filter((entry) => entry.name !== ORIGINAL_DIR)
     .map((entry) => entry.name)
     .sort(collator.compare);
   for (const category of categories) {
