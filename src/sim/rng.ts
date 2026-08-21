@@ -15,6 +15,8 @@ export const RNG_PURPOSE = {
   wantOdds: 9,
   wantPick: 10,
   wantItem: 11,
+  venueOdds: 12,
+  venuePick: 13,
 } as const;
 
 export type RngPurpose = (typeof RNG_PURPOSE)[keyof typeof RNG_PURPOSE];

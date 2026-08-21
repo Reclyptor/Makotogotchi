@@ -173,3 +173,35 @@ export const celestialAt = (hour: number, minute: number): Celestial => {
 
 export const isDaySegment = (value: unknown): value is DaySegment =>
   typeof value === "string" && (DAY_SEGMENTS as readonly string[]).includes(value);
+
+// ── venues (SPEC §22.8) ─────────────────────────────────────────────────────
+
+/** The venue catalog, in declaration order — the uniform pick depends on it. */
+export const VENUE_IDS = ["home", "garden", "meadow", "beach", "forest"] as const;
+export type VenueId = (typeof VENUE_IDS)[number];
+
+const AWAY_VENUES = VENUE_IDS.filter((venue) => venue !== "home");
+
+/** Home keeps roughly half of all days: the room carries the community's
+ *  funded themes and decor, and a rotation that hid that investment most
+ *  days would quietly refund it (SPEC §22.8). */
+export const VENUE_HOME_ODDS_P32 = Math.floor(2 ** 32 / 2);
+
+/**
+ * Where the day is spent (SPEC §22.8). Keyed by the pet-calendar day index
+ * like the weather forecast, so it is fixed the moment the day turns over.
+ * The owned pool is mutable server state, not a seeded fact: determinism
+ * comes from every viewer holding the same (seed, dayIndex, pool) — the
+ * pool rides the roomState broadcast. The filter normalizes any input
+ * ordering to the catalog's own, so the uniform pick cannot depend on
+ * array-order accidents.
+ */
+export const venueAt = (seed: number, dayIndex: number, ownedVenueIds: readonly string[]): VenueId => {
+  const pool = AWAY_VENUES.filter((venue) => ownedVenueIds.includes(venue));
+  if (pool.length === 0) return "home";
+  if (draw32(seed, dayIndex, RNG_PURPOSE.venueOdds) < VENUE_HOME_ODDS_P32) return "home";
+  return pool[draw32(seed, dayIndex, RNG_PURPOSE.venuePick) % pool.length]!;
+};
+
+export const isVenueId = (value: unknown): value is VenueId =>
+  typeof value === "string" && (VENUE_IDS as readonly string[]).includes(value);

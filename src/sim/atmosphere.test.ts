@@ -4,6 +4,7 @@ import {
   DAY_SEGMENTS,
   seasonFor,
   skyMomentAt,
+  venueAt,
   WEATHERS,
   weatherFor,
   type Season,
@@ -104,5 +105,44 @@ describe("seasons and weather", () => {
     const a = Array.from({ length: 30 }, (_, day) => weatherFor(1, day, "autumn"));
     const b = Array.from({ length: 30 }, (_, day) => weatherFor(2, day, "autumn"));
     expect(a.join()).not.toBe(b.join());
+  });
+});
+
+describe("day-trip venues (SPEC §22.8)", () => {
+  const OWNED = ["garden", "meadow"] as const;
+
+  it("draws the same venue for the same seed and day on every client", () => {
+    for (let day = 0; day < 500; day++) {
+      expect(venueAt(0xc0ffee, day, OWNED)).toBe(venueAt(0xc0ffee, day, OWNED));
+    }
+  });
+
+  it("stays home with nothing funded, and roughly half the time otherwise", () => {
+    let home = 0;
+    for (let day = 0; day < 2000; day++) {
+      expect(venueAt(7, day, [])).toBe("home");
+      if (venueAt(7, day, OWNED) === "home") home++;
+    }
+    expect(home).toBeGreaterThan(2000 * 0.44);
+    expect(home).toBeLessThan(2000 * 0.56);
+  });
+
+  it("only ever picks owned venues, whatever order the pool arrives in", () => {
+    for (let day = 0; day < 500; day++) {
+      const venue = venueAt(21, day, OWNED);
+      expect(["home", ...OWNED]).toContain(venue);
+      expect(venueAt(21, day, ["meadow", "garden"])).toBe(venue);
+      expect(venueAt(21, day, ["garden", "meadow", "not-a-venue"])).toBe(venue);
+    }
+  });
+
+  it("a funded venue joins the rotation without disturbing home days", () => {
+    for (let day = 0; day < 500; day++) {
+      const before = venueAt(99, day, OWNED);
+      const after = venueAt(99, day, [...OWNED, "beach"]);
+      // The home-or-away draw is independent of the pool, so a mid-day
+      // funding can move WHICH venue but never home-vs-away (SPEC §22.8).
+      expect(before === "home").toBe(after === "home");
+    }
   });
 });
