@@ -109,3 +109,67 @@ describe("PushDispatcher", () => {
     expect(sent.some((s) => s.payload.tag === "critical-hunger")).toBe(true);
   });
 });
+
+describe("the playful want lane (SPEC §25.6)", () => {
+  const wanting = (window: number): PetState => petState({ wantOpen: { window, kind: "cuddle" } });
+  const wantsSent = (): Sent[] => sent.filter((s) => s.payload.tag === "want");
+
+  it("fires into an empty room, once per window", async () => {
+    sent.length = 0;
+    fakeNowMs += 25 * 60 * 60 * 1000; // clear every earlier throttle
+    await dispatcher.observe(wanting(100));
+    expect(wantsSent()).toHaveLength(1);
+    await dispatcher.observe(wanting(100));
+    expect(wantsSent()).toHaveLength(1); // window already claimed
+  });
+
+  it("stays silent while anyone is watching — and still fires when the room empties", async () => {
+    sent.length = 0;
+    fakeNowMs += 5 * 60 * 60 * 1000;
+    await redis().zadd(key("presence"), String(Date.now()), "ct-x|conn-1");
+    await dispatcher.observe(wanting(101));
+    expect(wantsSent()).toHaveLength(0);
+    // The viewer leaves mid-window; the once-key was never claimed.
+    await redis().zremrangebyscore(key("presence"), "-inf", "+inf");
+    await dispatcher.observe(wanting(101));
+    expect(wantsSent()).toHaveLength(1);
+  });
+
+  it("defers to a recent urgent push but never blocks one", async () => {
+    sent.length = 0;
+    fakeNowMs += 5 * 60 * 60 * 1000;
+    // An urgent alert lands first…
+    await dispatcher.observe(petState({ sick: true, sickSinceTick: 9_000, generation: { ...petState({}).generation, id: "gen-push-2" } }));
+    expect(sent.filter((s) => s.payload.tag === "sick")).toHaveLength(1);
+    // …so the want defers for the urgent throttle's span.
+    await dispatcher.observe(wanting(102));
+    expect(wantsSent()).toHaveLength(0);
+
+    // Past the urgent window, the want goes out (the window key was
+    // consumed above — a fresh window asks again).
+    fakeNowMs += 31 * 60 * 1000;
+    await dispatcher.observe(wanting(103));
+    expect(wantsSent()).toHaveLength(1);
+
+    // And a playful send never consumes the urgent lane: a critical alert
+    // moments later still delivers.
+    const dying = petState({
+      healthRaw: HEALTH_MAX / 10,
+      generation: { ...petState({}).generation, id: "gen-push-3" },
+    });
+    await dispatcher.observe(dying);
+    expect(sent.filter((s) => s.payload.tag === "health")).toHaveLength(1);
+  });
+
+  it("throttles playful pushes to one per four hours per caretaker", async () => {
+    sent.length = 0;
+    // The last want push above set the playful throttle; a new window
+    // within four hours stays quiet.
+    fakeNowMs += 60 * 60 * 1000;
+    await dispatcher.observe(wanting(104));
+    expect(wantsSent()).toHaveLength(0);
+    fakeNowMs += 4 * 60 * 60 * 1000;
+    await dispatcher.observe(wanting(105));
+    expect(wantsSent()).toHaveLength(1);
+  });
+});

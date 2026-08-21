@@ -9,11 +9,20 @@
 //     recovered past a margin and stayed there ≥ 30 minutes (hysteresis)
 //   - each caretaker receives at most one push per 30 minutes
 //   - stage/hatch/death triggers are once-per-generation by construction
+//   - want pushes ride a separate playful lane (SPEC §25.6): they fire only
+//     into an empty room, at most once per 4 hours per caretaker, defer to
+//     any recent urgent push, and are never consulted by the urgent lane —
+//     "Makoto is dying" is never followed minutes later by a snack request,
+//     and a snack request can never starve a health alert.
 
 import type { Db } from "mongodb";
 import type Redis from "ioredis";
-import { stageAt, type PetState } from "@/sim/model";
+import { stageAt, type PetState, type WantOpen } from "@/sim/model";
 import { CRITICAL_THRESHOLD, HEALTH_MAX, NEED_KEYS, STAGE_STARTS, type NeedKey } from "@/sim/tuning";
+import { WANT_PUSH_THROTTLE_MS } from "@/sim/wants";
+import { foodItem } from "@/sim/economy";
+import { isMinigameId, MINIGAMES } from "@/sim/minigames";
+import { listPresence } from "../presence";
 import { allSubscriptions, deleteSubscription, type PushSubscriptionDoc } from "./store";
 
 const HEALTH_LOW_THRESHOLD = HEALTH_MAX / 4; // 25%
@@ -109,6 +118,25 @@ export class PushDispatcher {
     } else if (state.healthRaw >= HEALTH_LOW_THRESHOLD + HEALTH_REARM_MARGIN) {
       await this.observeRecovery(generationId, "health");
     }
+
+    // The pet is asking for something and nobody is around to hear it
+    // (SPEC §25.6). The open want is read straight off the state; presence
+    // is checked BEFORE the once-key is claimed, so a room that empties
+    // mid-window still gets its nudge.
+    const want = state.wantOpen;
+    if (want != null) {
+      const watching = await listPresence(this.redis, this.key("presence"));
+      if (watching.length === 0) {
+        const claimed = await this.redis.set(
+          this.firedKey(generationId, `want:${want.window}`),
+          "1",
+          "EX",
+          FIRED_KEY_TTL_SECONDS,
+          "NX",
+        );
+        if (claimed === "OK") await this.broadcast(wantPayload(name, want), "playful");
+      }
+    }
   }
 
   private firedKey(generationId: string, trigger: string): string {
@@ -152,16 +180,27 @@ export class PushDispatcher {
     }
   }
 
-  /** Send to every subscriber, respecting the per-caretaker throttle. */
-  private async broadcast(payload: PushPayload): Promise<void> {
+  /** Send to every subscriber, respecting the lane's per-caretaker throttle. */
+  private async broadcast(payload: PushPayload, lane: "urgent" | "playful" = "urgent"): Promise<void> {
     const subscriptions = await allSubscriptions(this.db);
     for (const subscription of subscriptions) {
       // Timestamp comparison against the injected clock (not a Redis TTL):
       // the dispatcher's whole notion of time must come from one source.
-      const throttleKey = this.key(`push:throttle:${subscription.caretakerId}`);
-      const lastSent = await this.redis.get(throttleKey);
-      if (lastSent && this.now() - Number(lastSent) < CARETAKER_THROTTLE_MS) continue;
-      await this.redis.set(throttleKey, String(this.now()), "EX", 24 * 60 * 60);
+      const urgentKey = this.key(`push:throttle:${subscription.caretakerId}`);
+      const lastUrgent = await this.redis.get(urgentKey);
+      const urgentRecently = lastUrgent !== null && this.now() - Number(lastUrgent) < CARETAKER_THROTTLE_MS;
+      if (lane === "urgent") {
+        if (urgentRecently) continue;
+        await this.redis.set(urgentKey, String(this.now()), "EX", 24 * 60 * 60);
+      } else {
+        // Playful consults urgent recency but never consumes the urgent
+        // key, and urgent never reads the playful one (SPEC §25.6).
+        if (urgentRecently) continue;
+        const playfulKey = this.key(`push:playful:${subscription.caretakerId}`);
+        const lastPlayful = await this.redis.get(playfulKey);
+        if (lastPlayful !== null && this.now() - Number(lastPlayful) < WANT_PUSH_THROTTLE_MS) continue;
+        await this.redis.set(playfulKey, String(this.now()), "EX", 24 * 60 * 60);
+      }
       try {
         await this.send(subscription, payload);
       } catch (error) {
@@ -176,3 +215,27 @@ export class PushDispatcher {
 }
 
 export const needLabel = (need: NeedKey): string => need[0]!.toUpperCase() + need.slice(1);
+
+/** What the pet is asking for, in one push-sized sentence (SPEC §25.6). */
+const wantPayload = (name: string, want: WantOpen): PushPayload => {
+  let ask: string;
+  switch (want.kind) {
+    case "crave-food":
+      ask = `${name} is craving ${(want.itemId !== undefined ? foodItem(want.itemId)?.label : undefined) ?? "a treat"}!`;
+      break;
+    case "play-game":
+      ask = `${name} wants to play ${want.itemId !== undefined && isMinigameId(want.itemId) ? MINIGAMES[want.itemId].title : "a game"}!`;
+      break;
+    case "cuddle":
+      ask = `${name} wants cuddles.`;
+      break;
+    case "dust-bath":
+      ask = `${name} wants a dust bath.`;
+      break;
+    default:
+      // A kind this build does not know — an older pod during a rolling
+      // deploy. Still worth the nudge.
+      ask = `${name} wants something.`;
+  }
+  return { title: `${name} wants something 💭`, body: `${ask} Nobody's around right now.`, tag: "want" };
+};
