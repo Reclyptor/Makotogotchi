@@ -2164,10 +2164,14 @@ can settle:
 
 The high-water mark is what makes duplicate appends harmless *in the
 fold*: an expired window cannot re-open, so no sequence of replayed or
-re-appended events can debit the same window twice. The leader still keeps
-Redis `SET NX` once-keys per `generationId:window`, but they are junk-
-event suppression only — §6.2's invariant that Redis holds no unique
-durable state survives a flush, because correctness lives in the fold.
+re-appended events can debit the same window twice. There are **no Redis
+once-keys at all**: the post-lock prepare re-check (below) makes a
+duplicate append impossible in the first place — the first append changes
+the exact state the second one's prepare inspects — and an earlier draft's
+`SET NX` guards were worse than redundant, because a key set by a leader
+that crashed before its append would suppress the retry until the key
+expired. §6.2's invariant that Redis holds no unique durable state is
+preserved trivially: the wants feature stores nothing in Redis.
 
 **The logged payload is authoritative.** The reducer never calls
 `wantAt`; it folds what `WANT_OPENED` says was wanted, exactly as the log

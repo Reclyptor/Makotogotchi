@@ -23,7 +23,8 @@ import { genesis } from "@/sim/genesis";
 import { project } from "@/sim/project";
 import { reduce } from "@/sim/reduce";
 import { canPerform, type ValidationResult } from "@/sim/validate";
-import type { Generation, PetState, ProjectionContext } from "@/sim/model";
+import { windowEndTick, windowIndexAt, type Want } from "@/sim/wants";
+import { isAlive, type Generation, type PetState, type ProjectionContext } from "@/sim/model";
 import { TICKS_PER_DAY, TICK_SECONDS, type CareAction } from "@/sim/tuning";
 import type { Milestone, MilestoneKind, PetEvent } from "@/sim/events";
 import type { EventExtras } from "../db/collections";
@@ -55,7 +56,15 @@ export type EngineDeps = {
 };
 
 export type CareOutcome =
-  | { ok: true; applied: number; state: PetState }
+  | {
+      ok: true;
+      applied: number;
+      state: PetState;
+      /** Milestones the reducer emitted applying this action (WANT_FULFILLED,
+       *  RECOVERED, SLEPT) — the write path pays coins and counts titles off
+       *  these (SPEC §25.4). */
+      milestones: Milestone[];
+    }
   | { ok: false; rejection: Exclude<ValidationResult, { ok: true }> };
 
 type HotState = { state: PetState; lastEventSeq: number };
@@ -66,7 +75,13 @@ type Prepared =
   | { kind: "reject"; rejection: Exclude<ValidationResult, { ok: true }> }
   | { kind: "skip" };
 
-type AdvanceResult = { state: PetState; applied: number; rejected: Exclude<ValidationResult, { ok: true }> | null };
+type AdvanceResult = {
+  state: PetState;
+  applied: number;
+  rejected: Exclude<ValidationResult, { ok: true }> | null;
+  /** Milestones the reducer emitted applying the input event, if any. */
+  eventMilestones: Milestone[];
+};
 
 export class PetEngine {
   private readonly now: () => number;
@@ -169,8 +184,9 @@ export class PetEngine {
       const prepared = prepare(state, ctx);
       let applied = 0;
       let inputEvent: PetEvent | null = null;
+      const eventMilestones: Milestone[] = [];
       if (prepared.kind === "reject") {
-        return { state, applied: 0, rejected: prepared.rejection };
+        return { state, applied: 0, rejected: prepared.rejection, eventMilestones };
       }
       if (prepared.kind === "event") {
         seq += 1;
@@ -180,8 +196,13 @@ export class PetEngine {
         applied = reduced.applied;
         toAppend.push({ event: inputEvent, extras: { applied, ...prepared.extras } });
         // Milestones produced by applying the event (RECOVERED, lullaby
-        // SLEPT) share its tick and fold cleanly after it.
+        // SLEPT, WANT_FULFILLED) share its tick and fold cleanly after it.
+        // The caller sees them too — coins and titles hang off WANT_FULFILLED
+        // on the write path (SPEC §25.4). reduce's own projection is a no-op
+        // here (the event carries the already-projected tick), so these are
+        // exactly the event's milestones.
         reduced.milestones.forEach(recordMilestone);
+        eventMilestones.push(...reduced.milestones);
       }
 
       for (const entry of toAppend) {
@@ -193,6 +214,24 @@ export class PetEngine {
             tick: state.tick,
             kind: entry.event.kind,
             ...(entry.event.detail !== undefined ? { detail: entry.event.detail } : {}),
+            state,
+          });
+        }
+        if (entry.event.type === "WANT_OPENED" || entry.event.type === "WANT_EXPIRED") {
+          toPublish.push({
+            type: "want",
+            edge: entry.event.type === "WANT_OPENED" ? "opened" : "expired",
+            seq: entry.event.seq,
+            tick: state.tick,
+            windowIndex: entry.event.windowIndex,
+            ...(entry.event.type === "WANT_OPENED"
+              ? {
+                  want: {
+                    kind: entry.event.want.kind,
+                    ...(entry.event.want.itemId !== undefined ? { itemId: entry.event.want.itemId } : {}),
+                  },
+                }
+              : {}),
             state,
           });
         }
@@ -232,7 +271,7 @@ export class PetEngine {
         await writeSnapshot(this.deps.db, state, seq);
       }
 
-      return { state, applied, rejected: null };
+      return { state, applied, rejected: null, eventMilestones };
     });
   }
 
@@ -270,7 +309,7 @@ export class PetEngine {
       };
     });
     if (result.rejected) return { ok: false, rejection: result.rejected };
-    return { ok: true, applied: result.applied, state: result.state };
+    return { ok: true, applied: result.applied, state: result.state, milestones: result.eventMilestones };
   }
 
   /** Install a communal toy for this generation (SPEC §13.2). */
@@ -329,6 +368,62 @@ export class PetEngine {
         count,
       }),
     }));
+    return result.state;
+  }
+
+  /**
+   * Open a window's want (SPEC §25.2). Leader-only; every condition is
+   * re-checked here, under the write lock, on the settled state — so a
+   * duplicate call, a racing leader, or a want granted between observation
+   * and lock acquisition all fold to a clean skip. No Redis guard exists or
+   * is needed: the first append changes the exact state a second one's
+   * prepare inspects.
+   */
+  async openWant(generation: Generation, windowIndex: number, want: Want): Promise<PetState> {
+    const result = await this.advance(generation, (state) => {
+      if (!isAlive(state)) return { kind: "skip" }; // no cravings from an egg or a corpse
+      if (state.wantOpen != null) return { kind: "skip" };
+      const settled = state.wantSettledWindow ?? null;
+      if (settled !== null && windowIndex <= settled) return { kind: "skip" };
+      // Only the window containing now — a late open is a lie about the past.
+      if (windowIndexAt(state.tick) !== windowIndex) return { kind: "skip" };
+      return {
+        kind: "event",
+        event: (seq, current): PetEvent => ({
+          type: "WANT_OPENED",
+          generationId: generation.id,
+          seq,
+          tick: current.tick,
+          windowIndex,
+          want: { kind: want.kind, ...(want.itemId !== undefined ? { itemId: want.itemId } : {}) },
+        }),
+      };
+    });
+    return result.state;
+  }
+
+  /**
+   * Expire the open want once its window has passed — late is legal, so a
+   * want left open across a leader outage settles on the next observation
+   * (SPEC §25.2). On death the want dies with the generation instead.
+   */
+  async expireWant(generation: Generation): Promise<PetState> {
+    const result = await this.advance(generation, (state) => {
+      if (!isAlive(state)) return { kind: "skip" };
+      const open = state.wantOpen;
+      if (open == null) return { kind: "skip" };
+      if (state.tick < windowEndTick(open.window)) return { kind: "skip" };
+      return {
+        kind: "event",
+        event: (seq, current): PetEvent => ({
+          type: "WANT_EXPIRED",
+          generationId: generation.id,
+          seq,
+          tick: current.tick,
+          windowIndex: open.window,
+        }),
+      };
+    });
     return result.state;
   }
 

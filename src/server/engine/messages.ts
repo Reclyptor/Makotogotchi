@@ -70,6 +70,18 @@ export type RecordMessage = {
   caretakerName: string;
 };
 
+/** A want opened or lapsed (SPEC §25.2) — state-bearing, drives the banner. */
+export type WantMessage = {
+  type: "want";
+  edge: "opened" | "expired";
+  seq: number;
+  tick: number;
+  windowIndex: number;
+  /** Present on "opened". */
+  want?: { kind: string; itemId?: string };
+  state: PetState;
+};
+
 /** A grand item finished funding (SPEC §21.8) — the names, not the fact. */
 export type FundedMessage = {
   type: "funded";
@@ -100,6 +112,7 @@ export type EngineMessage =
   | SnapshotMessage
   | PresenceMessage
   | MinigameMessage
+  | WantMessage
   | RecordMessage
   | FundedMessage
   | ThemeMessage

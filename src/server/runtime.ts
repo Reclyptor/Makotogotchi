@@ -23,6 +23,7 @@ import { ambientAt } from "@/sim/ambient";
 import { worthRecording } from "@/sim/difficulty";
 import { activeCaretakers } from "./population";
 import { settleQuest } from "./quests";
+import { observeWants } from "./wants";
 import { isAlive, type Generation } from "@/sim/model";
 
 const GENERATION_TTL_MS = 10_000;
@@ -94,13 +95,19 @@ const boot = async (): Promise<Runtime> => {
     void (async () => {
       if (!(await lease.acquire())) return;
       const current = await generation();
-      const state = await engine.tick(current);
+      let state = await engine.tick(current);
       const successor = await lifecycle.check(current, state);
       if (successor) cached = { generation: successor, at: Date.now() };
       if (!successor && state.tick !== lastAmbientTick) {
         lastAmbientTick = state.tick;
         const moment = isAlive(state) ? ambientAt(current.seed, state.tick, state.asleep) : null;
         if (moment) await engine.milestone(current, "AMBIENT", moment);
+      }
+      if (!successor) {
+        // The pet's asks (SPEC §25.2): expire a stale want, open this
+        // window's. State-driven, so a leader outage settles late instead
+        // of never; the engine re-validates everything under the lock.
+        state = await observeWants(engine, current, state, env().PET_TIMEZONE);
       }
       if (!successor) {
         // The day's shared goal (SPEC §21.7): claimed once, then announced.
