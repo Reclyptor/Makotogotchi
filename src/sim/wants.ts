@@ -13,6 +13,7 @@ import { draw32, RNG_PURPOSE } from "./rng";
 import { FOOD_ITEM_IDS } from "./economy";
 import { MINIGAME_IDS } from "./minigames";
 import { quirks } from "./quirks";
+import type { CareAction } from "./tuning";
 
 export const WANT_KINDS = ["crave-food", "play-game", "cuddle", "dust-bath"] as const;
 export type WantKind = (typeof WANT_KINDS)[number];
@@ -49,6 +50,18 @@ const TABLE: readonly Candidate[] = [
 
 export const isWantKind = (value: unknown): value is WantKind =>
   typeof value === "string" && (WANT_KINDS as readonly string[]).includes(value);
+
+/**
+ * The care action that grants each want (SPEC §25.3). Looked up with a plain
+ * index so a kind this build does not know — an older pod folding a newer
+ * leader's log mid-deploy — is unmatchable, never a crash.
+ */
+export const WANT_FULFILLING_ACTION: Partial<Record<string, CareAction>> = {
+  "crave-food": "FEED",
+  "play-game": "PLAY",
+  cuddle: "PET",
+  "dust-bath": "CLEAN",
+};
 
 export const windowIndexAt = (tick: number): number => Math.floor(tick / WANT_WINDOW_TICKS);
 

@@ -18,7 +18,7 @@ import {
   type NeedKey,
 } from "./tuning";
 import { budgetRemaining } from "./score";
-import { WANT_EXPIRY_JOY_DEBIT } from "./wants";
+import { WANT_BONUS_PERCENT, WANT_EXPIRY_JOY_DEBIT, WANT_FULFILLING_ACTION, windowIndexAt } from "./wants";
 import type { Milestone, PetEvent } from "./events";
 
 export type ReduceResult = {
@@ -119,6 +119,18 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       const record = caretakerRecord(state, event.caretakerId);
       let applied = 0;
 
+      // The open want, granted iff the action matches its kind (and item,
+      // where the kind names one) inside its own window — the deadline lives
+      // in the fold, so a dead leader cannot turn a lapse into a late
+      // jackpot (SPEC §25.3). A care event on the boundary tick is already
+      // the next window and can never fulfill.
+      const want = state.wantOpen;
+      const fulfills =
+        want != null &&
+        windowIndexAt(event.tick) === want.window &&
+        WANT_FULFILLING_ACTION[want.kind] === event.action &&
+        (want.itemId === undefined || want.itemId === event.itemId);
+
       if (event.action === "MEDICATE") {
         if (state.sick) {
           state.sick = false;
@@ -143,10 +155,23 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
             base = Math.floor((base * (100 + toysPlayBonusPercent(state.toys))) / 100);
             if (event.performance !== undefined) base = Math.floor((base * event.performance) / 100);
           }
+          // Granting a wish pays extra — last among the pre-curve modifiers,
+          // so a favorite-food craving stacks both bonuses (SPEC §25.3).
+          if (fulfills) base = Math.floor((base * WANT_BONUS_PERCENT) / 100);
           const curved = diminishedMagnitude(base, state.needs[magnitude.need]);
           applied = Math.min(curved, budgetRemaining(record, magnitude.need, event.tick));
           state.needs[magnitude.need] = clamp(state.needs[magnitude.need] + applied, NEED_MAX);
           recordApplied(record, magnitude.need, event.tick, applied);
+          if (fulfills && applied > 0) {
+            // A budget-exhausted no-op does not grant a wish (SPEC §25.3).
+            state.wantSettledWindow = want.window;
+            state.wantOpen = null;
+            milestones.push({
+              kind: "WANT_FULFILLED",
+              tick: event.tick,
+              detail: want.itemId !== undefined ? `${want.kind}:${want.itemId}` : want.kind,
+            });
+          }
           if (food) {
             // The joy side-bonus is bounded by purchases, so it bypasses the
             // caretaker budget but never the clamp.

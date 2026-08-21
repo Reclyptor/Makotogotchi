@@ -7,7 +7,7 @@ import { budgetRemaining, caretakerRecord } from "./score";
 import { quirks } from "./quirks";
 import { FOOD_ITEMS, QUIRK_DISLIKED_PERCENT, QUIRK_FAVORITE_PERCENT, type FoodItemId } from "./economy";
 import { EventLog, hatchedState, replay, TEST_GENERATION, testCtx } from "./testkit";
-import { WANT_EXPIRY_JOY_DEBIT, windowEndTick, windowIndexAt, type Want } from "./wants";
+import { WANT_BONUS_PERCENT, WANT_EXPIRY_JOY_DEBIT, windowEndTick, windowIndexAt, type Want } from "./wants";
 import {
   ACTION_MAGNITUDE,
   COOLDOWNS,
@@ -285,12 +285,12 @@ describe("economy items (SPEC §13)", () => {
   });
 });
 
-describe("want events (SPEC §25.2)", () => {
-  const opened = (seq: number, tick: number, want: Want, windowIndex = windowIndexAt(tick)) =>
-    ({ type: "WANT_OPENED", generationId: TEST_GENERATION.id, seq, tick, windowIndex, want }) as const;
-  const expired = (seq: number, tick: number, windowIndex: number) =>
-    ({ type: "WANT_EXPIRED", generationId: TEST_GENERATION.id, seq, tick, windowIndex }) as const;
+const opened = (seq: number, tick: number, want: Want, windowIndex = windowIndexAt(tick)) =>
+  ({ type: "WANT_OPENED", generationId: TEST_GENERATION.id, seq, tick, windowIndex, want }) as const;
+const expired = (seq: number, tick: number, windowIndex: number) =>
+  ({ type: "WANT_EXPIRED", generationId: TEST_GENERATION.id, seq, tick, windowIndex }) as const;
 
+describe("want events (SPEC §25.2)", () => {
   it("keeps both fields off genesis state — pre-feature logs fold byte-identically", () => {
     const state = genesis(TEST_GENERATION);
     expect("wantOpen" in state).toBe(false);
@@ -368,5 +368,96 @@ describe("want events (SPEC §25.2)", () => {
     const { state: open } = reduce(drained, opened(90, 1000, { kind: "cuddle" }), ctx);
     const { state: lapsed } = reduce(open, expired(91, windowEndTick(window), window), ctx);
     expect(lapsed.needs.joy).toBe(0);
+  });
+});
+
+describe("want fulfillment (SPEC §25.3)", () => {
+  /** A born pet at tick 1000 with an empty joy meter — room for a full PET. */
+  const craving = (want: Want) => {
+    const base = { ...project(hatchedState(ctx), 1000, ctx).state };
+    base.needs = { ...base.needs, joy: 0, hunger: 0 };
+    return { base, open: reduce(base, opened(90, 1000, want), ctx).state };
+  };
+  const care = (tick: number, action: Parameters<EventLog["care"]>[1], itemId?: string) => ({
+    ...new EventLog().care(tick, action),
+    seq: 91,
+    ...(itemId !== undefined ? { itemId } : {}),
+  });
+
+  it("grants a cuddle: 1.5× pre-curve, settle, and a same-burst milestone", () => {
+    const { base, open } = craving({ kind: "cuddle" });
+    const plain = reduce(base, care(1010, "PET"), ctx);
+    const granted = reduce(open, care(1010, "PET"), ctx);
+    expect(plain.applied).toBe(ACTION_MAGNITUDE.PET);
+    expect(granted.applied).toBe(Math.floor((ACTION_MAGNITUDE.PET * WANT_BONUS_PERCENT) / 100));
+    expect(granted.state.wantOpen).toBeNull();
+    expect(granted.state.wantSettledWindow).toBe(windowIndexAt(1000));
+    expect(granted.milestones).toContainEqual({ kind: "WANT_FULFILLED", tick: 1010, detail: "cuddle" });
+  });
+
+  it("the wrong action does not fulfill", () => {
+    const { open } = craving({ kind: "cuddle" });
+    const result = reduce(open, care(1010, "CLEAN"), ctx);
+    expect(result.state.wantOpen).toEqual({ window: windowIndexAt(1000), kind: "cuddle" });
+    expect(result.milestones.some((m) => m.kind === "WANT_FULFILLED")).toBe(false);
+  });
+
+  it("a craving names its dish: the exact item fulfills, anything else does not", () => {
+    const { favoriteFood } = quirks(TEST_GENERATION.seed);
+    const { open } = craving({ kind: "crave-food", itemId: favoriteFood });
+
+    const bare = reduce(open, care(1010, "FEED"), ctx);
+    expect(bare.state.wantOpen).not.toBeNull();
+
+    // The favorite-food jackpot: food scale × quirk × want bonus, in order,
+    // each floored — mirroring the reducer's integer chain exactly.
+    const food = FOOD_ITEMS[favoriteFood];
+    let base: number = ACTION_MAGNITUDE.FEED;
+    base = Math.floor((base * food.scalePercent) / 100);
+    base = Math.floor((base * QUIRK_FAVORITE_PERCENT) / 100);
+    base = Math.floor((base * WANT_BONUS_PERCENT) / 100);
+    const granted = reduce(open, care(1010, "FEED", favoriteFood), ctx);
+    expect(granted.applied).toBe(base);
+    expect(granted.milestones).toContainEqual({
+      kind: "WANT_FULFILLED",
+      tick: 1010,
+      detail: `crave-food:${favoriteFood}`,
+    });
+  });
+
+  it("the deadline lives in the fold: past the window nothing fulfills, boundary included", () => {
+    const { open } = craving({ kind: "cuddle" });
+    const window = windowIndexAt(1000);
+    const atBoundary = reduce(open, care(windowEndTick(window), "PET"), ctx);
+    expect(atBoundary.applied).toBe(ACTION_MAGNITUDE.PET);
+    expect(atBoundary.state.wantOpen).not.toBeNull();
+    const wayLate = reduce(open, care(windowEndTick(window) + 600, "PET"), ctx);
+    expect(wayLate.state.wantOpen).not.toBeNull();
+    expect(wayLate.milestones.some((m) => m.kind === "WANT_FULFILLED")).toBe(false);
+  });
+
+  it("a zero-applied action does not grant the wish", () => {
+    const { open } = craving({ kind: "cuddle" });
+    const full = { ...open, needs: { ...open.needs, joy: NEED_MAX } };
+    // Same tick as the state, so no decay re-opens room in the meter.
+    const result = reduce(full, care(1000, "PET"), ctx);
+    expect(result.applied).toBe(0);
+    expect(result.state.wantOpen).not.toBeNull();
+    expect(result.milestones.some((m) => m.kind === "WANT_FULFILLED")).toBe(false);
+  });
+
+  it("fulfillment settles the window: a second matching action earns no second bonus", () => {
+    const { open } = craving({ kind: "cuddle" });
+    const granted = reduce(open, care(1010, "PET"), ctx).state;
+    const again = reduce(granted, { ...care(1015, "PET"), caretakerId: "caretaker-b" }, ctx);
+    expect(again.milestones.some((m) => m.kind === "WANT_FULFILLED")).toBe(false);
+    expect(again.state.wantSettledWindow).toBe(windowIndexAt(1000));
+  });
+
+  it("an unrecognized want kind from a newer log is unmatchable, never a crash", () => {
+    const { open } = craving({ kind: "moon-cheese" as Want["kind"] });
+    const result = reduce(open, care(1010, "PET"), ctx);
+    expect(result.applied).toBe(ACTION_MAGNITUDE.PET);
+    expect(result.state.wantOpen).toEqual({ window: windowIndexAt(1000), kind: "moon-cheese" });
   });
 });
