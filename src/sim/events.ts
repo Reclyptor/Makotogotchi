@@ -10,6 +10,7 @@
 import { z } from "zod";
 import { CARE_ACTIONS } from "./tuning";
 import { PERFORMANCE_MAX, PERFORMANCE_MIN } from "./economy";
+import { WANT_KINDS } from "./wants";
 
 export const NICKNAME_PATTERN = /^[\p{L}\p{N} _-]{2,16}$/u;
 
@@ -56,6 +57,7 @@ export const MILESTONE_KINDS = [
   "AMBIENT", // detail carries the shared rare event's name (SPEC §21.5)
   "QUEST_DONE", // detail carries the completed quest's id (SPEC §21.7)
   "FUNDED", // detail carries the funded grand item's id (SPEC §21.8)
+  "WANT_FULFILLED", // detail carries the want's kind, or kind:itemId (SPEC §25.3)
 ] as const;
 
 export const milestoneEventSchema = z.object({
@@ -76,12 +78,38 @@ export const populationEventSchema = z.object({
   count: z.number().int().min(0).max(1_000_000),
 });
 
+/**
+ * The leader opened a window's want (SPEC §25.2). Like POPULATION, this is a
+ * real fold input: whether the pet was awake for the window is schedule
+ * knowledge the sim lacks, so it enters as an event. The payload is
+ * authoritative — reduce() folds what it says was wanted, never re-deriving
+ * from wantAt, so retuning catalogs cannot re-fold an old log.
+ */
+export const wantOpenedEventSchema = z.object({
+  ...eventBase,
+  type: z.literal("WANT_OPENED"),
+  windowIndex: z.number().int().nonnegative(),
+  want: z.object({
+    kind: z.enum(WANT_KINDS),
+    itemId: z.string().min(1).optional(),
+  }),
+});
+
+/** The want lapsed: a clamped joy debit, appended by the leader (SPEC §25.2). */
+export const wantExpiredEventSchema = z.object({
+  ...eventBase,
+  type: z.literal("WANT_EXPIRED"),
+  windowIndex: z.number().int().nonnegative(),
+});
+
 export const petEventSchema = z.discriminatedUnion("type", [
   careEventSchema,
   hatchedEventSchema,
   toyAddedEventSchema,
   milestoneEventSchema,
   populationEventSchema,
+  wantOpenedEventSchema,
+  wantExpiredEventSchema,
 ]);
 
 export type CareEvent = z.infer<typeof careEventSchema>;
@@ -89,6 +117,8 @@ export type HatchedEvent = z.infer<typeof hatchedEventSchema>;
 export type ToyAddedEvent = z.infer<typeof toyAddedEventSchema>;
 export type MilestoneEvent = z.infer<typeof milestoneEventSchema>;
 export type PopulationEvent = z.infer<typeof populationEventSchema>;
+export type WantOpenedEvent = z.infer<typeof wantOpenedEventSchema>;
+export type WantExpiredEvent = z.infer<typeof wantExpiredEventSchema>;
 export type PetEvent = z.infer<typeof petEventSchema>;
 
 export type MilestoneKind = (typeof MILESTONE_KINDS)[number];

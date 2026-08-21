@@ -3,6 +3,7 @@
 // lives in this file, and nothing stored here is recomputable from the rest.
 
 import { STAGE_STARTS, type AdultForm, type CareAction, type LifeStage, type NeedKey, type SleepPhase } from "./tuning";
+import type { WantKind } from "./wants";
 
 export type Needs = Record<NeedKey, number>;
 
@@ -39,6 +40,13 @@ export type CaretakerRecord = {
   budget: Partial<Record<NeedKey, BudgetDay[]>>;
 };
 
+/** The open want as recorded by WANT_OPENED (SPEC §25.2). */
+export type WantOpen = {
+  window: number;
+  kind: WantKind;
+  itemId?: string;
+};
+
 export type PetState = {
   generation: Generation;
   /** The tick this state is settled to. project() advances it. */
@@ -69,6 +77,19 @@ export type PetState = {
    * section, where it reads as the baseline and replays unchanged.
    */
   population?: number;
+  /**
+   * The want currently open, set by WANT_OPENED and cleared to explicit null
+   * on settlement — never undefined, which the hot-state JSON round trip and
+   * BSON serialize differently (SPEC §25.2). Absent in histories written
+   * before that section.
+   */
+  wantOpen?: WantOpen | null;
+  /**
+   * Monotonic high-water mark of settled (fulfilled or expired) want windows.
+   * An expired window can never re-open, so no replayed or re-appended event
+   * can debit the same window twice (SPEC §25.2). Absent reads as −∞.
+   */
+  wantSettledWindow?: number | null;
 };
 
 /** Pure function of hatch time — never stored (SPEC §4.3). */

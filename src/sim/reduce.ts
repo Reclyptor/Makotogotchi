@@ -18,6 +18,7 @@ import {
   type NeedKey,
 } from "./tuning";
 import { budgetRemaining } from "./score";
+import { WANT_EXPIRY_JOY_DEBIT } from "./wants";
 import type { Milestone, PetEvent } from "./events";
 
 export type ReduceResult = {
@@ -59,6 +60,36 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       // Difficulty changes from this tick forward; the ticks already
       // projected above kept the rate they were lived at.
       state.population = event.count;
+      return { state, milestones, applied: 0 };
+    }
+
+    case "WANT_OPENED": {
+      // A real fold input like POPULATION: whether the pet was awake for
+      // this window is schedule knowledge the sim lacks, so the leader
+      // records the opening. The payload is authoritative — never re-derived
+      // from wantAt. The high-water mark is the idempotence guard: a settled
+      // window can never re-open, so duplicate appends fold to nothing and a
+      // window is never debited twice (SPEC §25.2).
+      const settled = state.wantSettledWindow ?? null;
+      if (state.wantOpen == null && (settled === null || event.windowIndex > settled)) {
+        state.wantOpen = {
+          window: event.windowIndex,
+          kind: event.want.kind,
+          // Conditional spread: `itemId: undefined` survives structuredClone
+          // but not the hot-state JSON round trip (SPEC §25.2).
+          ...(event.want.itemId !== undefined ? { itemId: event.want.itemId } : {}),
+        };
+      }
+      return { state, milestones, applied: 0 };
+    }
+
+    case "WANT_EXPIRED": {
+      if (state.wantOpen != null && state.wantOpen.window === event.windowIndex) {
+        state.needs.joy = clamp(state.needs.joy - WANT_EXPIRY_JOY_DEBIT, NEED_MAX);
+        state.wantSettledWindow = event.windowIndex;
+        // Explicit null, never undefined or delete (SPEC §25.2).
+        state.wantOpen = null;
+      }
       return { state, milestones, applied: 0 };
     }
 

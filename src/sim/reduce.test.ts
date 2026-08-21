@@ -7,6 +7,7 @@ import { budgetRemaining, caretakerRecord } from "./score";
 import { quirks } from "./quirks";
 import { FOOD_ITEMS, QUIRK_DISLIKED_PERCENT, QUIRK_FAVORITE_PERCENT, type FoodItemId } from "./economy";
 import { EventLog, hatchedState, replay, TEST_GENERATION, testCtx } from "./testkit";
+import { WANT_EXPIRY_JOY_DEBIT, windowEndTick, windowIndexAt, type Want } from "./wants";
 import {
   ACTION_MAGNITUDE,
   COOLDOWNS,
@@ -281,5 +282,91 @@ describe("economy items (SPEC §13)", () => {
     expect(canPerform(resick, "MEDICATE", "b", ctx, "super_medicine")).toMatchObject({ ok: true });
     // But a healthy pet still rejects it.
     expect(canPerform({ ...cured, tick: 1001 }, "MEDICATE", "b", ctx, "super_medicine")).toMatchObject({ ok: false, reason: "NOT_SICK" });
+  });
+});
+
+describe("want events (SPEC §25.2)", () => {
+  const opened = (seq: number, tick: number, want: Want, windowIndex = windowIndexAt(tick)) =>
+    ({ type: "WANT_OPENED", generationId: TEST_GENERATION.id, seq, tick, windowIndex, want }) as const;
+  const expired = (seq: number, tick: number, windowIndex: number) =>
+    ({ type: "WANT_EXPIRED", generationId: TEST_GENERATION.id, seq, tick, windowIndex }) as const;
+
+  it("keeps both fields off genesis state — pre-feature logs fold byte-identically", () => {
+    const state = genesis(TEST_GENERATION);
+    expect("wantOpen" in state).toBe(false);
+    expect("wantSettledWindow" in state).toBe(false);
+  });
+
+  it("WANT_OPENED sets the open want from its authoritative payload", () => {
+    const state = hatchedState(ctx);
+    const { state: open } = reduce(state, opened(90, 1000, { kind: "cuddle" }), ctx);
+    expect(open.wantOpen).toEqual({ window: windowIndexAt(1000), kind: "cuddle" });
+    // Conditional spread: no itemId key at all, not an undefined one.
+    expect("itemId" in open.wantOpen!).toBe(false);
+    // Nothing settled yet — the mark stays absent, like population before §23.
+    expect("wantSettledWindow" in open).toBe(false);
+  });
+
+  it("a second open while one is live is a no-op", () => {
+    const state = hatchedState(ctx);
+    const { state: open } = reduce(state, opened(90, 1000, { kind: "cuddle" }), ctx);
+    const { state: again } = reduce(open, opened(91, 1600, { kind: "dust-bath" }), ctx);
+    expect(again.wantOpen).toEqual({ window: windowIndexAt(1000), kind: "cuddle" });
+  });
+
+  it("expiry debits joy through the clamp, settles the window, and clears to explicit null", () => {
+    const state = hatchedState(ctx);
+    const window = windowIndexAt(1000);
+    const { state: open } = reduce(state, opened(90, 1000, { kind: "cuddle" }), ctx);
+    const boundary = windowEndTick(window);
+    const control = project(open, boundary, ctx).state.needs.joy;
+    const { state: lapsed } = reduce(open, expired(91, boundary, window), ctx);
+    expect(lapsed.needs.joy).toBe(control - WANT_EXPIRY_JOY_DEBIT);
+    expect(lapsed.wantSettledWindow).toBe(window);
+    expect(lapsed.wantOpen).toBeNull();
+    expect("wantOpen" in lapsed).toBe(true);
+  });
+
+  it("a settled window can never re-open, so the debit cannot double", () => {
+    const state = hatchedState(ctx);
+    const window = windowIndexAt(1000);
+    const boundary = windowEndTick(window);
+    const { state: open } = reduce(state, opened(90, 1000, { kind: "cuddle" }), ctx);
+    const { state: lapsed } = reduce(open, expired(91, boundary, window), ctx);
+    // A lost Redis once-key re-appends both events for the SAME window;
+    // the high-water mark makes both fold to nothing.
+    const { state: reopened } = reduce(lapsed, opened(92, boundary + 5, { kind: "cuddle" }, window), ctx);
+    expect(reopened.wantOpen).toBeNull();
+    const control = project(lapsed, boundary + 6, ctx).state.needs.joy;
+    const { state: relapsed } = reduce(reopened, expired(93, boundary + 6, window), ctx);
+    expect(relapsed.needs.joy).toBe(control);
+    expect(relapsed.wantSettledWindow).toBe(window);
+  });
+
+  it("settlement never blocks the next window from opening", () => {
+    const state = hatchedState(ctx);
+    const window = windowIndexAt(1000);
+    const { state: open } = reduce(state, opened(90, 1000, { kind: "cuddle" }), ctx);
+    const { state: lapsed } = reduce(open, expired(91, windowEndTick(window), window), ctx);
+    const nextTick = windowEndTick(window) + 5;
+    const { state: next } = reduce(lapsed, opened(92, nextTick, { kind: "dust-bath" }), ctx);
+    expect(next.wantOpen).toEqual({ window: window + 1, kind: "dust-bath" });
+  });
+
+  it("expiry for a window that is not open is a no-op", () => {
+    const state = hatchedState(ctx);
+    const control = project(state, 3000, ctx).state.needs.joy;
+    const { state: after } = reduce(state, expired(90, 3000, 5), ctx);
+    expect(after.needs.joy).toBe(control);
+    expect("wantSettledWindow" in after).toBe(false);
+  });
+
+  it("the debit clamps at zero instead of going negative", () => {
+    const drained = { ...project(hatchedState(ctx), 1000, ctx).state };
+    drained.needs = { ...drained.needs, joy: 20_000 };
+    const window = windowIndexAt(1000);
+    const { state: open } = reduce(drained, opened(90, 1000, { kind: "cuddle" }), ctx);
+    const { state: lapsed } = reduce(open, expired(91, windowEndTick(window), window), ctx);
+    expect(lapsed.needs.joy).toBe(0);
   });
 });
