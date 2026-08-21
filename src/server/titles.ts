@@ -9,8 +9,11 @@
 import type { Collection, Db } from "mongodb";
 import { quirks } from "@/sim/quirks";
 import type { CareAction } from "@/sim/tuning";
+import type { Generation } from "@/sim/model";
+import type { Milestone } from "@/sim/events";
 import { isDuplicateKeyError } from "./db/collections";
 import { anonymousName, nicknameMap } from "./social";
+import { localHourAt } from "./schedule";
 import type { TitleMessage } from "./engine/messages";
 
 export const TITLE_IDS = ["night-nurse", "chef", "groundskeeper", "sandman", "cuddler", "wish-granter"] as const;
@@ -174,6 +177,47 @@ export const titleHolders = async (db: Db, generationId: string): Promise<TitleH
   await ensureTitleIndexes(db);
   const docs = await titles(db).find({ generationId }).toArray();
   return docs.map((doc) => ({ titleId: doc.titleId, caretakerId: doc.caretakerId, value: doc.value }));
+};
+
+/** Current holders keyed by caretaker — the presence join (SPEC §24.4). */
+export const holderChips = async (db: Db, generationId: string): Promise<Map<string, TitleId[]>> => {
+  const chips = new Map<string, TitleId[]>();
+  for (const holder of await titleHolders(db, generationId)) {
+    chips.set(holder.caretakerId, [...(chips.get(holder.caretakerId) ?? []), holder.titleId]);
+  }
+  return chips;
+};
+
+/**
+ * The one call both write routes make (SPEC §24.3): classify the accepted
+ * action off the care outcome, roll the counts, and publish any takeover.
+ */
+export const rollTitles = async (
+  db: Db,
+  publish: (message: TitleMessage) => Promise<void>,
+  input: {
+    generation: Generation;
+    caretakerId: string;
+    action: CareAction;
+    itemId?: string;
+    tick: number;
+    timeZone: string;
+    milestones: readonly Milestone[];
+  },
+): Promise<void> => {
+  const earned = classifyTitles({
+    action: input.action,
+    ...(input.itemId !== undefined ? { itemId: input.itemId } : {}),
+    seed: input.generation.seed,
+    localHour: localHourAt(input.generation.genesisEpochMs, input.tick, input.timeZone),
+    becameAsleep: input.milestones.some((milestone) => milestone.kind === "SLEPT"),
+    wantFulfilled: input.milestones.some((milestone) => milestone.kind === "WANT_FULFILLED"),
+  });
+  if (earned.length === 0) return;
+  const takeovers = await settleTitles(db, input.generation.id, input.caretakerId, earned);
+  for (const message of await takeoverMessages(db, takeovers)) {
+    await publish(message);
+  }
 };
 
 /** Resolve takeovers into ready-to-publish messages (SPEC §24.2). */

@@ -43,7 +43,7 @@ export type SnapshotMessage = {
  */
 export type PresenceView = {
   count: number;
-  caretakers: { id: string; name: string }[];
+  caretakers: { id: string; name: string; titles: string[] }[];
 };
 
 export type PresenceMessage = PresenceView & { type: "presence" };

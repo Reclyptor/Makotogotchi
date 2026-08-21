@@ -9,6 +9,7 @@ import { generations } from "./db/collections";
 import { PetEngine } from "./engine/engine";
 import { Lifecycle } from "./engine/lifecycle";
 import { caretakerProfile, recordContribution } from "./social";
+import { settleTitles } from "./titles";
 import { proposeName, voteForName } from "./votes";
 import { startTestInfra, type TestInfra } from "./testsetup";
 import type { Generation } from "@/sim/model";
@@ -64,6 +65,9 @@ describe("generation lifecycle", () => {
       await recordContribution(database, { caretakerId: "bo", generationId: first.id, action: "PLAY", applied: played.applied, tick: played.state.tick });
     }
 
+    // Ana holds a title going into the grave (SPEC §24.2).
+    await settleTitles(database, first.id, "ana", ["cuddler"]);
+
     // Total abandonment: the pet dies.
     advanceTicks(10 * TICKS_PER_DAY);
     state = await engine.tick(first);
@@ -77,6 +81,8 @@ describe("generation lifecycle", () => {
     const sealed = await generations(database).findOne({ _id: first.id });
     expect(sealed?.memorial).not.toBeNull();
     expect(sealed?.memorial?.ranking.map((row) => row.caretakerId).sort()).toEqual(["ana", "bo"]);
+    // The final title holders are frozen in, like quirks (SPEC §24.2).
+    expect(sealed?.memorial?.titles).toEqual([{ titleId: "cuddler", caretakerId: "ana", name: "Friend ana", value: 1 }]);
     expect((await caretakerProfile(database, "ana"))?.generationsSurvived).toBe(1);
     expect((await caretakerProfile(database, "bo"))?.generationsSurvived).toBe(1);
 

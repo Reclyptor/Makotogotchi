@@ -17,6 +17,7 @@ import { quirks } from "@/sim/quirks";
 import { QUIRK_FAVORITE_GAME_COIN_PERCENT } from "@/sim/economy";
 import { anonymousName, creditCoins, nicknameMap, recordContribution } from "@/server/social";
 import { settleWantFulfillment } from "@/server/wants";
+import { rollTitles } from "@/server/titles";
 import { submitScore } from "@/server/records";
 import { isoWeekKeyAtTick } from "@/server/schedule";
 import { env } from "@/server/env";
@@ -165,6 +166,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   await creditCoins(await db(), identity.caretakerId, coins);
   // Granting a play-game wish pays extra (SPEC §25.4).
   const wantCoins = await settleWantFulfillment(await db(), identity.caretakerId, outcome.milestones);
+  // And the title race advances — Wish Granter can move here (SPEC §24.3).
+  await rollTitles(await db(), publish, {
+    generation: current,
+    caretakerId: identity.caretakerId,
+    action: "PLAY",
+    itemId: sessionGame.id,
+    tick: outcome.state.tick,
+    timeZone: env().PET_TIMEZONE,
+    milestones: outcome.milestones,
+  });
 
   // Records are offered after the coins are safely credited, so a board
   // write can never cost someone their payout (SPEC §21.3).

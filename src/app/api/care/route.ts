@@ -15,7 +15,9 @@ import { key, redis } from "@/server/redis/client";
 import { LIMITS, takeToken } from "@/server/ratelimit";
 import { recordContribution } from "@/server/social";
 import { settleWantFulfillment } from "@/server/wants";
+import { rollTitles } from "@/server/titles";
 import { consumeItem, refundItem } from "@/server/shop";
+import { env } from "@/server/env";
 import { caretakerCookieHeader, clientIp, resolveCaretaker } from "@/server/http";
 
 const bodySchema = z.object({
@@ -94,6 +96,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   });
   // Granting a wish pays extra (SPEC §25.4).
   const wantCoins = await settleWantFulfillment(await db(), identity.caretakerId, outcome.milestones);
+  // And the title race advances (SPEC §24.3).
+  await rollTitles(
+    await db(),
+    async (message) => {
+      await redis().publish(key("events"), JSON.stringify(message));
+    },
+    {
+      generation: current,
+      caretakerId: identity.caretakerId,
+      action: parsed.data.action,
+      ...(itemId !== undefined ? { itemId } : {}),
+      tick: outcome.state.tick,
+      timeZone: env().PET_TIMEZONE,
+      milestones: outcome.milestones,
+    },
+  );
 
   return withCookie(
     NextResponse.json({

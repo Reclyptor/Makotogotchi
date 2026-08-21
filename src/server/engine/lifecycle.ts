@@ -12,7 +12,8 @@ import { quirks } from "@/sim/quirks";
 import { INCUBATION_TICKS, MOURNING_TICKS } from "@/sim/tuning";
 import { generations, isDuplicateKeyError } from "../db/collections";
 import { createGeneration } from "../db/repository";
-import { generationRanking, incrementGenerationsSurvived } from "../social";
+import { anonymousName, generationRanking, incrementGenerationsSurvived, nicknameMap } from "../social";
+import { titleHolders } from "../titles";
 import { resolveWinner } from "../votes";
 import type { PetEngine } from "./engine";
 
@@ -56,11 +57,20 @@ export class Lifecycle {
     if (!doc) return;
     const claimed = await generations(this.db).findOneAndUpdate(
       { _id: generationId, memorial: null, died: { $ne: null } },
-      { $set: { memorial: { sealedAt: new Date(), ranking: [], quirks: quirks(doc.seed) } } },
+      { $set: { memorial: { sealedAt: new Date(), ranking: [], titles: [], quirks: quirks(doc.seed) } } },
     );
     if (!claimed) return; // already sealed, or death not yet recorded
     const ranking = await generationRanking(this.db, generationId);
-    await generations(this.db).updateOne({ _id: generationId }, { $set: { "memorial.ranking": ranking } });
+    // The final title holders, frozen like quirks are (SPEC §24.2).
+    const holders = await titleHolders(this.db, generationId);
+    const names = await nicknameMap(this.db, holders.map((holder) => holder.caretakerId));
+    const titles = holders.map((holder) => ({
+      titleId: holder.titleId,
+      caretakerId: holder.caretakerId,
+      name: names.get(holder.caretakerId) ?? anonymousName(holder.caretakerId),
+      value: holder.value,
+    }));
+    await generations(this.db).updateOne({ _id: generationId }, { $set: { "memorial.ranking": ranking, "memorial.titles": titles } });
     await incrementGenerationsSurvived(this.db, generationId);
   }
 

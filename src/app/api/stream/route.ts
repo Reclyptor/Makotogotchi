@@ -11,6 +11,7 @@ import { key, redis } from "@/server/redis/client";
 import { subscribeToEvents } from "@/server/stream/hub";
 import { dropPresence, listPresence, PresenceBroadcaster, shouldBroadcastPresence, touchPresence } from "@/server/presence";
 import { anonymousName, caretakerProfile, nicknameMap } from "@/server/social";
+import { holderChips } from "@/server/titles";
 import { snapshotPayload } from "@/server/snapshot";
 import { caretakerCookieHeader, clientIp, resolveCaretaker } from "@/server/http";
 import type { EngineMessage, PresenceView } from "@/server/engine/messages";
@@ -34,7 +35,13 @@ const streamCounts = (): Map<string, number> => {
 const presenceView = async (): Promise<PresenceView> => {
   const ids = await listPresence(redis(), key("presence"));
   const names = await nicknameMap(await db(), ids);
-  return { count: ids.length, caretakers: ids.map((id) => ({ id, name: names.get(id) ?? anonymousName(id) })) };
+  // Current title holders wear their chips in the presence list (SPEC §24.4).
+  const { generation } = await runtime();
+  const chips = await holderChips(await db(), (await generation()).id);
+  return {
+    count: ids.length,
+    caretakers: ids.map((id) => ({ id, name: names.get(id) ?? anonymousName(id), titles: chips.get(id) ?? [] })),
+  };
 };
 
 const publishPresence = async (): Promise<void> => {

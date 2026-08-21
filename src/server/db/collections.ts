@@ -26,6 +26,11 @@ export type GenerationDoc = {
      * Absent on generations sealed before quirks existed.
      */
     quirks?: Quirks;
+    /**
+     * Who held each contested title when the pet died (SPEC §24.2). Absent
+     * on generations sealed before titles existed — no backfill.
+     */
+    titles?: { titleId: string; caretakerId: string; name: string; value: number }[];
   } | null;
 };
 
