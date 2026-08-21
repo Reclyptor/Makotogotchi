@@ -1,7 +1,7 @@
 # Makotogotchi — Specification
 
-> **Version:** 1.1 (approved; revised after adversarial plan review)
-> **Last Updated:** 2026-08-15
+> **Version:** 1.2 (approved; §22.8, §24, §25 added after adversarial plan review)
+> **Last Updated:** 2026-08-21
 > **Status:** Source of truth for the entire project. No code lands that
 > contradicts this document. When reality and this document disagree, one of
 > the two is a bug — decide which, then fix it.
@@ -30,7 +30,12 @@
 18. [Deployment](#18-deployment)
 19. [Cloudflare](#19-cloudflare)
 20. [Build Phases](#20-build-phases)
-21. [Appendix: What the Original Got Wrong](#21-appendix-what-the-original-got-wrong)
+21. [Liveliness and Community Program](#21-liveliness-and-community-program)
+22. [The Living Room](#22-the-living-room)
+23. [Dynamic Difficulty](#23-dynamic-difficulty)
+24. [Caretaker Titles](#24-caretaker-titles)
+25. [Pet Wants](#25-pet-wants)
+26. [Appendix: What the Original Got Wrong](#26-appendix-what-the-original-got-wrong)
 
 ---
 
@@ -95,8 +100,9 @@ alive the longest. Then a new egg begins to hatch, and the community names it.
 
 ### 2.2 Needs
 
-Five needs, each an integer in `[0, 100000]` (rendered as a percentage with
-three decimal places of internal precision; see §4.2 for why integers).
+Five needs, each an integer in `[0, 1_000_000]` (display divides by 10,000
+for a percentage with two decimal places; see §4.2 for why integers — this
+matches `NEED_MAX` in §5, which is authoritative).
 
 | Need | Decays because | Restored by | Notes |
 | --- | --- | --- | --- |
@@ -1785,6 +1791,83 @@ are testable claims, not taste:
 | **B3** | Weather and season | Rain, snow, overcast, seasonal views | each forecast renders distinctly and the room tints with it |
 | **B4** | Condition | Room warmth and dimming from derived state | a critical pet is visibly rough on the room before the meters are read |
 | **B5** | Themes | Theme registry, `cabin` and `seaside` as grand items, switching | two caretakers fund a theme, switch to it, and both rooms change |
+| **B6** | Venue framework | `venueAt` rotation, `Venue` abstraction, room refactored into the `home` venue, `garden` and `meadow` | `home` renders pixel-identical to before the refactor; every client draws the same venue on the same pet-day |
+| **B7** | Funded venues | `beach` and `forest` as grand items joining the rotation pool | funding a venue adds it to rotation for every client; an unfunded venue is never drawn |
+
+### 22.8 Day-Trip Venues
+
+The same room every day, however alive, eventually reads as wallpaper. So
+Makoto goes places: each pet-day, a seeded draw decides where the day is
+spent — at home in the room, or out at a **venue**, a full outdoor scene
+drawn under the same sky. The rotation obeys both of §22's governing
+constraints: it is **shared** (one draw per pet-day, from data every client
+holds) and it is **presentation** (no `PetState`, no event log — a venue
+changes what is behind the pet, never what the pet is).
+
+**The draw.** `venueAt(seed, dayIndex, ownedVenueIds)` in
+`src/sim/atmosphere.ts`, beside the weather forecast it mirrors: a
+`RNG_PURPOSE.venueOdds` draw decides home-or-away with `home` keeping
+roughly half of all days, and an independent `RNG_PURPOSE.venuePick` draw
+picks uniformly among the owned away venues — one purpose per draw, the
+ambient convention. `dayIndex` is **`petClock`'s day index** (epoch days in
+the pet's zone — the same arithmetic the weather forecast already keys on),
+and the pool is the venue catalog **in declaration order, filtered to
+owned**, so the uniform pick cannot depend on array-order accidents. Like
+the forecast, the day's venue is fixed the moment its `dayIndex` turns over
+— two caretakers a continent apart discuss the same meadow.
+
+Home days are half of the rotation *on purpose*: the room carries the
+community's investment — funded themes, communal decor, grand items — and a
+rotation that hid that investment most days would quietly refund it. Away
+days are the novelty; home days are why the novelty doesn't cheapen the
+room.
+
+**The pool is state, and that is fine.** Which venues are owned is mutable
+server state, not a seeded fact — so determinism comes from the inputs, not
+the function alone. `roomState` already broadcasts to every client (theme
+switching depends on it); the venue pool rides the same object, so every
+viewer computes the same venue from the same `(seed, dayIndex, pool)`. When
+a funding completes mid-day the pool changes once, identically for everyone,
+and the day's draw may re-resolve — the beach can open *today*, which is a
+feature and the feed says so.
+
+**The venues.**
+
+| Venue | Availability | Scene |
+| --- | --- | --- |
+| `home` | always | the room of §22.3, themes and decor unchanged |
+| `garden` | free | fenced backyard: flowerbeds, a vegetable patch, blossom and harvest states riding the season |
+| `meadow` | free | open wildflower meadow under the full sky, grasses swaying on wall-clock wind |
+| `beach` | grand item, 800 | sand, animated surf, a water horizon |
+| `forest` | grand item, 950 | pine clearing, dappled light, a stump to perch on; snowed-in come winter |
+
+**Architecture.** A `Venue` supplies its named ramps and its back-to-front
+draw layers; the current room becomes the `home` venue rather than a special
+case, and must render pixel-identical through the refactor. Outdoor venues
+draw the sky **directly** — no window, no pane. The sky machinery (§22.2)
+is already theme-independent, so sun, moon, stars, clouds, weather, and
+season reuse wholesale; weather renders full-bleed, and the window's light
+pool generalizes to direct sun patches. The wander band is venue-defined:
+the rug-inset rule of §22.3 generalizes to each venue's ground span, with
+the same stage-scaled insets and the same clamp against the scene's edges.
+
+Communal decor and grand furniture draw on `home` only — a kotatsu in a
+meadow is a joke, not a place. Condition dimming (§22.7 B4) applies
+everywhere: a struggling pet roughens the meadow exactly as it roughens the
+room.
+
+**Funding.** `beach` and `forest` are ordinary §21.8 grand items — the
+`funding` collection, the contribute route, the `FUNDED` milestone, the
+top-three-contributors feed line — with one distinct effect: on funding they
+join the rotation pool via `roomState` instead of placing an object in the
+room. No new economy mechanics.
+
+**Visibility.** A small caption beside the difficulty line names the day's
+location — *"Makoto is at the meadow today"* — so an away day reads as an
+outing, not a bug. The sky's offscreen cache key gains the venue; the §22.6
+readability check runs against each venue's darkest and lightest extremes;
+reduced motion holds each venue's moving elements exactly as it holds the
+room's.
 
 
 ---
@@ -1891,12 +1974,374 @@ When the multiplier is 1.00× the line simply names the community size.
 
 ---
 
-## 24. Appendix: What the Original Got Wrong
+## 24. Caretaker Titles
+
+Among five friends, the leaderboard stops motivating the moment it
+stabilizes: everyone knows who is #1, and that rarely changes. Titles give
+every caretaker a niche orthogonal to raw score — earned by *how* you play,
+not how much. They are **contested**: each title has exactly one current
+holder, it can be taken, and losing it is itself an event. Standings are
+**per-generation**: a new egg wipes every slate, so each death gives the
+whole community a fresh shot at every title, and the memorial records who
+held what when the pet died.
+
+Titles are server-side derived data. Nothing here touches `PetState` or the
+event log; the fold does not know titles exist.
+
+### 24.1 The Roster
+
+| Title | Chip | Held by whoever has the most… |
+| --- | --- | --- |
+| Night Nurse | 🌙 | accepted care actions between 0:00 and 6:59 pet-local |
+| Chef | 🍳 | favorite-food FEEDs (the generation's quirk) |
+| Groundskeeper | 🧹 | CLEANs |
+| Sandman | 🎵 | LULLABYs that actually put the pet to sleep |
+| Cuddler | 🤗 | PETs |
+| Wish Granter | ⭐ | pet wants fulfilled (§25) |
+
+Two definitions are deliberately narrower or wider than the obvious one:
+
+- **Night Nurse counts any accepted care action**, not just MEDICATE. A
+  MEDICATE-only rule would be a sickness lottery — the pet must happen to be
+  sick between midnight and seven, which whole generations may never see.
+  The point of the title is "was there at 3am", not "won a dice roll".
+- **Sandman counts only lullabies that transitioned the pet to sleep.** A
+  night lullaby sung to an already-sleeping pet validates but applies
+  nothing; counting it would make the title farmable by cooldown-paced
+  no-ops. The write path detects the transition from the care outcome's
+  `SLEPT` milestone.
+
+A title with no qualifying action yet has **no holder**, and every surface
+renders that state plainly. The minimum to hold a title is a count of one.
+
+### 24.2 The Contest
+
+The holder is whoever *first* reached the current maximum count: a
+challenger takes a title only by **strictly exceeding** the holder's value.
+Ties keep the incumbent — being first is worth something, and the strict
+rule is also what makes the claim a race-free compare-and-swap (§24.3). A
+holder raising their own count keeps the title silently; a takeover is
+announced everywhere: *"🌙 Emilio took Night Nurse from Ana"*.
+
+At death, the final holders are frozen into the memorial exactly as quirks
+are (§21.4): written once at seal time as an optional field, no backfill,
+older generations simply lack it.
+
+### 24.3 Counting and Claiming
+
+Counting follows the incremental-counter idiom the leaderboard established
+(§2.11): stats are `$inc`'d on the care write path, never scanned from the
+event log. A shared helper — called from **both** `/api/care` and
+`/api/play`, the two routes that already call `recordContribution` —
+classifies each accepted action into the titles it advances (the night
+window comes from a new `localHourAt` in `src/server/schedule.ts`, the only
+timezone-aware module; the favorite-food check from `quirks(seed)` and the
+event's `itemId`).
+
+Two collections in a new `src/server/titles.ts` (house module conventions:
+own accessors, `ensureIndexes` guard, test reset seam):
+
+- `titleStats` — `{ generationId, caretakerId, counts: { [titleId]: n } }`,
+  unique on `(generationId, caretakerId)`. The increment is a
+  `findOneAndUpdate` returning the post-increment value — an `updateOne`
+  cannot say what the new count is, and the claim needs it.
+- `titles` — `{ generationId, titleId, caretakerId, value, takenAt }`,
+  unique on `(generationId, titleId)`. The claim is a single atomic
+  `findOneAndUpdate` guarded by `value $lt` the challenger's new count,
+  returning the **prior** document. The prior holder must come from that
+  same atomic operation: a separate read can name the wrong loser under two
+  concurrent takeovers. The takeover message is published only when a prior
+  holder existed and differs from the winner. First claim inserts via the
+  duplicate-key retry `records` uses. Under concurrent care writes the two
+  `$inc`s produce distinct values and the `$lt` guard resolves either
+  arrival order to the same winner.
+
+The takeover broadcast is a pure `title` message on the existing fan-out —
+the `record` message's shape and lifecycle, carrying winner, loser, title,
+and value, with nicknames resolved through `nicknameMap`.
+
+### 24.4 Visibility
+
+- **Presence.** `presenceView()` joins current holders beside the nickname
+  lookup it already does, so every presence message carries each watcher's
+  titles. The `👥 N watching` pill becomes an expandable list — names, title
+  chips, and the current generation leader's crown, honoring §2.11's
+  original promise now that a presence list finally exists.
+- **Leaderboard.** A Titles block using the records section's row
+  conventions: `title · holder · count`.
+- **Feed.** Takeover messages render live; titles are not milestones, so
+  they are live-only in the feed, like records — the durable record is the
+  holder itself, visible in presence and leaderboard.
+- **Memorial.** Each sealed generation lists its final holders.
+
+### 24.5 Delivery Phases
+
+Same rules as §20: green typecheck, lint, and tests per phase, one commit
+per seam.
+
+| # | Phase | Deliverable | Done when |
+| --- | --- | --- | --- |
+| **T1** | Titles server | `titles.ts` (stats, CAS claim, announce), `localHourAt`, `title` message | concurrent-write test yields one holder and the true prior holder; night and Sandman classification unit-tested |
+| **T2** | Wiring | both routes through the shared helper, memorial freeze, `presenceView` join | a sealed generation records holders; Wish Granter counts once §25's helper lands |
+| **T3** | UI | presence list with chips and crown, leaderboard block, memorial | e2e: a title changes hands and re-renders in presence, leaderboard, and feed |
+
+
+---
+
+## 25. Pet Wants
+
+Everything the pet has ever said to its caretakers is a complaint: a meter
+falls, an alert fires, someone fixes it. Wants give Makoto the other half
+of an interior life — the pet occasionally *asks for something*: a food it
+is craving, a game it feels like playing, a cuddle, a dust bath. Granting
+the wish inside its window pays a joy bonus, coins, and a delighted
+animation. Letting it lapse costs a small, real slice of joy: the user
+chose genuine stakes over a cosmetic sulk, and the difference is what makes
+a want a request rather than a decoration.
+
+### 25.1 The Want
+
+Pet-days divide into fixed windows of `WANT_WINDOW_TICKS` (540 ticks —
+90 minutes), indexed globally: `windowIndex = floor(tick /
+WANT_WINDOW_TICKS)`, genesis-anchored like `petDay` (partial windows at DST
+shifts are accepted and documented, not special-cased). A pure
+`wantAt(seed, windowIndex)` in `src/sim/wants.ts` decides each window with
+two independent draws, exactly the `ambient.ts` shape: an odds draw against
+`WANT_ODDS_P32` (≈1/3 of windows), then a weighted pick:
+
+| Want | Fulfilled by | Weight |
+| --- | --- | --- |
+| `crave-food` — a specific food item | FEED with that `itemId` | 3 |
+| `play-game` — a specific minigame | a plausible finish of that game | 2 |
+| `cuddle` | PET | 2 |
+| `dust-bath` | CLEAN | 2 |
+
+`crave-food` picks over `FOOD_ITEM_IDS` excluding the generation's disliked
+food — the pet does not crave what it hates — and may land on the favorite,
+in which case fulfilling it stacks both bonuses: a rare, accepted jackpot.
+The draws use one `RNG_PURPOSE` each, the ambient convention: `wantOdds`,
+`wantPick` (the kind), and `wantItem` (the food or game within the kind) —
+never a reused purpose, which would collapse "independent" draws into one.
+`wantAt` is **schedule-free**: the sim never asks what hour it is. Whether
+a window actually *opens* is the leader's decision (§25.2), because waking
+hours are schedule knowledge the sim deliberately lacks (§4.5).
+
+### 25.2 Lifecycle: Leader-Appended Fold Events
+
+A want that can debit joy must live in the fold, and §23.2 already names
+the only honest way in: **as an event**. Two new event types, appended by
+the leader, folded by the reducer — the `POPULATION` precedent, not
+milestones, because milestones are assertions and can never change state:
+
+- `WANT_OPENED { windowIndex, want }` — appended at the first tick of a
+  window whose `wantAt` drew a want *and* whose span the leader's schedule
+  places in waking hours, *and* only while the pet is born and alive
+  (`isAlive` — no cravings from an egg, no debits against a corpse mid-
+  mourning; on death an open want simply dies with the generation, no
+  `WANT_EXPIRED` appended). Sets `PetState.wantOpen`.
+- `WANT_EXPIRED { windowIndex }` — the trigger is **state-shaped, not
+  calendar-shaped**: whenever `wantOpen` is set and the clock stands at or
+  past its window's end, the leader appends the expiry — late is legal, so
+  a want left open across a leader outage is expired by whichever leader
+  next observes it, *before* any newer window may open. Subtracts
+  `WANT_EXPIRY_JOY_DEBIT` from joy through the standard `[0, NEED_MAX]`
+  clamp and settles the window.
+
+**The reducer's rules are exact, and they are the idempotence guard** —
+spec text, not implementation detail, because two honest readings would
+fold the same log differently. State carries two optional fields:
+`wantOpen: { window, kind, itemId? } | null` and `wantSettledWindow:
+number | null`, a monotonic high-water mark set by *both* ways a window
+can settle:
+
+- `WANT_OPENED { W, want }` folds only when `wantOpen == null` **and**
+  `W > wantSettledWindow` (an absent mark reads as −∞). Otherwise a no-op.
+- `WANT_EXPIRED { W }` folds only when `wantOpen != null` and
+  `wantOpen.window === W`: applies the clamped debit, sets
+  `wantSettledWindow = W`, clears `wantOpen`. Otherwise a no-op.
+- Fulfillment (§25.3) likewise sets `wantSettledWindow` and clears
+  `wantOpen`.
+
+The high-water mark is what makes duplicate appends harmless *in the
+fold*: an expired window cannot re-open, so no sequence of replayed or
+re-appended events can debit the same window twice. The leader still keeps
+Redis `SET NX` once-keys per `generationId:window`, but they are junk-
+event suppression only — §6.2's invariant that Redis holds no unique
+durable state survives a flush, because correctness lives in the fold.
+
+**The logged payload is authoritative.** The reducer never calls
+`wantAt`; it folds what `WANT_OPENED` says was wanted, exactly as the log
+is trusted everywhere else — so retuning odds, weights, or catalogs never
+re-folds an old log differently, and `wantAt` is consulted only by the
+leader at append time (and by tests). A want kind the folding code does
+not recognize (an older pod folding a newer leader's log mid-deploy) is
+unmatchable, never a crash.
+
+**Appends run under the write lock.** The leader decides from observed
+state, but observation races care writes: a want can be granted between
+"still open → expire" and the append. Both appends therefore go through
+`advance()`'s prepare callback — the same post-lock validation every care
+write gets — and skip when the locked state disagrees, so a granted want
+can never acquire a durable "lapsed" record in the log.
+
+**Serialization discipline.** Clearing `wantOpen` assigns **explicit
+`null`** — the `sickSinceTick` idiom — never `undefined`, and never
+deletion: the three serializers state rides through disagree about
+`undefined` (`structuredClone` keeps the key, the Redis hot-state
+`JSON.stringify` drops it, the Mongo driver stores BSON `null`), which is
+exactly how a snapshot-recovered fold drifts from a fold-from-genesis.
+Presence checks are `!= null`; the optional `itemId` inside the payload is
+built by conditional spread, never `itemId: undefined`; the Mongo client
+gains `ignoreUndefined: true` as defense in depth. A property test pins
+it: a snapshot taken mid-window recovers to a state that stringifies
+identically to the from-genesis fold at the same seq.
+
+Both events render in the feed — `/api/feed`'s type filter widens from
+`CARE`/`MILESTONE` to include them, or lapses would silently vanish from
+history — so the feed and the state can never disagree about what lapsed.
+
+**Replay identity.** Histories recorded before this section contain
+neither event type, so they fold byte-identically through the new code —
+no golden-fixture regeneration, no retroactive debits, no snapshot
+divergence. Genesis leaves both new fields absent, the `population`
+precedent. (An earlier draft derived expiry at projection-time window
+boundaries; adversarial review showed that breaks §3.1 — a pre-feature log
+would replay debits that were never lived — and that per-segment schedule
+context makes "was the pet awake at that boundary" path-dependent. Events
+delete both failure classes.)
+
+**Accepted gaps**, stated rather than discovered: while no leader runs,
+wants neither open nor expire — the same tradeoff quest settlement made.
+And a debit that drops joy below `CRITICAL_THRESHOLD` is **milestone-
+silent**: projection detects crossings only within its own decay step, so
+an event-caused crossing never emits `CRITICAL` (the same latent behavior
+`PLAY`'s energy cost has today). Push alerting is unaffected — the
+dispatcher observes values, not milestones (§12).
+
+### 25.3 Fulfillment
+
+Fulfillment folds in the reducer, in the `CARE` case beside the quirk
+multipliers. A care event fulfills iff **all** of:
+
+- it matches `state.wantOpen`'s kind (and `itemId`, where the kind names
+  one);
+- `floor(event.tick / WANT_WINDOW_TICKS) === wantOpen.window` — the
+  deadline is enforced *in the fold*, as pure log arithmetic, so a leader
+  outage can never convert a lapsed want into an hours-late jackpot;
+- its applied restoration is greater than zero — a budget-exhausted no-op
+  does not grant a wish, the same rule that keeps Sandman honest (§24.1).
+
+Then, in order:
+
+1. The action's base magnitude is scaled `base = floor(base ×
+   WANT_BONUS_PERCENT / 100)` — a multiplier, the `quirkFoodPercent`
+   convention, **not** the toys' additive convention — applied last among
+   the pre-curve modifiers, before the diminishing-returns curve.
+2. `wantSettledWindow` is set to the window, `wantOpen` is cleared to
+   `null`.
+3. The reducer emits a `WANT_FULFILLED` milestone — the `RECOVERED`
+   precedent — so every client receives it in the **same SSE burst** as the
+   care message. The delight lands on the action, not ten seconds later.
+
+No schedule check exists here: a want can only be open because the leader
+opened it. A care event landing on exactly the boundary tick resolves
+against the expiry event by `seq` order — the log's total order is the
+tiebreak, either order replays identically. `play-game` wants match through
+the PLAY event's optional `itemId`, which `/api/play` injects
+**server-side** from its session's fixed game; `/api/care` never accepts a
+gameId, and its `itemId` remains a consumable reference.
+
+The pet's reaction reuses the favorite-food vocabulary: `celebrating`
+one-shot, heart particles, a feed line. Expiry plays a brief sulk beat and
+a feed line ("Makoto sighs… nobody brought pizza"); reduced motion gets the
+feed line only.
+
+### 25.4 Rewards
+
+The fulfilling caretaker earns `WANT_REWARD_COINS`. Coins live outside the
+fold (§13.1), so payment happens on the write path: `engine.care`'s outcome
+gains the milestones the reduce step emitted, and the same shared helper
+that counts titles (§24.3) — called from both `/api/care` and `/api/play` —
+credits the coins when the outcome carries `WANT_FULFILLED`. The reducer's
+once-per-window settlement makes the payment **at-most-once** with no
+marker collection and no log scan — honestly named: a crash between the
+event append and the credit loses that payment forever, since replay
+discards re-emitted milestones. Ten coins on a crashed pod is an accepted
+loss; a double payment would not be. The same signal increments Wish
+Granter.
+
+### 25.5 Expiry Is Not Griefable
+
+§2.4's guarantee survives inspection: expiry is caused by *inaction*, and
+there is still no action in the game that harms the pet — the worst a
+malicious visitor can do about a want is fulfill it. The debit is a single
+bounded subtraction from one warning-light need, once per window at most,
+at most a handful of windows per day; joy cannot kill except through the
+health-drain arithmetic of §2.3, hours away from any single want.
+
+### 25.6 Push
+
+A want push exists for exactly one situation: the room is empty and the pet
+is asking for something. The dispatcher derives the open want from
+`state.wantOpen` — no new inputs — and sends only when `listPresence`
+returns nobody (the 45-second presence TTL means a just-departed viewer
+suppresses it briefly; accepted). It is the first **playful-lane** push,
+and the lanes are asymmetric by design:
+
+- The playful lane has its own per-caretaker throttle
+  (`WANT_PUSH_THROTTLE_MS`, 4 hours) and a per-`generationId:window` fired
+  key so the 10-second observation loop sends once, not once per tick.
+- Playful **consults** the urgent lane: no want push within 30 minutes
+  after a critical, sickness, or death notification. Urgent never consults
+  playful. "Makoto is dying" is never followed minutes later by "Makoto
+  craves cheese", and a want push can never starve a health alert of its
+  throttle window.
+
+### 25.7 Visibility
+
+The live want appears in a slim banner beside the quest banner (same
+conventions: one `subscribe` prop, debounced refresh), with the want's icon
+and a countdown to the window's end. The state stream already carries
+`wantOpen`, so the banner needs no extra round trip. Feed lines cover all
+three lifecycle edges: asked, granted (with the granter's name), lapsed.
+
+### 25.8 Tuning
+
+Feature constants live in `src/sim/wants.ts`, per the house convention
+(quests, quirks, and ambient each carry their own):
+
+| Constant | Value | Meaning |
+| --- | --- | --- |
+| `WANT_WINDOW_TICKS` | 540 | 90-minute windows |
+| `WANT_ODDS_P32` | `floor(2³² / 3)` | ≈1/3 of windows draw a want — ~3 asked per waking day |
+| `WANT_BONUS_PERCENT` | 150 | fulfillment multiplier (`floor(base × 150 / 100)`), pre-curve |
+| `WANT_EXPIRY_JOY_DEBIT` | 50 000 | flat need-units (5% of `NEED_MAX` = 1 000 000), clamped subtraction |
+| `WANT_REWARD_COINS` | 10 | paid to the fulfiller |
+| `WANT_PUSH_THROTTLE_MS` | 14 400 000 | one playful push per caretaker per 4 h |
+
+### 25.9 Delivery Phases
+
+Same rules as §20. The A-track below is sequential; §24's T-track is
+independent of it except Wish Granter (lands in T2, after A3–A4).
+
+| # | Phase | Deliverable | Done when |
+| --- | --- | --- | --- |
+| **A1** | Sim vocabulary | `wants.ts`, rng purposes, `WANT_OPENED`/`WANT_EXPIRED` event types, `WANT_FULFILLED` kind, optional state fields (`wantOpen`, `wantSettledWindow` — absent at genesis, the `population` precedent) | determinism and rate tests green; every existing test untouched |
+| **A2** | The fold | reducer open/expire/fulfill, bonus arithmetic | boundary-tick seq test; idempotence tests; existing golden fixtures pass unmodified |
+| **A3** | Engine + leader | outcome milestone plumbing, leader open/expire with NX guards | each window opens and expires exactly once under leader restart and failover |
+| **A4** | Routes | shared helper in `/api/care` and `/api/play`, server-side gameId | fulfillment pays exactly once from either route; gameId never client-supplied |
+| **A5** | Push | playful lane, fired keys, empty-room gate | playful never consumes or blocks urgent; urgent recency suppresses playful; sends only to an empty room |
+| **A6** | UI | want banner, feed lines for the new event types, fulfill and sulk beats | e2e: a want is asked, granted with bonus and celebration, and a lapse renders |
+
+
+---
+
+## 26. Appendix: What the Original Got Wrong
 
 Recorded so the rebuild is measured against real defects rather than vague
 dissatisfaction. Source: `~/Projects/makotogotchi_old` at `master`.
 
-### 24.1 Architectural
+### 26.1 Architectural
 
 1. **No server.** State lived in `localStorage`. Every visitor had a private
    pet. The premise of a shared global pet was unimplementable on that
@@ -1910,7 +2355,7 @@ dissatisfaction. Source: `~/Projects/makotogotchi_old` at `master`.
    the simulation unreproducible. There were no tests, and none could have
    been written without heavy mocking.
 
-### 24.2 Simulation Bugs
+### 26.2 Simulation Bugs
 
 4. **`status()` read pre-tick state**, so every derived status lagged one tick
    behind the values it was derived from.
@@ -1928,7 +2373,7 @@ dissatisfaction. Source: `~/Projects/makotogotchi_old` at `master`.
     and the reconstruction silently dropped `ANGRY` from the array — so any
     angry state that had been set would vanish on the next tick.
 
-### 24.3 Structural
+### 26.3 Structural
 
 11. **Presentation stored as game state.** `Status.CLONE1..4` were animation
     frames living in the state enum.
