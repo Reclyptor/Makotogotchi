@@ -105,6 +105,10 @@ export const isoWeekKey = (epochMs: number, timeZone: string): string => {
 export const isoWeekKeyAtTick = (genesisEpochMs: number, tick: number, timeZone: string): string =>
   isoWeekKey(genesisEpochMs + tick * TICK_MS, timeZone);
 
+/** The pet-local hour of day at a tick — Night Nurse's clock (SPEC §24.3). */
+export const localHourAt = (genesisEpochMs: number, tick: number, timeZone: string): number =>
+  wallClockAt(genesisEpochMs + tick * TICK_MS, timeZone).hour;
+
 /**
  * The schedule covering [fromTick, toTick]: initial phase plus every
  * sleep/wake boundary in range, in tick units relative to genesisEpochMs.

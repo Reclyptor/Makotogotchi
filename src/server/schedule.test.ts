@@ -3,7 +3,7 @@
 // has to know these two days a year exist (SPEC §4.5).
 
 import { describe, expect, it } from "vitest";
-import { isoWeekKey, isoWeekKeyAtTick, scheduleFor } from "./schedule";
+import { isoWeekKey, isoWeekKeyAtTick, localHourAt, scheduleFor } from "./schedule";
 import { phaseAt } from "@/sim/model";
 import { TICKS_PER_DAY, TICKS_PER_HOUR, TICK_SECONDS } from "@/sim/tuning";
 
@@ -87,5 +87,16 @@ describe("isoWeekKey (SPEC §21.3)", () => {
     expect(isoWeekKeyAtTick(genesis, 0, "America/Chicago")).toBe("2026-W02");
     expect(isoWeekKeyAtTick(genesis, 7 * TICKS_PER_DAY, "America/Chicago")).toBe("2026-W03");
     expect(TICKS_PER_DAY * TICK_SECONDS).toBe(86_400);
+  });
+});
+
+describe("localHourAt (SPEC §24.3)", () => {
+  it("reads the pet-local hour off the tick clock, across the night window", () => {
+    const genesis = Date.UTC(2026, 0, 5, 13); // 07:00 Monday, America/Chicago
+    expect(localHourAt(genesis, 0, "America/Chicago")).toBe(7);
+    // 17 hours later it is midnight; Night Nurse's window opens.
+    expect(localHourAt(genesis, 17 * TICKS_PER_HOUR, "America/Chicago")).toBe(0);
+    expect(localHourAt(genesis, 23 * TICKS_PER_HOUR, "America/Chicago")).toBe(6);
+    expect(localHourAt(genesis, 24 * TICKS_PER_HOUR, "America/Chicago")).toBe(7);
   });
 });

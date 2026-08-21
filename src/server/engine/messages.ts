@@ -60,6 +60,17 @@ export type MinigameMessage = {
   applied?: number;
 };
 
+/** A contested title changed hands (SPEC §24.2) — pure broadcast, no state. */
+export type TitleMessage = {
+  type: "title";
+  titleId: string;
+  caretakerId: string;
+  caretakerName: string;
+  previousId: string;
+  previousName: string;
+  value: number;
+};
+
 /** A new per-game high score (SPEC §21.3) — pure broadcast, no state. */
 export type RecordMessage = {
   type: "record";
@@ -113,6 +124,7 @@ export type EngineMessage =
   | PresenceMessage
   | MinigameMessage
   | WantMessage
+  | TitleMessage
   | RecordMessage
   | FundedMessage
   | ThemeMessage
