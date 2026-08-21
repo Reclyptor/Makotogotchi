@@ -14,6 +14,7 @@ import { db } from "@/server/db/client";
 import { key, redis } from "@/server/redis/client";
 import { LIMITS, takeToken } from "@/server/ratelimit";
 import { recordContribution } from "@/server/social";
+import { settleWantFulfillment } from "@/server/wants";
 import { consumeItem, refundItem } from "@/server/shop";
 import { caretakerCookieHeader, clientIp, resolveCaretaker } from "@/server/http";
 
@@ -91,13 +92,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     applied: outcome.applied,
     tick: outcome.state.tick,
   });
+  // Granting a wish pays extra (SPEC §25.4).
+  const wantCoins = await settleWantFulfillment(await db(), identity.caretakerId, outcome.milestones);
 
   return withCookie(
     NextResponse.json({
       applied: outcome.applied,
       tick: outcome.state.tick,
       score: ledger.score,
-      coins: ledger.coins,
+      coins: ledger.coins + wantCoins,
       streakDays: ledger.streakDays,
     }),
   );

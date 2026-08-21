@@ -16,6 +16,7 @@ import { MINIGAME_IDS, MINIGAMES, plausibleRun, type MinigameId } from "@/sim/mi
 import { quirks } from "@/sim/quirks";
 import { QUIRK_FAVORITE_GAME_COIN_PERCENT } from "@/sim/economy";
 import { anonymousName, creditCoins, nicknameMap, recordContribution } from "@/server/social";
+import { settleWantFulfillment } from "@/server/wants";
 import { submitScore } from "@/server/records";
 import { isoWeekKeyAtTick } from "@/server/schedule";
 import { env } from "@/server/env";
@@ -136,7 +137,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return withCookie(NextResponse.json({ error: "implausible" }, { status: 422 }));
   }
 
+  // The game's id rides the event as itemId — injected here from the
+  // server-side session, never from the client body — so the fold can match
+  // play-game wants (SPEC §25.3).
   const outcome = await engine.care(current, "PLAY", identity.caretakerId, {
+    itemId: sessionGame.id,
     performance: sessionGame.performance(score),
     minigameScore: score,
   });
@@ -158,6 +163,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     tick: outcome.state.tick,
   });
   await creditCoins(await db(), identity.caretakerId, coins);
+  // Granting a play-game wish pays extra (SPEC §25.4).
+  const wantCoins = await settleWantFulfillment(await db(), identity.caretakerId, outcome.milestones);
 
   // Records are offered after the coins are safely credited, so a board
   // write can never cost someone their payout (SPEC §21.3).
@@ -175,5 +182,5 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   await endSpectacle(score, outcome.applied);
-  return withCookie(NextResponse.json({ applied: outcome.applied, coins: ledger.coins + coins, score }));
+  return withCookie(NextResponse.json({ applied: outcome.applied, coins: ledger.coins + coins + wantCoins, score }));
 }

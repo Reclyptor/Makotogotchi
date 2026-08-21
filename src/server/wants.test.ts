@@ -9,12 +9,13 @@ import { closeDb, db } from "./db/client";
 import { closeRedis, key, redis } from "./redis/client";
 import { createGeneration, eventsSince } from "./db/repository";
 import { PetEngine } from "./engine/engine";
-import { observeWants, windowIsScheduledAwake } from "./wants";
+import { observeWants, settleWantFulfillment, windowIsScheduledAwake } from "./wants";
+import { caretakerProfile } from "./social";
 import { startTestInfra, type TestInfra } from "./testsetup";
 import { genesis } from "@/sim/genesis";
 import { reduce } from "@/sim/reduce";
 import { scheduleFor } from "./schedule";
-import { wantAt, WANT_WINDOW_TICKS } from "@/sim/wants";
+import { WANT_REWARD_COINS, wantAt, WANT_WINDOW_TICKS } from "@/sim/wants";
 import type { Generation, PetState } from "@/sim/model";
 import { TICK_SECONDS } from "@/sim/tuning";
 
@@ -136,6 +137,19 @@ describe("want lifecycle on the leader", () => {
     // fields must agree everywhere (SPEC §25.2).
     expect(JSON.stringify(recovered.state)).toBe(JSON.stringify(replayed));
     expect(recovered.state.wantOpen).toBeNull();
+  });
+});
+
+describe("settleWantFulfillment", () => {
+  it("pays exactly when the outcome carries WANT_FULFILLED", async () => {
+    const database = await db();
+    const before = (await caretakerProfile(database, "payee"))?.coins ?? 0;
+    const paid = await settleWantFulfillment(database, "payee", [{ kind: "WANT_FULFILLED", tick: 1, detail: "cuddle" }]);
+    expect(paid).toBe(WANT_REWARD_COINS);
+    const none = await settleWantFulfillment(database, "payee", [{ kind: "SLEPT", tick: 1 }]);
+    expect(none).toBe(0);
+    const after = (await caretakerProfile(database, "payee"))?.coins ?? 0;
+    expect(after - before).toBe(WANT_REWARD_COINS);
   });
 });
 

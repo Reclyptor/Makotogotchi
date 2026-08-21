@@ -6,10 +6,30 @@
 // own: it merely avoids taking the lock when the settled state already shows
 // nothing to do.
 
+import type { Db } from "mongodb";
 import { isAlive, phaseAt, type Generation, type PetState } from "@/sim/model";
-import { WANT_WINDOW_TICKS, wantAt, windowEndTick, windowIndexAt } from "@/sim/wants";
+import { WANT_REWARD_COINS, WANT_WINDOW_TICKS, wantAt, windowEndTick, windowIndexAt } from "@/sim/wants";
+import type { Milestone } from "@/sim/events";
+import { creditCoins } from "./social";
 import { scheduleFor } from "./schedule";
 import type { PetEngine } from "./engine/engine";
+
+/**
+ * Pay the caretaker who granted a wish (SPEC §25.4). Both write routes —
+ * /api/care and /api/play — funnel accepted actions through this after
+ * their contribution ledger roll. The reducer's once-per-window settlement
+ * makes this at-most-once with no marker: the milestone appears on exactly
+ * one care outcome per window. Returns the coins granted for the response.
+ */
+export const settleWantFulfillment = async (
+  database: Db,
+  caretakerId: string,
+  milestones: readonly Milestone[],
+): Promise<number> => {
+  if (!milestones.some((milestone) => milestone.kind === "WANT_FULFILLED")) return 0;
+  await creditCoins(database, caretakerId, WANT_REWARD_COINS);
+  return WANT_REWARD_COINS;
+};
 
 /**
  * A want may only open in a window that sits fully inside scheduled waking
