@@ -13,6 +13,7 @@ import { SPRITE_SHEET_URL } from "@/game/atlas.generated";
 import { Room, ROOM_HEIGHT, ROOM_WIDTH, type FoodTaste } from "@/game/scene/room";
 import { petClock } from "@/game/scene/backdrop";
 import { startLoop } from "@/game/engine/loop";
+import { wantToast } from "@/app/components/WantBanner/copy";
 import type { PetStream } from "@/app/hooks/usePetStream";
 
 const ACTION_EMOJI: Record<CareAction, string> = {
@@ -72,7 +73,8 @@ export type PetCanvasProps = {
 
 export default function PetCanvas({ stream }: PetCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const { projectNow, onCare, onMilestone, onMinigame, onReact, caretakerId, room: roomView, timeZone, presenceCount } = stream;
+  const { projectNow, onCare, onMilestone, onWant, onMinigame, onReact, caretakerId, room: roomView, timeZone, presenceCount } =
+    stream;
   const roomRef = useRef<Room | null>(null);
   const roomViewRef = useRef(roomView);
   useEffect(() => {
@@ -134,8 +136,25 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
         room.onMilestone(notice.kind === "FUNDED" ? "the room grows!" : "goal complete!", performance.now());
         return;
       }
+      if (notice.kind === "WANT_FULFILLED") {
+        // A wish came true (SPEC §25.3) — hearts, in the same burst as the
+        // care beat that granted it.
+        room.celebrate(performance.now(), "heart");
+        room.onMilestone("⭐ wish granted!", performance.now());
+        return;
+      }
       const label = MILESTONE_LABELS[notice.kind];
       if (label) room.onMilestone(label, performance.now());
+    });
+    const offWant = onWant((notice) => {
+      if (notice.edge === "opened") {
+        room.onMilestone(`💭 ${wantToast(notice.want?.kind ?? "", notice.want?.itemId)}`, performance.now());
+        return;
+      }
+      // The sulk beat (SPEC §25.3): a brief sob, reduced motion holds the
+      // first frame like every one-shot.
+      room.machine.trigger("sulking", performance.now());
+      room.onMilestone("😔", performance.now());
     });
     const offReact = onReact((notice) => {
       const who = notice.caretakerId === caretakerRef.current ? "you" : notice.caretakerName;
@@ -209,11 +228,12 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
       roomRef.current = null;
       offCare();
       offMilestone();
+      offWant();
       offMinigame();
       offReact();
       media.removeEventListener("change", onMotionChange);
     };
-  }, [onCare, onMilestone, onMinigame, onReact, projectNow]);
+  }, [onCare, onMilestone, onWant, onMinigame, onReact, projectNow]);
 
   // A crowd gathering is a rising edge, not a level: the room celebrates the
   // moment the third watcher arrives, and stays quiet while they linger.

@@ -25,6 +25,7 @@ import type {
   FundedMessage,
   RecordMessage,
   SnapshotMessage,
+  WantMessage,
 } from "@/server/engine/messages";
 
 type Authoritative = {
@@ -46,6 +47,15 @@ export type CareNotice = {
   applied: number;
 };
 export type MilestoneNotice = { seq: number; kind: string; detail?: string };
+export type WantNotice = {
+  seq: number;
+  edge: "opened" | "expired";
+  windowIndex: number;
+  /** Present on "opened"; on "expired" it is the lapsed want, recovered from
+   *  the state held just before the message applied (the event itself does
+   *  not carry it). */
+  want?: { kind: string; itemId?: string };
+};
 export type MinigameNotice = Omit<MinigameMessage, "type">;
 export type RecordNotice = Omit<RecordMessage, "type">;
 export type FundedNotice = Omit<FundedMessage, "type">;
@@ -81,6 +91,7 @@ export type PetStream = {
   context: () => ProjectionContext | null;
   onCare: (listener: (notice: CareNotice) => void) => () => void;
   onMilestone: (listener: (notice: MilestoneNotice) => void) => () => void;
+  onWant: (listener: (notice: WantNotice) => void) => () => void;
   onMinigame: (listener: (notice: MinigameNotice) => void) => () => void;
   onRecord: (listener: (notice: RecordNotice) => void) => () => void;
   onFunded: (listener: (notice: FundedNotice) => void) => () => void;
@@ -91,6 +102,7 @@ export const usePetStream = (): PetStream => {
   const authRef = useRef<Authoritative | null>(null);
   const careListeners = useRef(new Set<(notice: CareNotice) => void>());
   const milestoneListeners = useRef(new Set<(notice: MilestoneNotice) => void>());
+  const wantListeners = useRef(new Set<(notice: WantNotice) => void>());
   const minigameListeners = useRef(new Set<(notice: MinigameNotice) => void>());
   const recordListeners = useRef(new Set<(notice: RecordNotice) => void>());
   const fundedListeners = useRef(new Set<(notice: FundedNotice) => void>());
@@ -187,6 +199,26 @@ export const usePetStream = (): PetStream => {
         listener({ seq: message.seq, kind: message.kind, ...(message.detail !== undefined ? { detail: message.detail } : {}) });
       }
     });
+    source.addEventListener("want", (event) => {
+      const message = JSON.parse((event as MessageEvent<string>).data) as WantMessage;
+      // The expiry event does not carry what lapsed; the state we held a
+      // moment ago does. Read it before the new state replaces it.
+      const lapsed =
+        message.edge === "expired" && authRef.current?.state.wantOpen?.window === message.windowIndex
+          ? authRef.current.state.wantOpen
+          : null;
+      acceptState(message.state);
+      const want =
+        message.want ?? (lapsed ? { kind: lapsed.kind, ...(lapsed.itemId !== undefined ? { itemId: lapsed.itemId } : {}) } : undefined);
+      for (const listener of wantListeners.current) {
+        listener({
+          seq: message.seq,
+          edge: message.edge,
+          windowIndex: message.windowIndex,
+          ...(want !== undefined ? { want } : {}),
+        });
+      }
+    });
     source.addEventListener("minigame", (event) => {
       const message = JSON.parse((event as MessageEvent<string>).data) as MinigameMessage;
       const { type: _type, ...notice } = message;
@@ -244,6 +276,11 @@ export const usePetStream = (): PetStream => {
     return () => milestoneListeners.current.delete(listener);
   }, []);
 
+  const onWant = useCallback((listener: (notice: WantNotice) => void) => {
+    wantListeners.current.add(listener);
+    return () => wantListeners.current.delete(listener);
+  }, []);
+
   const onMinigame = useCallback((listener: (notice: MinigameNotice) => void) => {
     minigameListeners.current.add(listener);
     return () => minigameListeners.current.delete(listener);
@@ -277,6 +314,7 @@ export const usePetStream = (): PetStream => {
     context,
     onCare,
     onMilestone,
+    onWant,
     onMinigame,
     onRecord,
     onFunded,

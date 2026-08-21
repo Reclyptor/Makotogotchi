@@ -21,6 +21,8 @@ import NicknameEditor from "@/app/components/NicknameEditor";
 import PushToggle from "@/app/components/PushToggle";
 import ShopPanel from "@/app/components/ShopPanel";
 import QuestBanner from "@/app/components/QuestBanner";
+import WantBanner from "@/app/components/WantBanner";
+import { wantAsk, wantGranted, wantLapse } from "@/app/components/WantBanner/copy";
 import MinigameShell from "@/app/components/minigames/Shell";
 import { isMinigameId, MINIGAME_IDS, MINIGAMES, type MinigameId } from "@/sim/minigames";
 import { isAmbientEvent, type AmbientEvent } from "@/sim/ambient";
@@ -105,6 +107,9 @@ const milestoneLine = (kind: string, detail: string | undefined, petName: string
   if (kind === "FUNDED" && detail !== undefined) {
     return { icon: "🏠", text: `The ${GRAND_LABELS[detail] ?? detail} is funded — it's in the room for good!` };
   }
+  if (kind === "WANT_FULFILLED") {
+    return { icon: "⭐", text: wantGranted(petName, detail) };
+  }
   const name = kind === "HATCHED" && detail !== undefined ? detail : petName;
   const text = milestoneFeedText(name)[kind];
   return text === undefined ? null : { icon: MILESTONE_ICONS[kind] ?? "✨", text };
@@ -122,8 +127,20 @@ const age = (state: PetState): string => {
 
 export default function GameView() {
   const stream = usePetStream();
-  const { projectNow, nowTickExact, context, onCare, onMilestone, onMinigame, onRecord, onFunded, onReact, caretakerId, profile } =
-    stream;
+  const {
+    projectNow,
+    nowTickExact,
+    context,
+    onCare,
+    onMilestone,
+    onWant,
+    onMinigame,
+    onRecord,
+    onFunded,
+    onReact,
+    caretakerId,
+    profile,
+  } = stream;
   const [ui, setUi] = useState<{ state: PetState; derived: DerivedState; nowTickExact: number } | null>(null);
   // Play launches a random game from the roster; a ?game= query pins it —
   // handy for sharing a favourite and for deterministic e2e runs.
@@ -218,6 +235,13 @@ export default function GameView() {
             },
           ];
         }
+        if (entry.type === "want") {
+          const text =
+            entry.edge === "opened"
+              ? wantAsk(petName, entry.wantKind ?? "", entry.wantItemId)
+              : wantLapse(petName, entry.wantKind, entry.wantItemId);
+          return [{ id: entry.seq, icon: entry.edge === "opened" ? "💭" : "😔", text, at: clockTime(new Date(entry.at)) }];
+        }
         const line = milestoneLine(entry.kind ?? "", entry.detail, petName);
         return line === null ? [] : [{ id: entry.seq, icon: line.icon, text: line.text, at: clockTime(new Date(entry.at)) }];
       });
@@ -255,6 +279,17 @@ export default function GameView() {
       if (line) pushFeed(line.icon, line.text, notice.seq);
       if (notice.kind === "CRITICAL" || notice.kind === "BECAME_SICK" || notice.kind === "DIED") {
         audioRef.current?.playAlert();
+      }
+    });
+    // The pet's asks and their lapses (SPEC §25.7); fulfillment arrives as a
+    // WANT_FULFILLED milestone and is handled above.
+    const offWant = onWant((notice) => {
+      if (notice.seq <= maxSeqRef.current) return;
+      maxSeqRef.current = notice.seq;
+      if (notice.edge === "opened") {
+        pushFeed("💭", wantAsk(petNameRef.current, notice.want?.kind ?? "", notice.want?.itemId), notice.seq);
+      } else {
+        pushFeed("😔", wantLapse(petNameRef.current, notice.want?.kind, notice.want?.itemId), notice.seq);
       }
     });
     // The minigame spectacle (SPEC §13.3), with a staleness backstop so a
@@ -300,13 +335,14 @@ export default function GameView() {
     return () => {
       offCare();
       offMilestone();
+      offWant();
       offMinigame();
       offRecord();
       offFunded();
       offReact();
       if (spectateTimeout) clearTimeout(spectateTimeout);
     };
-  }, [onCare, onMilestone, onMinigame, onRecord, onFunded, onReact]);
+  }, [onCare, onMilestone, onWant, onMinigame, onRecord, onFunded, onReact]);
 
   const toggleAudio = (): void => {
     const audio = audioRef.current;
@@ -413,6 +449,9 @@ export default function GameView() {
         />
       )}
       {ui && !isEgg && !isDead && <QuestBanner subscribe={questNudge} />}
+      {ui && !isEgg && !isDead && (
+        <WantBanner want={ui.state.wantOpen ?? null} nowTickExact={ui.nowTickExact} petName={petName} />
+      )}
       {isEgg && <VotePanel />}
       {ui && !isEgg && !isDead && ctx && caretakerId && (
         <ActionBar

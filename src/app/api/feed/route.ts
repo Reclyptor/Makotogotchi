@@ -18,13 +18,17 @@ export type FeedEntryPayload = {
   seq: number;
   tick: number;
   at: string;
-  type: "care" | "milestone";
+  type: "care" | "milestone" | "want";
   action?: string;
   caretakerId?: string;
   caretakerName?: string;
   applied?: number;
   kind?: string;
   detail?: string;
+  /** Want entries (SPEC §25.7). */
+  edge?: "opened" | "expired";
+  wantKind?: string;
+  wantItemId?: string;
 };
 
 export async function GET(): Promise<NextResponse> {
@@ -33,7 +37,7 @@ export async function GET(): Promise<NextResponse> {
   const database = await db();
 
   const docs = await events(database)
-    .find({ generationId: current.id, type: { $in: ["CARE", "MILESTONE"] } })
+    .find({ generationId: current.id, type: { $in: ["CARE", "MILESTONE", "WANT_OPENED", "WANT_EXPIRED"] } })
     .sort({ seq: -1 })
     .limit(LIMIT)
     .toArray();
@@ -41,6 +45,12 @@ export async function GET(): Promise<NextResponse> {
 
   const careIds = [...new Set(docs.flatMap((doc) => (doc.type === "CARE" ? [doc.caretakerId] : [])))];
   const names = await nicknameMap(database, careIds);
+
+  // The expiry event does not carry what lapsed; its opening, when it is
+  // still inside the tail, does (SPEC §25.7).
+  const openedWants = new Map(
+    docs.flatMap((doc) => (doc.type === "WANT_OPENED" ? [[doc.windowIndex, doc.want] as const] : [])),
+  );
 
   const entries: FeedEntryPayload[] = docs.flatMap((doc): FeedEntryPayload[] => {
     if (doc.type === "CARE") {
@@ -66,6 +76,20 @@ export async function GET(): Promise<NextResponse> {
           type: "milestone" as const,
           kind: doc.kind,
           ...(doc.detail !== undefined ? { detail: doc.detail } : {}),
+        },
+      ];
+    }
+    if (doc.type === "WANT_OPENED" || doc.type === "WANT_EXPIRED") {
+      const want = doc.type === "WANT_OPENED" ? doc.want : openedWants.get(doc.windowIndex);
+      return [
+        {
+          seq: doc.seq,
+          tick: doc.tick,
+          at: doc.at.toISOString(),
+          type: "want" as const,
+          edge: doc.type === "WANT_OPENED" ? ("opened" as const) : ("expired" as const),
+          ...(want !== undefined ? { wantKind: want.kind } : {}),
+          ...(want?.itemId !== undefined ? { wantItemId: want.itemId } : {}),
         },
       ];
     }

@@ -39,6 +39,7 @@ export const ONE_SHOT_NAMES = [
   "greeting",
   "celebrating",
   "startled",
+  "sulking",
 ] as const;
 export type OneShotName = (typeof ONE_SHOT_NAMES)[number];
 
@@ -55,6 +56,8 @@ export const ONE_SHOT_CLIPS: Record<OneShotName, Clip> = {
   greeting: clip(["pekori", "idleFront1", "pekori"], 500, false),
   celebrating: clip(["cheer1", "cheer2", "cheer1", "cheer2", "heart1", "heart2"], 450, false),
   startled: clip(["earTwitch", "idleSide1", "earTwitch"], 280, false),
+  // A wish went ungranted (SPEC §25.3) — a brief sob, then back to life.
+  sulking: clip(["cry1", "cry2", "cry1", "cry2"], 500, false),
 };
 
 /** Micro-idle flourishes: short interludes the machine sprinkles into the
