@@ -26,6 +26,7 @@ import { wantAsk, wantGranted, wantLapse } from "@/app/components/WantBanner/cop
 import MinigameShell from "@/app/components/minigames/Shell";
 import { isMinigameId, MINIGAME_IDS, MINIGAMES, type MinigameId } from "@/sim/minigames";
 import { isAmbientEvent, type AmbientEvent } from "@/sim/ambient";
+import { isTitleId, TITLES } from "@/sim/titles";
 import { usePetStream } from "@/app/hooks/usePetStream";
 import type { FeedEntryPayload } from "@/app/api/feed/route";
 
@@ -134,6 +135,7 @@ export default function GameView() {
     onCare,
     onMilestone,
     onWant,
+    onTitle,
     onMinigame,
     onRecord,
     onFunded,
@@ -292,6 +294,13 @@ export default function GameView() {
         pushFeed("😔", wantLapse(petNameRef.current, notice.want?.kind, notice.want?.itemId), notice.seq);
       }
     });
+    // A contested title changed hands (SPEC §24.2).
+    const offTitle = onTitle((notice) => {
+      const meta = isTitleId(notice.titleId) ? TITLES[notice.titleId] : null;
+      const winner = notice.caretakerId === caretakerRef.current ? "You" : notice.caretakerName;
+      const loser = notice.previousId === caretakerRef.current ? "you" : notice.previousName;
+      pushFeed(meta?.chip ?? "🏷️", `${winner} took ${meta?.label ?? notice.titleId} from ${loser}!`);
+    });
     // The minigame spectacle (SPEC §13.3), with a staleness backstop so a
     // crashed game can never pin the banner.
     let spectateTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -336,13 +345,14 @@ export default function GameView() {
       offCare();
       offMilestone();
       offWant();
+      offTitle();
       offMinigame();
       offRecord();
       offFunded();
       offReact();
       if (spectateTimeout) clearTimeout(spectateTimeout);
     };
-  }, [onCare, onMilestone, onWant, onMinigame, onRecord, onFunded, onReact]);
+  }, [onCare, onMilestone, onWant, onTitle, onMinigame, onRecord, onFunded, onReact]);
 
   const toggleAudio = (): void => {
     const audio = audioRef.current;
@@ -377,18 +387,46 @@ export default function GameView() {
           MAKOTOGOTCHI
         </span>
         <div className="flex items-center gap-2">
-          {/* "👥 7 watching", as §11.2 draws it. A bare count read out as
-              "busts in silhouette, 2" says nothing, and the emoji-and-a-digit
-              shape is ambiguous besides — the meters carry a "👥 N caretakers
-              this week" line that looks the same (SPEC §11.3). */}
-          <span
-            className="panel !rounded-full px-2.5 py-1 text-xs text-muted"
-            aria-live="polite"
-            title={stream.presenceNames.length > 0 ? stream.presenceNames.join(", ") : undefined}
-          >
-            <span aria-hidden="true">👥 </span>
-            {stream.presenceCount} watching
-          </span>
+          {/* "👥 7 watching", as §11.2 draws it — now expandable into the
+              presence list §2.11 promised: names, title chips, and the
+              leader's crown (SPEC §24.4). A bare count read out as "busts in
+              silhouette, 2" says nothing, and the emoji-and-a-digit shape is
+              ambiguous besides — the meters carry a "👥 N caretakers this
+              week" line that looks the same (SPEC §11.3). */}
+          <details className="relative">
+            <summary
+              aria-live="polite"
+              className="panel cursor-pointer list-none !rounded-full px-2.5 py-1 text-xs text-muted [&::-webkit-details-marker]:hidden"
+            >
+              <span aria-hidden="true">👥 </span>
+              {stream.presenceCount} watching
+            </summary>
+            <ul
+              aria-label="Watching now"
+              className="panel absolute right-0 top-full z-10 mt-1 flex min-w-44 flex-col gap-1 !rounded-2xl p-2.5 text-xs"
+            >
+              {stream.presenceCaretakers.map((watcher) => (
+                <li key={watcher.id} className="flex items-center justify-between gap-3">
+                  <span className="truncate">
+                    {stream.crownedId === watcher.id && <span aria-label="current leader">👑 </span>}
+                    {watcher.id === caretakerId ? "You" : watcher.name}
+                  </span>
+                  {watcher.titles.length > 0 && (
+                    <span className="shrink-0">
+                      {watcher.titles.map((titleId) =>
+                        isTitleId(titleId) ? (
+                          <span key={titleId} title={TITLES[titleId].label} aria-label={TITLES[titleId].label}>
+                            {TITLES[titleId].chip}
+                          </span>
+                        ) : null,
+                      )}
+                    </span>
+                  )}
+                </li>
+              ))}
+              {stream.presenceCaretakers.length === 0 && <li className="text-muted">nobody yet — stay a while</li>}
+            </ul>
+          </details>
           <button
             type="button"
             onClick={toggleAudio}

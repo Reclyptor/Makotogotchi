@@ -44,6 +44,8 @@ export type SnapshotMessage = {
 export type PresenceView = {
   count: number;
   caretakers: { id: string; name: string; titles: string[] }[];
+  /** The current generation's leaderboard leader — wears the §2.11 crown. */
+  crownedId?: string;
 };
 
 export type PresenceMessage = PresenceView & { type: "presence" };

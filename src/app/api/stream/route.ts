@@ -6,11 +6,12 @@
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { runtime } from "@/server/runtime";
+import { env } from "@/server/env";
 import { db } from "@/server/db/client";
 import { key, redis } from "@/server/redis/client";
 import { subscribeToEvents } from "@/server/stream/hub";
 import { dropPresence, listPresence, PresenceBroadcaster, shouldBroadcastPresence, touchPresence } from "@/server/presence";
-import { anonymousName, caretakerProfile, nicknameMap } from "@/server/social";
+import { anonymousName, caretakerProfile, leaderboard, nicknameMap } from "@/server/social";
 import { holderChips } from "@/server/titles";
 import { snapshotPayload } from "@/server/snapshot";
 import { caretakerCookieHeader, clientIp, resolveCaretaker } from "@/server/http";
@@ -20,7 +21,6 @@ export const dynamic = "force-dynamic";
 
 const PING_INTERVAL_MS = 15_000;
 const SNAPSHOT_INTERVAL_MS = 30_000;
-const MAX_STREAMS_PER_IP = 5;
 
 // Per-process connection accounting (SPEC §8.3). One replica in production
 // makes this globally correct; more replicas would only loosen the cap.
@@ -35,12 +35,17 @@ const streamCounts = (): Map<string, number> => {
 const presenceView = async (): Promise<PresenceView> => {
   const ids = await listPresence(redis(), key("presence"));
   const names = await nicknameMap(await db(), ids);
-  // Current title holders wear their chips in the presence list (SPEC §24.4).
+  // Current title holders wear their chips, and the generation's leader the
+  // §2.11 crown, in the presence list (SPEC §24.4). Generation scope reads
+  // no day window, so nowTick is unused.
   const { generation } = await runtime();
-  const chips = await holderChips(await db(), (await generation()).id);
+  const current = await generation();
+  const chips = await holderChips(await db(), current.id);
+  const [leader] = await leaderboard(await db(), "generation", { generationId: current.id, nowTick: 0 }, 1);
   return {
     count: ids.length,
     caretakers: ids.map((id) => ({ id, name: names.get(id) ?? anonymousName(id), titles: chips.get(id) ?? [] })),
+    ...(leader !== undefined ? { crownedId: leader.caretakerId } : {}),
   };
 };
 
@@ -66,7 +71,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   const ip = clientIp(request);
   const counts = streamCounts();
 
-  if ((counts.get(ip) ?? 0) >= MAX_STREAMS_PER_IP) {
+  if ((counts.get(ip) ?? 0) >= env().MAX_STREAMS_PER_IP) {
     return new Response("too many streams", { status: 429 });
   }
   counts.set(ip, (counts.get(ip) ?? 0) + 1);

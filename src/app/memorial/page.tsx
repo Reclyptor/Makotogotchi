@@ -7,6 +7,7 @@ import { generations } from "@/server/db/collections";
 import { FOOD_ITEMS } from "@/sim/economy";
 import { MINIGAMES } from "@/sim/minigames";
 import { TICKS_PER_DAY } from "@/sim/tuning";
+import { isTitleId, TITLES } from "@/sim/titles";
 import type { Quirks } from "@/sim/quirks";
 
 export const dynamic = "force-dynamic";
@@ -62,6 +63,13 @@ export default async function MemorialPage() {
                 {doc.died!.at.toLocaleDateString()}
               </p>
               {quirks && <p className="text-sm italic text-muted">{quirks}</p>}
+              {doc.memorial?.titles !== undefined && doc.memorial.titles.length > 0 && (
+                <p className="text-sm text-muted">
+                  {doc.memorial.titles
+                    .map((row) => `${isTitleId(row.titleId) ? TITLES[row.titleId].chip + " " + TITLES[row.titleId].label : row.titleId}: ${row.name}`)
+                    .join(" · ")}
+                </p>
+              )}
               {doc.memorial && doc.memorial.ranking.length > 0 && (
                 <div className="text-sm">
                   <h3 className="text-xs uppercase tracking-wide text-muted">devoted caretakers</h3>

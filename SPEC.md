@@ -1201,6 +1201,7 @@ rather than producing an undefined at 3am.
 | `VAPID_PRIVATE_KEY` | for push | Web Push. |
 | `VAPID_SUBJECT` | for push | `mailto:` contact. |
 | `PET_TIMEZONE` | no (`America/Chicago`) | Day/night boundary. |
+| `MAX_STREAMS_PER_IP` | no (`5`) | SSE connections per client IP (§8.3). The e2e harness raises it: every Playwright worker shares 127.0.0.1. |
 | `PORT` | no (`3000`) | |
 | `NODE_ENV` | yes | |
 

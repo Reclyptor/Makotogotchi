@@ -16,20 +16,9 @@ import { anonymousName, nicknameMap } from "./social";
 import { localHourAt } from "./schedule";
 import type { TitleMessage } from "./engine/messages";
 
-export const TITLE_IDS = ["night-nurse", "chef", "groundskeeper", "sandman", "cuddler", "wish-granter"] as const;
-export type TitleId = (typeof TITLE_IDS)[number];
+import { NIGHT_END_HOUR, type TitleId } from "@/sim/titles";
 
-export const TITLES: Record<TitleId, { label: string; chip: string; description: string }> = {
-  "night-nurse": { label: "Night Nurse", chip: "🌙", description: "care between midnight and seven" },
-  chef: { label: "Chef", chip: "🍳", description: "favorite-food meals served" },
-  groundskeeper: { label: "Groundskeeper", chip: "🧹", description: "dust baths given" },
-  sandman: { label: "Sandman", chip: "🎵", description: "lullabies that worked" },
-  cuddler: { label: "Cuddler", chip: "🤗", description: "pets and cuddles" },
-  "wish-granter": { label: "Wish Granter", chip: "⭐", description: "wishes granted" },
-};
-
-/** Night Nurse's window: 0:00 up to (not including) this local hour. */
-export const NIGHT_END_HOUR = 7;
+export { NIGHT_END_HOUR, TITLE_IDS, TITLES, type TitleId } from "@/sim/titles";
 
 export type TitleStatsDoc = {
   generationId: string;

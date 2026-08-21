@@ -25,6 +25,7 @@ import type {
   FundedMessage,
   RecordMessage,
   SnapshotMessage,
+  TitleMessage,
   WantMessage,
 } from "@/server/engine/messages";
 
@@ -57,6 +58,8 @@ export type WantNotice = {
   want?: { kind: string; itemId?: string };
 };
 export type MinigameNotice = Omit<MinigameMessage, "type">;
+export type TitleNotice = Omit<TitleMessage, "type">;
+export type PresenceCaretaker = { id: string; name: string; titles: string[] };
 export type RecordNotice = Omit<RecordMessage, "type">;
 export type FundedNotice = Omit<FundedMessage, "type">;
 export type ReactNotice = Omit<ReactMessage, "type">;
@@ -78,7 +81,10 @@ export type PetStream = {
   /** From hello — the caller's own social profile. */
   profile: CaretakerProfile | null;
   presenceCount: number;
-  presenceNames: string[];
+  /** Who is watching, with their title chips (SPEC §24.4). */
+  presenceCaretakers: PresenceCaretaker[];
+  /** The generation leader's id — wears the §2.11 crown. */
+  crownedId: string | null;
   /** Communal room decoration (SPEC §13.2), from the latest snapshot. */
   room: RoomView | null;
   /** The pet's IANA zone, from the latest snapshot — its calendar, not ours. */
@@ -92,6 +98,7 @@ export type PetStream = {
   onCare: (listener: (notice: CareNotice) => void) => () => void;
   onMilestone: (listener: (notice: MilestoneNotice) => void) => () => void;
   onWant: (listener: (notice: WantNotice) => void) => () => void;
+  onTitle: (listener: (notice: TitleNotice) => void) => () => void;
   onMinigame: (listener: (notice: MinigameNotice) => void) => () => void;
   onRecord: (listener: (notice: RecordNotice) => void) => () => void;
   onFunded: (listener: (notice: FundedNotice) => void) => () => void;
@@ -103,6 +110,7 @@ export const usePetStream = (): PetStream => {
   const careListeners = useRef(new Set<(notice: CareNotice) => void>());
   const milestoneListeners = useRef(new Set<(notice: MilestoneNotice) => void>());
   const wantListeners = useRef(new Set<(notice: WantNotice) => void>());
+  const titleListeners = useRef(new Set<(notice: TitleNotice) => void>());
   const minigameListeners = useRef(new Set<(notice: MinigameNotice) => void>());
   const recordListeners = useRef(new Set<(notice: RecordNotice) => void>());
   const fundedListeners = useRef(new Set<(notice: FundedNotice) => void>());
@@ -113,14 +121,18 @@ export const usePetStream = (): PetStream => {
   const [caretakerId, setCaretakerId] = useState<string | null>(null);
   const [profile, setProfile] = useState<CaretakerProfile | null>(null);
   const [presenceCount, setPresenceCount] = useState(0);
-  const [presenceNames, setPresenceNames] = useState<string[]>([]);
+  const [presenceCaretakers, setPresenceCaretakers] = useState<PresenceCaretaker[]>([]);
+  const [crownedId, setCrownedId] = useState<string | null>(null);
 
   useEffect(() => {
     const source = new EventSource("/api/stream");
 
     const acceptPresence = (view: PresenceView): void => {
       setPresenceCount(view.count);
-      setPresenceNames(view.caretakers.map((caretaker) => caretaker.name));
+      // Older servers may not send titles yet — a rolling deploy must not
+      // crash the list.
+      setPresenceCaretakers(view.caretakers.map((caretaker) => ({ ...caretaker, titles: caretaker.titles ?? [] })));
+      setCrownedId(view.crownedId ?? null);
     };
 
     const acceptSnapshot = (payload: SnapshotPayload): void => {
@@ -224,6 +236,11 @@ export const usePetStream = (): PetStream => {
       const { type: _type, ...notice } = message;
       for (const listener of minigameListeners.current) listener(notice);
     });
+    source.addEventListener("title", (event) => {
+      const message = JSON.parse((event as MessageEvent<string>).data) as TitleMessage;
+      const { type: _type, ...notice } = message;
+      for (const listener of titleListeners.current) listener(notice);
+    });
     source.addEventListener("record", (event) => {
       const message = JSON.parse((event as MessageEvent<string>).data) as RecordMessage;
       const { type: _type, ...notice } = message;
@@ -281,6 +298,11 @@ export const usePetStream = (): PetStream => {
     return () => wantListeners.current.delete(listener);
   }, []);
 
+  const onTitle = useCallback((listener: (notice: TitleNotice) => void) => {
+    titleListeners.current.add(listener);
+    return () => titleListeners.current.delete(listener);
+  }, []);
+
   const onMinigame = useCallback((listener: (notice: MinigameNotice) => void) => {
     minigameListeners.current.add(listener);
     return () => minigameListeners.current.delete(listener);
@@ -306,7 +328,8 @@ export const usePetStream = (): PetStream => {
     caretakerId,
     profile,
     presenceCount,
-    presenceNames,
+    presenceCaretakers,
+    crownedId,
     room,
     timeZone,
     projectNow,
@@ -315,6 +338,7 @@ export const usePetStream = (): PetStream => {
     onCare,
     onMilestone,
     onWant,
+    onTitle,
     onMinigame,
     onRecord,
     onFunded,

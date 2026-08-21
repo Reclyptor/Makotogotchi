@@ -5,8 +5,10 @@
 import Link from "next/link";
 import { db } from "@/server/db/client";
 import { runtime } from "@/server/runtime";
-import { leaderboard, type LeaderboardWindow } from "@/server/social";
+import { anonymousName, leaderboard, nicknameMap, type LeaderboardWindow } from "@/server/social";
 import { gameRecords, type RecordHolder } from "@/server/records";
+import { titleHolders } from "@/server/titles";
+import { TITLE_IDS, TITLES } from "@/sim/titles";
 import { isoWeekKeyAtTick } from "@/server/schedule";
 import { env } from "@/server/env";
 
@@ -34,6 +36,8 @@ export default async function LeaderboardPage({
   const state = await engine.view(current);
   const rows = await leaderboard(await db(), active, { generationId: current.id, nowTick: state.tick });
   const boards = await gameRecords(await db(), isoWeekKeyAtTick(current.genesisEpochMs, state.tick, env().PET_TIMEZONE));
+  const holders = await titleHolders(await db(), current.id);
+  const holderNames = await nicknameMap(await db(), holders.map((holder) => holder.caretakerId));
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col gap-4 p-4">
@@ -70,6 +74,35 @@ export default async function LeaderboardPage({
         ))}
         {rows.length === 0 && <li className="text-sm text-muted">Nobody has cared yet. Be the first.</li>}
       </ol>
+
+      {/* Titles: one contested holder per niche, this generation (SPEC §24). */}
+      <section aria-label="Titles" className="flex flex-col gap-1">
+        <h2 className="px-2.5 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">Titles</h2>
+        <ul className="flex flex-col">
+          {TITLE_IDS.map((titleId) => {
+            const holder = holders.find((candidate) => candidate.titleId === titleId);
+            return (
+              <li
+                key={titleId}
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-2.5 py-2 hover:bg-white/[0.04]"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold leading-tight">
+                    <span aria-hidden="true">{TITLES[titleId].chip} </span>
+                    {TITLES[titleId].label}
+                  </p>
+                  <p className="truncate text-[11px] leading-tight text-muted">{TITLES[titleId].description}</p>
+                </div>
+                <span className="w-32 truncate text-right text-xs tabular-nums text-muted">
+                  {holder
+                    ? `${holderNames.get(holder.caretakerId) ?? anonymousName(holder.caretakerId)} · ${holder.value}`
+                    : "—"}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
 
       {/* Records: one aligned row per game, weekly beside all-time. */}
       <section aria-label="Records" className="flex flex-col gap-1">

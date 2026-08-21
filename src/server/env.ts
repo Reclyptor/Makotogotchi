@@ -15,6 +15,9 @@ const schema = z.object({
   VAPID_PRIVATE_KEY: z.string().optional(),
   VAPID_SUBJECT: z.string().optional(),
   PET_TIMEZONE: z.string().min(1).default("America/Chicago"),
+  /** SSE connections allowed per client IP (SPEC §8.3). The e2e harness
+   *  raises it — every Playwright worker shares 127.0.0.1. */
+  MAX_STREAMS_PER_IP: z.coerce.number().int().positive().default(5),
 });
 
 export type Env = z.infer<typeof schema>;

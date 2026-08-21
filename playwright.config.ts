@@ -36,6 +36,9 @@ export default defineConfig({
       MONGODB_DB: "makotogotchi-e2e",
       REDIS_URL: E2E.redisUrl,
       CARETAKER_SECRET: E2E.caretakerSecret,
+      // Every Playwright worker connects from 127.0.0.1; the production
+      // per-IP stream cap would reject parallel specs' EventSources.
+      MAX_STREAMS_PER_IP: "40",
     },
   },
 });
