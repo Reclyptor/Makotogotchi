@@ -33,6 +33,8 @@ export const RUG = { x: 66, y: 158, w: 128, h: 26 } as const;
 export type Condition = "well" | "poor" | "critical";
 
 export type BackdropKey = {
+  /** Where the day is being spent (SPEC §22.8). */
+  venueId: string;
   themeId: string;
   segment: DaySegment;
   next: DaySegment;
@@ -45,7 +47,7 @@ export type BackdropKey = {
 };
 
 export const keyOf = (key: BackdropKey): string =>
-  [key.themeId, key.segment, key.next, key.blend, key.weather, key.season, key.sunStep, key.condition].join("|");
+  [key.venueId, key.themeId, key.segment, key.next, key.blend, key.weather, key.season, key.sunStep, key.condition].join("|");
 
 // ── dithering ───────────────────────────────────────────────────────────────
 

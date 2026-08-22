@@ -2,13 +2,15 @@
 // §22.6) are testable rather than a matter of taste.
 
 import { describe, expect, it } from "vitest";
-import { composeBackdrop, GLASS, ROOM_HEIGHT, ROOM_WIDTH, type BackdropKey } from "./compose";
+import { composeBackdrop, GLASS, keyOf, ROOM_HEIGHT, ROOM_WIDTH, type BackdropKey } from "./compose";
+import { venueSpec } from "./venues";
 import { COZY, hex, type RGB } from "./theme";
 import { skyMomentAt } from "@/sim/atmosphere";
 
 const keyAt = (hour: number, extra: Partial<BackdropKey> = {}): BackdropKey => {
   const moment = skyMomentAt(hour, 0);
   return {
+    venueId: "home",
     themeId: "cozy",
     segment: moment.segment,
     next: moment.next,
@@ -103,6 +105,22 @@ describe("backdrop composition", () => {
     };
     expect(brightness("poor")).toBeLessThan(brightness("well"));
     expect(brightness("critical")).toBeLessThan(brightness("poor"));
+  });
+
+  it("dispatches home through the venue registry pixel-identically (SPEC §22.8)", () => {
+    // The refactor's contract: the home venue IS the untouched composer, so
+    // every hour and weather renders byte-for-byte what it did before.
+    for (const hour of [3, 13]) {
+      for (const weather of ["clear", "rain"] as const) {
+        const key = keyAt(hour, { weather });
+        expect(Array.from(venueSpec("home").compose(key))).toEqual(Array.from(composeBackdrop(key)));
+      }
+    }
+    // Unknown or not-yet-drawn venues fall back to home, never to a blank.
+    expect(venueSpec("not-a-venue").id).toBe("home");
+    expect(venueSpec("meadow").compose(keyAt(13))).toEqual(composeBackdrop(keyAt(13)));
+    // The cache key tells venues apart.
+    expect(keyOf(keyAt(13))).not.toBe(keyOf(keyAt(13, { venueId: "meadow" })));
   });
 
   it("throws more light across the floor at noon than at midnight", () => {

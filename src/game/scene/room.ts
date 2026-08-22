@@ -8,8 +8,8 @@ import { Toasts } from "./toasts";
 import { AnimationMachine } from "../anim/machine";
 import { BASE_CLIPS, BUTTERFLY_CLIP, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP, type OneShotName } from "../anim/clips";
 import { SPRITE_FRAMES } from "../atlas.generated";
-import { Backdrop, ROOM_HEIGHT, ROOM_WIDTH, RUG, type BackdropKey, type Condition } from "./backdrop";
-import { celestialAt, seasonFor, skyMomentAt, weatherFor, type Celestial } from "@/sim/atmosphere";
+import { Backdrop, ROOM_HEIGHT, ROOM_WIDTH, RUG, venueSpec, type BackdropKey, type Condition } from "./backdrop";
+import { celestialAt, seasonFor, skyMomentAt, venueAt, weatherFor, type Celestial } from "@/sim/atmosphere";
 import type { DerivedState } from "@/sim/derive";
 import type { AmbientEvent } from "@/sim/ambient";
 import type { CareAction, LifeStage } from "@/sim/tuning";
@@ -28,6 +28,8 @@ export type AtmosphereInput = {
   dayIndex: number;
   seed: number;
   themeId: string | null;
+  /** Venues in the rotation pool — free ones plus funded ones (SPEC §22.8). */
+  ownedVenues: readonly string[];
 };
 
 const ALERT_CONDITION: Record<DerivedState["alert"], Condition> = {
@@ -75,15 +77,16 @@ const ROOM_EDGE_MARGIN = 2;
 export type WanderBand = { min: number; max: number };
 
 /**
- * Where the pet may stand at this stage (SPEC §21.9 scales it): on the rug,
- * and inside the room. A pet too big for its own rug gets the rug's centre
- * rather than a band that runs backwards.
+ * Where the pet may stand at this stage (SPEC §21.9 scales it): on the
+ * venue's ground span — the rug at home, the generalized §22.3 rule
+ * elsewhere — and inside the scene. A pet too big for its own span gets the
+ * centre rather than a band that runs backwards.
  */
-export const wanderBand = (scale: number): WanderBand => {
+export const wanderBand = (scale: number, span: { left: number; right: number } = { left: RUG.x, right: RUG.x + RUG.w }): WanderBand => {
   const foot = PET_FOOT_REACH * scale;
   const half = PET_HALF_WIDTH * scale;
-  const min = Math.max(RUG.x + foot, half + ROOM_EDGE_MARGIN);
-  const max = Math.min(RUG.x + RUG.w - foot, ROOM_WIDTH - half - ROOM_EDGE_MARGIN);
+  const min = Math.max(span.left + foot, half + ROOM_EDGE_MARGIN);
+  const max = Math.min(span.right - foot, ROOM_WIDTH - half - ROOM_EDGE_MARGIN);
   return min <= max ? { min, max } : { min: PET_X, max: PET_X };
 };
 
@@ -153,6 +156,7 @@ export class Room {
   private seed = 0;
   // Until the first sync lands, the room holds an ordinary clear midday.
   private backdropKey: BackdropKey = {
+    venueId: "home",
     themeId: "cozy",
     segment: "midday",
     next: "midday",
@@ -199,6 +203,7 @@ export class Room {
     this.seed = input.seed;
     this.celestial = celestialAt(input.hour, input.minute);
     this.backdropKey = {
+      venueId: venueAt(input.seed, input.dayIndex, input.ownedVenues),
       themeId: input.themeId ?? "cozy",
       segment: moment.segment,
       next: moment.next,
@@ -267,9 +272,10 @@ export class Room {
   private updateWander(nowMs: number): void {
     const dt = Math.min(nowMs - (this.lastWanderMs ?? nowMs), 100);
     this.lastWanderMs = nowMs;
-    // Growing narrows the band, so a pet that just evolved can find itself
-    // standing outside it. Walk it back in rather than leaving it clipped.
-    const band = wanderBand(this.petScale);
+    // Growing narrows the band — and a day trip moves it — so the pet can
+    // find itself standing outside it. Walk it back in rather than leaving
+    // it clipped.
+    const band = wanderBand(this.petScale, venueSpec(this.backdropKey.venueId).span);
     this.petX = Math.min(band.max, Math.max(band.min, this.petX));
     const key = this.machine.baseKey;
     const wanderable =
@@ -384,8 +390,10 @@ export class Room {
     }
   }
 
-  /** Communal decor (SPEC §13.2, §21.8), drawn procedurally in the palette. */
+  /** Communal decor (SPEC §13.2, §21.8), drawn procedurally in the palette.
+   *  It furnishes the room — away venues carry none of it (SPEC §22.8). */
   private renderDecor(ctx: CanvasRenderingContext2D, nowMs: number): void {
+    if (!venueSpec(this.backdropKey.venueId).decor) return;
     const px = (x: number, y: number, w: number, h: number, color: string): void => {
       ctx.fillStyle = color;
       ctx.fillRect(x, y, w, h);

@@ -121,7 +121,7 @@ describe("rendering a pet that was just petted", () => {
       sick: false,
       asleep: false,
     };
-    room.syncAtmosphere({ hour: 13, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null });
+    room.syncAtmosphere({ hour: 13, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, ownedVenues: [] });
     return { room, derived: derive(contented) };
   };
 

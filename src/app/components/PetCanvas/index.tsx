@@ -211,6 +211,9 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
             dayIndex: clock.dayIndex,
             seed: state.generation.seed,
             themeId: roomViewRef.current?.activeTheme ?? null,
+            // The rotation pool (SPEC §22.8) opens as venue scenes land
+            // (§22.7 B6/B7): the free pair first, then funded grand items.
+            ownedVenues: [],
           });
         }
         if (state) {
