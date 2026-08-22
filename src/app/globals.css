@@ -1,11 +1,18 @@
 @import "tailwindcss";
 
 /* ── AURORA GLASS ──────────────────────────────────────────────────────────
-   True glassmorphism: frosted panels floating over a slowly drifting aurora
-   field. Per NN/g: glass only reads against a rich backdrop, blur high for
-   legibility, gradient strokes + a lit top edge for thickness, fill opacity
-   high enough that text stays WCAG-legible. Motion: ease-out ≤300ms,
-   transform/opacity only. */
+   True glassmorphism: frosted panels floating over a rich aurora field. Per
+   NN/g: glass only reads against a rich backdrop, blur high for legibility,
+   gradient strokes + a lit top edge for thickness, fill opacity high enough
+   that text stays WCAG-legible. Motion: ease-out ≤300ms, transform/opacity
+   only.
+
+   Every animation here is finite and settles. Nothing loops forever, and
+   that is a hard rule rather than a preference: a page holding this many
+   `backdrop-filter` panels re-blurs all of them on any frame where anything
+   underneath moves, so a single perpetual animation — even a 6px dot — keeps
+   the compositor at full refresh rate for as long as the tab is open. That
+   cost is not paid by the animation; it is paid by the glass. */
 
 @theme {
   --color-background: #0a0918;
@@ -24,7 +31,6 @@
 
   --animate-pop: pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
   --animate-rise: rise 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
-  --animate-glow: glow 3.2s ease-in-out infinite;
   --animate-wiggle: wiggle 0.4s ease-in-out;
 
   @keyframes pop {
@@ -34,10 +40,6 @@
   @keyframes rise {
     0% { transform: translateY(6px); opacity: 0; }
     100% { transform: translateY(0); opacity: 1; }
-  }
-  @keyframes glow {
-    0%, 100% { opacity: 0.5; }
-    50% { opacity: 1; }
   }
   @keyframes wiggle {
     0%, 100% { transform: rotate(0deg); }
@@ -57,8 +59,11 @@ body {
   min-height: 100dvh;
 }
 
-/* The aurora field the glass frosts against. Two layers drifting on
-   transform only — composite-friendly, and frozen under reduced motion. */
+/* The aurora field the glass frosts against: two oversized gradient layers,
+   held still. They used to drift on a 52s and a 64s loop — imperceptible
+   frame to frame, and the single most expensive thing on the page, because
+   they sit *behind* every frosted panel and so invalidated all of them on
+   every frame, forever. */
 body::before,
 body::after {
   content: "";
@@ -72,21 +77,11 @@ body::before {
     radial-gradient(38rem 30rem at 28% 22%, rgba(124, 92, 240, 0.34), transparent 65%),
     radial-gradient(30rem 26rem at 75% 14%, rgba(56, 189, 248, 0.17), transparent 65%),
     radial-gradient(36rem 30rem at 70% 85%, rgba(217, 83, 138, 0.16), transparent 65%);
-  animation: aurora-a 52s ease-in-out infinite alternate;
 }
 body::after {
   background:
     radial-gradient(28rem 24rem at 18% 78%, rgba(52, 211, 153, 0.10), transparent 65%),
     radial-gradient(34rem 26rem at 55% 45%, rgba(167, 139, 250, 0.12), transparent 70%);
-  animation: aurora-b 64s ease-in-out infinite alternate;
-}
-@keyframes aurora-a {
-  from { transform: translate3d(-3%, -2%, 0) rotate(0deg); }
-  to { transform: translate3d(3%, 3%, 0) rotate(6deg); }
-}
-@keyframes aurora-b {
-  from { transform: translate3d(2%, 3%, 0) rotate(0deg); }
-  to { transform: translate3d(-3%, -2%, 0) rotate(-5deg); }
 }
 
 /* Frosted panel: high blur, gradient fill, lit top edge, hairline stroke. */
@@ -158,10 +153,6 @@ button[aria-disabled="true"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body::before,
-  body::after {
-    animation: none;
-  }
   .press,
   .press:active {
     transition: none;

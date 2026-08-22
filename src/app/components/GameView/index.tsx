@@ -451,9 +451,13 @@ export default function GameView() {
             role="status"
             className={`panel flex items-center gap-1.5 !rounded-full px-2.5 py-1 text-xs ${stream.connected ? "text-mint" : "text-muted"}`}
           >
+            {/* Steady, not pulsing. The word beside it already says "live";
+                the dot only carries the colour. A perpetual animation here
+                cost a third of a GPU, because it sits inside a frosted panel
+                and re-blurred the whole page on every frame it drew. */}
             <span
               aria-hidden="true"
-              className={`inline-block h-1.5 w-1.5 rounded-full ${stream.connected ? "animate-glow bg-mint" : "bg-muted"}`}
+              className={`inline-block h-1.5 w-1.5 rounded-full ${stream.connected ? "bg-mint" : "bg-muted"}`}
             />
             {stream.connected ? "live" : "connecting"}
           </span>
