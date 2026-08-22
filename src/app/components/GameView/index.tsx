@@ -27,6 +27,8 @@ import MinigameShell from "@/app/components/minigames/Shell";
 import { isMinigameId, MINIGAME_IDS, MINIGAMES, type MinigameId } from "@/sim/minigames";
 import { isAmbientEvent, type AmbientEvent } from "@/sim/ambient";
 import { isTitleId, TITLES } from "@/sim/titles";
+import { isVenueId, venueAt } from "@/sim/atmosphere";
+import { FREE_VENUES, petClock, venueSpec } from "@/game/scene/backdrop";
 import { usePetStream } from "@/app/hooks/usePetStream";
 import type { FeedEntryPayload } from "@/app/api/feed/route";
 
@@ -367,6 +369,15 @@ export default function GameView() {
   const isEgg = ui !== null && ui.state.bornAtTick === null;
   const isDead = ui !== null && ui.state.diedAtTick !== null;
 
+  // Where the day is being spent (SPEC §22.8) — the same pure draw the
+  // canvas dresses itself with, so caption and scene can never disagree.
+  const venueLabel = (() => {
+    if (!ui || !stream.timeZone || isEgg || isDead) return null;
+    const owned = [...FREE_VENUES, ...(stream.room?.decor ?? []).filter(isVenueId)];
+    const venueId = venueAt(ui.state.generation.seed, petClock(stream.timeZone).dayIndex, owned);
+    return venueId === "home" ? null : venueSpec(venueId).label;
+  })();
+
   const statusText = ui
     ? isDead
       ? `${petName} has died. A new egg will appear soon.`
@@ -468,6 +479,8 @@ export default function GameView() {
         </div>
         <p aria-live="polite" className="px-3 py-2 text-center text-sm text-muted">
           {statusText}
+          {/* An away day reads as an outing, not a bug (SPEC §22.8). */}
+          {venueLabel && ` 🧭 Out at ${venueLabel} today.`}
         </p>
       </div>
 

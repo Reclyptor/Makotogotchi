@@ -29,6 +29,8 @@ export type SkyRect = { x: number; y: number; w: number; h: number };
 
 export type VenueSpec = {
   id: VenueId;
+  /** How the caption names the place: "Makoto is at ~ today" (SPEC §22.8). */
+  label: string;
   /** Where the live sky draws and clips — home's is the window pane. */
   sky: SkyRect;
   /** Silhouette height above the sky's bottom in a column: where the sun
@@ -53,6 +55,7 @@ export type VenueSpec = {
 
 export const HOME: VenueSpec = {
   id: "home",
+  label: "home",
   sky: GLASS,
   horizonAt: skylineAt,
   span: { left: RUG.x, right: RUG.x + RUG.w },
@@ -62,8 +65,9 @@ export const HOME: VenueSpec = {
   compose: composeBackdrop,
 };
 
-const outdoor = (id: VenueId, horizonAt: (sx: number) => number, compose: VenueSpec["compose"]): VenueSpec => ({
+const outdoor = (id: VenueId, label: string, horizonAt: (sx: number) => number, compose: VenueSpec["compose"]): VenueSpec => ({
   id,
+  label,
   sky: OUTDOOR_SKY,
   // Outdoor horizons belong to the venue, not the room's theme.
   horizonAt: (_theme: RoomTheme, sx: number) => horizonAt(sx),
@@ -77,10 +81,10 @@ const outdoor = (id: VenueId, horizonAt: (sx: number) => number, compose: VenueS
 /** Scenes land here as they are drawn (§22.7 B6/B7). */
 export const VENUES: Partial<Record<VenueId, VenueSpec>> = {
   home: HOME,
-  garden: outdoor("garden", gardenHorizonAt, composeGarden),
-  meadow: outdoor("meadow", meadowHorizonAt, composeMeadow),
-  beach: { ...outdoor("beach", beachHorizonAt, composeBeach), renderLive: renderBeachLive },
-  forest: outdoor("forest", forestHorizonAt, composeForest),
+  garden: outdoor("garden", "the garden", gardenHorizonAt, composeGarden),
+  meadow: outdoor("meadow", "the meadow", meadowHorizonAt, composeMeadow),
+  beach: { ...outdoor("beach", "the beach", beachHorizonAt, composeBeach), renderLive: renderBeachLive },
+  forest: outdoor("forest", "the forest clearing", forestHorizonAt, composeForest),
 };
 
 /** The venues every room owns from the start (SPEC §22.8) — funded grand
