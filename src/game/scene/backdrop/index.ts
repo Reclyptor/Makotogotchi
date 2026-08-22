@@ -10,7 +10,7 @@ import { venueSpec, type SkyRect } from "./venues";
 import { hex, themeFor, type RGB } from "./theme";
 
 export { ROOM_WIDTH, ROOM_HEIGHT, RUG, WINDOW, GLASS, FLOOR_Y, type BackdropKey, type Condition } from "./compose";
-export { venueSpec, VENUES, type VenueSpec } from "./venues";
+export { FREE_VENUES, venueSpec, VENUES, type VenueSpec } from "./venues";
 export { themeFor, THEMES } from "./theme";
 export { petClock, type PetClock } from "./clock";
 
@@ -79,11 +79,12 @@ export class Backdrop {
     ctx.rect(sky.x, sky.y, sky.w, sky.h);
     ctx.clip();
 
-    if (celestial.body === "moon") this.renderStars(ctx, sky, seed, clock, reducedMotion);
+    const density = venue.weatherDensity;
+    if (celestial.body === "moon") this.renderStars(ctx, sky, density, seed, clock, reducedMotion);
     this.renderCelestial(ctx, sky, venue.horizonAt, celestial, key.weather, key.themeId);
-    this.renderClouds(ctx, sky, key.weather, seed, clock);
-    if (key.weather === "rain") this.renderRain(ctx, sky, venue.glassPane, seed, clock);
-    if (key.weather === "snow") this.renderSnow(ctx, sky, seed, clock);
+    this.renderClouds(ctx, sky, density, key.weather, seed, clock);
+    if (key.weather === "rain") this.renderRain(ctx, sky, density, venue.glassPane, seed, clock);
+    if (key.weather === "snow") this.renderSnow(ctx, sky, density, seed, clock);
 
     ctx.restore();
   }
@@ -104,8 +105,15 @@ export class Backdrop {
   }
 
   /** Fixed constellations that breathe, rather than a field of noise. */
-  private renderStars(ctx: CanvasRenderingContext2D, sky: SkyRect, seed: number, nowMs: number, reducedMotion: boolean): void {
-    for (let index = 0; index < STAR_COUNT; index++) {
+  private renderStars(
+    ctx: CanvasRenderingContext2D,
+    sky: SkyRect,
+    density: number,
+    seed: number,
+    nowMs: number,
+    reducedMotion: boolean,
+  ): void {
+    for (let index = 0; index < STAR_COUNT * density; index++) {
       const x = sky.x + Math.floor(hash(seed + index * 31) * sky.w);
       const y = sky.y + Math.floor(hash(seed + index * 57) * (sky.h * 0.62));
       const phase = reducedMotion ? 0.5 : (Math.sin(nowMs / 900 + index * 1.7) + 1) / 2;
@@ -155,10 +163,17 @@ export class Backdrop {
     ctx.restore();
   }
 
-  private renderClouds(ctx: CanvasRenderingContext2D, sky: SkyRect, weather: Weather, seed: number, nowMs: number): void {
+  private renderClouds(
+    ctx: CanvasRenderingContext2D,
+    sky: SkyRect,
+    density: number,
+    weather: Weather,
+    seed: number,
+    nowMs: number,
+  ): void {
     const tint = CLOUD_TINT[weather];
     const span = sky.w + 24;
-    for (let index = 0; index < tint.count; index++) {
+    for (let index = 0; index < tint.count * density; index++) {
       const drift = (nowMs / (CLOUD_DRIFT_MS * (0.7 + hash(seed + index * 13) * 0.6))) % 1;
       const x = Math.round(sky.x - 12 + ((drift + hash(seed + index * 97)) % 1) * span);
       const y = sky.y + 3 + Math.floor(hash(seed + index * 41) * (sky.h * 0.4));
@@ -170,9 +185,16 @@ export class Backdrop {
     }
   }
 
-  private renderRain(ctx: CanvasRenderingContext2D, sky: SkyRect, glassPane: boolean, seed: number, nowMs: number): void {
+  private renderRain(
+    ctx: CanvasRenderingContext2D,
+    sky: SkyRect,
+    density: number,
+    glassPane: boolean,
+    seed: number,
+    nowMs: number,
+  ): void {
     ctx.fillStyle = "#a9bcd8";
-    for (let index = 0; index < RAIN_DROPS; index++) {
+    for (let index = 0; index < RAIN_DROPS * density; index++) {
       const speed = 900 + hash(seed + index * 23) * 400;
       const progress = ((nowMs / speed) + hash(seed + index * 71)) % 1;
       const x = sky.x + Math.floor(hash(seed + index * 11) * sky.w) - Math.floor(progress * 4);
@@ -192,9 +214,9 @@ export class Backdrop {
     }
   }
 
-  private renderSnow(ctx: CanvasRenderingContext2D, sky: SkyRect, seed: number, nowMs: number): void {
+  private renderSnow(ctx: CanvasRenderingContext2D, sky: SkyRect, density: number, seed: number, nowMs: number): void {
     ctx.fillStyle = "#f2f6ff";
-    for (let index = 0; index < SNOW_FLAKES; index++) {
+    for (let index = 0; index < SNOW_FLAKES * density; index++) {
       const speed = 5200 + hash(seed + index * 29) * 3400;
       const progress = ((nowMs / speed) + hash(seed + index * 83)) % 1;
       const sway = Math.sin(nowMs / 1400 + index * 2.1) * 3;

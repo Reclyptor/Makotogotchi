@@ -118,7 +118,7 @@ describe("backdrop composition", () => {
     }
     // Unknown or not-yet-drawn venues fall back to home, never to a blank.
     expect(venueSpec("not-a-venue").id).toBe("home");
-    expect(venueSpec("meadow").compose(keyAt(13))).toEqual(composeBackdrop(keyAt(13)));
+    expect(venueSpec("beach").compose(keyAt(13))).toEqual(composeBackdrop(keyAt(13)));
     // The cache key tells venues apart.
     expect(keyOf(keyAt(13))).not.toBe(keyOf(keyAt(13, { venueId: "meadow" })));
   });

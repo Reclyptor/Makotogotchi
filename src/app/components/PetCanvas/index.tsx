@@ -11,7 +11,8 @@ import { isAmbientEvent } from "@/sim/ambient";
 import type { CareAction } from "@/sim/tuning";
 import { SPRITE_SHEET_URL } from "@/game/atlas.generated";
 import { Room, ROOM_HEIGHT, ROOM_WIDTH, type FoodTaste } from "@/game/scene/room";
-import { petClock } from "@/game/scene/backdrop";
+import { FREE_VENUES, petClock } from "@/game/scene/backdrop";
+import { isVenueId } from "@/sim/atmosphere";
 import { startLoop } from "@/game/engine/loop";
 import { wantToast } from "@/app/components/WantBanner/copy";
 import type { PetStream } from "@/app/hooks/usePetStream";
@@ -211,9 +212,9 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
             dayIndex: clock.dayIndex,
             seed: state.generation.seed,
             themeId: roomViewRef.current?.activeTheme ?? null,
-            // The rotation pool (SPEC §22.8) opens as venue scenes land
-            // (§22.7 B6/B7): the free pair first, then funded grand items.
-            ownedVenues: [],
+            // The rotation pool (SPEC §22.8): the free venues plus any
+            // funded grand-item venues the room owns (§22.7 B7).
+            ownedVenues: [...FREE_VENUES, ...(roomViewRef.current?.decor ?? []).filter(isVenueId)],
           });
         }
         if (state) {

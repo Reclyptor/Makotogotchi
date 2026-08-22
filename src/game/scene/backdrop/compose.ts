@@ -59,7 +59,7 @@ const BAYER = [
 ] as const;
 
 /** The Bayer cutoff at a pixel; `layer` decorrelates stacked dithers. */
-const threshold = (x: number, y: number, layer = 0): number =>
+export const threshold = (x: number, y: number, layer = 0): number =>
   (BAYER[(y + layer * 2) & 3]![(x + layer * 3) & 3]! + 0.5) / 16;
 
 /**
@@ -70,7 +70,7 @@ const threshold = (x: number, y: number, layer = 0): number =>
 const DITHER_ZONE = 0.4;
 
 /** Pick a ramp entry for a 0–1 position, dithering only across the seam. */
-const pickRamp = (ramp: readonly RGB[], t: number, x: number, y: number, layer = 0): RGB => {
+export const pickRamp = (ramp: readonly RGB[], t: number, x: number, y: number, layer = 0): RGB => {
   const clamped = Math.max(0, Math.min(0.999_9, t));
   const position = clamped * (ramp.length - 1);
   const index = Math.floor(position);
@@ -135,7 +135,7 @@ const expand = (anchors: readonly RGB[]): RGB[] => {
 };
 
 /** Weather and season bend the ramp without inventing a new palette. */
-const skyRamp = (segment: DaySegment, weather: Weather, season: Season): readonly RGB[] => {
+export const skyRamp = (segment: DaySegment, weather: Weather, season: Season): readonly RGB[] => {
   let ramp = expand(SKY_RAMPS[segment]);
   if (weather === "cloudy") ramp = ramp.map((color) => mix(color, OVERCAST, 0.35));
   if (weather === "rain") ramp = ramp.map((color) => scale(mix(color, OVERCAST, 0.45), 0.78));
@@ -146,7 +146,7 @@ const skyRamp = (segment: DaySegment, weather: Weather, season: Season): readonl
   return ramp;
 };
 
-const isDark = (segment: DaySegment): boolean => segment === "night";
+export const isDark = (segment: DaySegment): boolean => segment === "night";
 
 // ── outside ─────────────────────────────────────────────────────────────────
 
@@ -199,7 +199,7 @@ const SEASON_GROUND: Record<Season, RGB> = {
  * loses a little life and a little light. It is deliberately subtle — a
  * signal you feel before you read the meters, not a punishment.
  */
-const wear = (color: RGB, condition: Condition): RGB => {
+export const wear = (color: RGB, condition: Condition): RGB => {
   if (condition === "well") return color;
   const grey = (color[0] + color[1] + color[2]) / 3;
   const toward: RGB = [grey, grey, grey];

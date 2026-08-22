@@ -10,6 +10,14 @@
 
 import type { VenueId } from "@/sim/atmosphere";
 import { composeBackdrop, GLASS, RUG, skylineAt, type BackdropKey } from "./compose";
+import {
+  composeGarden,
+  composeMeadow,
+  gardenHorizonAt,
+  meadowHorizonAt,
+  OUTDOOR_SKY,
+  OUTDOOR_SPAN,
+} from "./outdoors";
 import type { RoomTheme } from "./theme";
 
 export type SkyRect = { x: number; y: number; w: number; h: number };
@@ -29,6 +37,9 @@ export type VenueSpec = {
   decor: boolean;
   /** Rain droplets cling to glass; outdoor skies have none to cling to. */
   glassPane: boolean;
+  /** Live weather element counts scale by this: the window pane is a sliver
+   *  of sky, the open air is all of it. Home stays exactly 1. */
+  weatherDensity: number;
   compose: (key: BackdropKey) => Uint8ClampedArray;
 };
 
@@ -39,12 +50,31 @@ export const HOME: VenueSpec = {
   span: { left: RUG.x, right: RUG.x + RUG.w },
   decor: true,
   glassPane: true,
+  weatherDensity: 1,
   compose: composeBackdrop,
 };
+
+const outdoor = (id: VenueId, horizonAt: (sx: number) => number, compose: VenueSpec["compose"]): VenueSpec => ({
+  id,
+  sky: OUTDOOR_SKY,
+  // Outdoor horizons belong to the venue, not the room's theme.
+  horizonAt: (_theme: RoomTheme, sx: number) => horizonAt(sx),
+  span: OUTDOOR_SPAN,
+  decor: false,
+  glassPane: false,
+  weatherDensity: 3,
+  compose,
+});
 
 /** Scenes land here as they are drawn (§22.7 B6/B7). */
 export const VENUES: Partial<Record<VenueId, VenueSpec>> = {
   home: HOME,
+  garden: outdoor("garden", gardenHorizonAt, composeGarden),
+  meadow: outdoor("meadow", meadowHorizonAt, composeMeadow),
 };
+
+/** The venues every room owns from the start (SPEC §22.8) — funded grand
+ *  items join through roomState as their scenes land (§22.7 B7). */
+export const FREE_VENUES = ["garden", "meadow"] as const;
 
 export const venueSpec = (id: string): VenueSpec => VENUES[id as VenueId] ?? HOME;
