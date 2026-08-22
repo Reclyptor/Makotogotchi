@@ -893,7 +893,7 @@ need, and it is fully unit-testable.
 
 | File | Purpose |
 | --- | --- |
-| `engine/loop.ts` | Fixed-timestep accumulator driving `update(dt)` at a constant rate, decoupled from `render(alpha)` on `requestAnimationFrame`. Pauses on `visibilitychange`. |
+| `engine/loop.ts` | Fixed-timestep accumulator driving `update(dt)` at 10Hz, decoupled from `render(now)` on a 15fps cadence of its own. Parks itself while the document is hidden **or** the window is unfocused. |
 | `engine/atlas.ts` | Sprite atlas: loads the sheet with retry, exposes named frames, blits them with integer-snapped bottom-center anchoring. |
 | `engine/particles.ts` | Pooled particle system — dust puffs, sparkles, hearts, Zs, crumbs. |
 | `anim/machine.ts` | Declarative animation state machine: `animKey → clip`, with transition rules, one-shot clips that return to idle, and interruption priorities. Pure and unit-tested. |
