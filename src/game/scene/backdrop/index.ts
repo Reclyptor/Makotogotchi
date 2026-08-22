@@ -87,6 +87,8 @@ export class Backdrop {
     if (key.weather === "snow") this.renderSnow(ctx, sky, density, seed, clock);
 
     ctx.restore();
+
+    venue.renderLive?.(ctx, clock);
   }
 
   private blitArchitecture(ctx: CanvasRenderingContext2D, key: BackdropKey): void {

@@ -11,12 +11,17 @@
 import type { VenueId } from "@/sim/atmosphere";
 import { composeBackdrop, GLASS, RUG, skylineAt, type BackdropKey } from "./compose";
 import {
+  beachHorizonAt,
+  composeBeach,
+  composeForest,
   composeGarden,
   composeMeadow,
+  forestHorizonAt,
   gardenHorizonAt,
   meadowHorizonAt,
   OUTDOOR_SKY,
   OUTDOOR_SPAN,
+  renderBeachLive,
 } from "./outdoors";
 import type { RoomTheme } from "./theme";
 
@@ -41,6 +46,9 @@ export type VenueSpec = {
    *  of sky, the open air is all of it. Home stays exactly 1. */
   weatherDensity: number;
   compose: (key: BackdropKey) => Uint8ClampedArray;
+  /** A venue's own living touch, drawn each frame over the composed scene —
+   *  the beach's surf. Passed 0 under reduced motion, which holds it still. */
+  renderLive?: (ctx: CanvasRenderingContext2D, nowMs: number) => void;
 };
 
 export const HOME: VenueSpec = {
@@ -71,6 +79,8 @@ export const VENUES: Partial<Record<VenueId, VenueSpec>> = {
   home: HOME,
   garden: outdoor("garden", gardenHorizonAt, composeGarden),
   meadow: outdoor("meadow", meadowHorizonAt, composeMeadow),
+  beach: { ...outdoor("beach", beachHorizonAt, composeBeach), renderLive: renderBeachLive },
+  forest: outdoor("forest", forestHorizonAt, composeForest),
 };
 
 /** The venues every room owns from the start (SPEC §22.8) — funded grand

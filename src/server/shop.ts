@@ -34,6 +34,10 @@ export const GRAND_ITEMS = {
   // and a new view out of the window, for everyone, forever.
   theme_cabin: { kind: "grand", price: 900, label: "Log Cabin Walls" },
   theme_seaside: { kind: "grand", price: 1100, label: "Seaside Walls" },
+  // Day-trip venues (SPEC §22.8). Funding one adds a whole place to the
+  // daily rotation, for everyone, forever — the ids ARE the venue ids.
+  beach: { kind: "grand", price: 800, label: "Beach Day" },
+  forest: { kind: "grand", price: 950, label: "Forest Clearing" },
 } as const;
 
 /** The style every room starts with and can always return to. */

@@ -4,9 +4,23 @@
 // hour, weather, and season.
 
 import { describe, expect, it } from "vitest";
-import { skyMomentAt, SEASONS, WEATHERS, type Season, type Weather } from "@/sim/atmosphere";
+import { skyMomentAt, SEASONS, WEATHERS, type Season } from "@/sim/atmosphere";
 import { ROOM_HEIGHT, ROOM_WIDTH, type BackdropKey } from "./compose";
-import { composeGarden, composeMeadow, GARDEN, gardenHorizonAt, HORIZON_Y, MEADOW, meadowHorizonAt } from "./outdoors";
+import {
+  BEACH,
+  beachHorizonAt,
+  composeBeach,
+  composeForest,
+  composeGarden,
+  composeMeadow,
+  FOREST,
+  forestHorizonAt,
+  GARDEN,
+  gardenHorizonAt,
+  HORIZON_Y,
+  MEADOW,
+  meadowHorizonAt,
+} from "./outdoors";
 import { hex, type RGB } from "./theme";
 
 const keyAt = (hour: number, extra: Partial<BackdropKey> = {}): BackdropKey => {
@@ -41,6 +55,7 @@ const VENUES = [
     id: "garden",
     compose: composeGarden,
     horizonAt: gardenHorizonAt,
+    growing: GARDEN.grass,
     named: [
       ...Object.values(GARDEN.grass).flat(),
       ...SNOW,
@@ -65,6 +80,7 @@ const VENUES = [
     id: "meadow",
     compose: composeMeadow,
     horizonAt: meadowHorizonAt,
+    growing: MEADOW.grass,
     named: [
       ...Object.values(MEADOW.grass).flat(),
       ...SNOW,
@@ -79,9 +95,46 @@ const VENUES = [
       MEADOW.moonPatch,
     ],
   },
+  {
+    id: "beach",
+    compose: composeBeach,
+    horizonAt: beachHorizonAt,
+    growing: BEACH.sand,
+    named: [
+      ...Object.values(BEACH.sand).flat(),
+      ...SNOW,
+      BEACH.pebble,
+      ...BEACH.sea,
+      BEACH.sparkle,
+      BEACH.foam,
+      BEACH.sunPatch,
+      BEACH.moonPatch,
+    ],
+  },
+  {
+    id: "forest",
+    compose: composeForest,
+    horizonAt: forestHorizonAt,
+    growing: FOREST.floor,
+    named: [
+      ...Object.values(FOREST.floor).flat(),
+      ...SNOW,
+      FOREST.fern,
+      FOREST.canopy,
+      FOREST.canopyLight,
+      FOREST.trunk,
+      FOREST.trunkLight,
+      FOREST.stumpTop,
+      FOREST.stumpRing,
+      FOREST.stumpSide,
+      FOREST.stumpShadow,
+      FOREST.sunPatch,
+      FOREST.moonPatch,
+    ],
+  },
 ] as const;
 
-describe.each(VENUES)("the $id venue", ({ compose, horizonAt, named }) => {
+describe.each(VENUES)("the $id venue", ({ compose, horizonAt, growing, named }) => {
   it("fills every pixel opaquely at every hour, weather, and season", () => {
     for (const hour of [3, 9, 13, 20]) {
       for (const weather of WEATHERS) {
@@ -115,7 +168,7 @@ describe.each(VENUES)("the $id venue", ({ compose, horizonAt, named }) => {
     }
   });
 
-  it("changes with the seasons, and winter buries the grass entirely", () => {
+  it("changes with the seasons, and winter buries the growing ground entirely", () => {
     const groundRow = (season: Season): string => {
       const buffer = compose(keyAt(13, { season }));
       const row: string[] = [];
@@ -126,12 +179,10 @@ describe.each(VENUES)("the $id venue", ({ compose, horizonAt, named }) => {
 
     const winter = compose(keyAt(13, { season: "winter" }));
     const growingSeasons = ["spring", "summer", "autumn"] as const;
-    const summerGrass = new Set(
-      growingSeasons.flatMap((season) => [...GARDEN.grass[season], ...MEADOW.grass[season]]).map((color) => hex(color as RGB)),
-    );
+    const growingGround = new Set(growingSeasons.flatMap((season) => [...growing[season]]).map((color) => hex(color as RGB)));
     for (let y = HORIZON_Y; y < ROOM_HEIGHT; y += 7) {
       for (let x = 0; x < ROOM_WIDTH; x += 7) {
-        expect(summerGrass.has(hex(pixelAt(winter, x, y)))).toBe(false);
+        expect(growingGround.has(hex(pixelAt(winter, x, y)))).toBe(false);
       }
     }
   });
