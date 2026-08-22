@@ -8,20 +8,24 @@ import { SPRITE_FRAMES, type FrameName, type SpriteFrame } from "../atlas.genera
 const LOAD_ATTEMPTS = 4;
 const RETRY_BASE_MS = 600;
 
-const loadOnce = (src: string, attempt: number): Promise<HTMLImageElement> =>
+const loadOnce = (src: string): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error(`failed to load spritesheet: ${src}`));
-    // A cache-busting query on retries sidesteps a poisoned cache entry.
-    image.src = attempt === 1 ? src : `${src}?retry=${attempt}`;
+    // Retries re-request the SAME URL (SPEC §10.2): the sheet is
+    // content-hashed and served immutable, so a cache-busting query would
+    // pin a year-long browser and edge entry per attempt to sidestep a
+    // poisoned cache the hashing already makes impossible — the only way
+    // the bytes can be wrong is a transfer that failed outright.
+    image.src = src;
   });
 
 /** Load the sheet with backoff; null only after every attempt failed. */
 export const loadSpriteSheet = async (src: string): Promise<HTMLImageElement | null> => {
   for (let attempt = 1; attempt <= LOAD_ATTEMPTS; attempt++) {
     try {
-      return await loadOnce(src, attempt);
+      return await loadOnce(src);
     } catch {
       if (attempt < LOAD_ATTEMPTS) {
         await new Promise((resolve) => setTimeout(resolve, RETRY_BASE_MS * attempt));

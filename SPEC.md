@@ -945,6 +945,14 @@ exists because its absence bit in production: a repacked unhashed
 `/sprites.png` sat in browser caches for four hours while the new bundle's
 coordinates read garbage out of it.)
 
+A corollary that is easy to violate: **retries do not mint cache keys.**
+`Atlas.load` retries a failed sheet fetch with backoff, and every attempt
+requests the *same* URL. A cache-busting query would pin a separate
+year-long browser and edge entry per attempt, to sidestep a poisoned cache
+entry that content-hashing already makes impossible — under `immutable`,
+the only way a hashed URL's bytes can be wrong is a transfer that failed
+outright, and a plain re-request is the direct expression of that.
+
 Two source formats coexist, told apart by filename. `name.png` is native
 resolution, packed as-is — the original sheet's frames, extracted losslessly.
 `name@1x.png` is on the logical pixel grid (one image pixel per art pixel)
