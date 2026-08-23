@@ -5,6 +5,7 @@
 // draws over that blit each frame, clipped to the glass.
 
 import type { Celestial, Weather } from "@/sim/atmosphere";
+import { layer } from "../../engine/layer";
 import { keyOf, ROOM_HEIGHT, ROOM_WIDTH, type BackdropKey } from "./compose";
 import { venueSpec, type SkyRect } from "./venues";
 import { hex, themeFor, type RGB } from "./theme";
@@ -51,7 +52,17 @@ const makeCanvas = (width: number, height: number): HTMLCanvasElement | null => 
   return canvas;
 };
 
+/** A full-size RGBA buffer, laid onto a context at the origin. */
+const lay = (target: CanvasRenderingContext2D, pixels: Uint8ClampedArray): void => {
+  const image = target.createImageData(ROOM_WIDTH, ROOM_HEIGHT);
+  image.data.set(pixels);
+  target.putImageData(image, 0, 0);
+};
+
 export class Backdrop {
+  /** The composed architecture for `cacheKey`, kept so the scene can still be
+   *  painted when there is no canvas to cache it on. */
+  private pixels: Uint8ClampedArray | null = null;
   private canvas: HTMLCanvasElement | null = null;
   private cacheKey = "";
 
@@ -74,36 +85,52 @@ export class Backdrop {
     // Held still, the room keeps its hour but loses its weather and drift.
     const clock = reducedMotion ? 0 : nowMs;
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(sky.x, sky.y, sky.w, sky.h);
-    ctx.clip();
+    // Clipped in a layer, not a bare save/restore pair: a throw in here would
+    // otherwise leave the sky clip on the context for good, and the next
+    // frame's architecture blit — the scene's only full-canvas paint — would
+    // land masked to this rectangle (SPEC §10.1).
+    layer(ctx, () => {
+      ctx.beginPath();
+      ctx.rect(sky.x, sky.y, sky.w, sky.h);
+      ctx.clip();
 
-    const density = venue.weatherDensity;
-    if (celestial.body === "moon") this.renderStars(ctx, sky, density, seed, clock, reducedMotion);
-    this.renderCelestial(ctx, sky, venue.horizonAt, celestial, key.weather, key.themeId);
-    this.renderClouds(ctx, sky, density, key.weather, seed, clock);
-    if (key.weather === "rain") this.renderRain(ctx, sky, density, venue.glassPane, seed, clock);
-    if (key.weather === "snow") this.renderSnow(ctx, sky, density, seed, clock);
-
-    ctx.restore();
+      const density = venue.weatherDensity;
+      if (celestial.body === "moon") this.renderStars(ctx, sky, density, seed, clock, reducedMotion);
+      this.renderCelestial(ctx, sky, venue.horizonAt, celestial, key.weather, key.themeId);
+      this.renderClouds(ctx, sky, density, key.weather, seed, clock);
+      if (key.weather === "rain") this.renderRain(ctx, sky, density, venue.glassPane, seed, clock);
+      if (key.weather === "snow") this.renderSnow(ctx, sky, density, seed, clock);
+    });
 
     venue.renderLive?.(ctx, clock);
   }
 
   private blitArchitecture(ctx: CanvasRenderingContext2D, key: BackdropKey): void {
     const wanted = keyOf(key);
-    if (wanted !== this.cacheKey || !this.canvas) {
-      const canvas = this.canvas ?? makeCanvas(ROOM_WIDTH, ROOM_HEIGHT);
-      const target = canvas?.getContext("2d");
-      if (!canvas || !target) return;
-      const image = target.createImageData(ROOM_WIDTH, ROOM_HEIGHT);
-      image.data.set(venueSpec(key.venueId).compose(key));
-      target.putImageData(image, 0, 0);
-      this.canvas = canvas;
+    if (wanted !== this.cacheKey || !this.pixels) {
+      this.pixels = venueSpec(key.venueId).compose(key);
+      this.canvas = this.toCanvas(this.pixels);
       this.cacheKey = wanted;
     }
-    ctx.drawImage(this.canvas, 0, 0);
+    if (this.canvas) {
+      ctx.drawImage(this.canvas, 0, 0);
+      return;
+    }
+    // No offscreen canvas to blit from — a page is not guaranteed a second 2D
+    // context, and mobile browsers hand back null once a page holds too much
+    // canvas. Lay the composed pixels straight onto the target rather than
+    // returning: this is the scene's only full-canvas paint, and skipping it
+    // leaves the room showing whatever last managed to land on it.
+    lay(ctx, this.pixels);
+  }
+
+  /** The composed pixels on a canvas of their own, so a frame costs one blit. */
+  private toCanvas(pixels: Uint8ClampedArray): HTMLCanvasElement | null {
+    const canvas = this.canvas ?? makeCanvas(ROOM_WIDTH, ROOM_HEIGHT);
+    const target = canvas?.getContext("2d");
+    if (!canvas || !target) return null;
+    lay(target, pixels);
+    return canvas;
   }
 
   /** Fixed constellations that breathe, rather than a field of noise. */
@@ -141,28 +168,27 @@ export class Backdrop {
     // The sun rises from behind the horizon and sets behind it: clip the disc
     // to the sky above whatever stands in its column.
     const horizon = sky.y + sky.h - horizonAt(themeFor(themeId), x - sky.x);
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(sky.x, sky.y, sky.w, Math.max(0, horizon - sky.y));
-    ctx.clip();
-    if (celestial.body === "sun") {
-      ctx.fillStyle = veiled ? "#c9c6b4" : "#ffe9a8";
+    layer(ctx, () => {
+      ctx.beginPath();
+      ctx.rect(sky.x, sky.y, sky.w, Math.max(0, horizon - sky.y));
+      ctx.clip();
+      if (celestial.body === "sun") {
+        ctx.fillStyle = veiled ? "#c9c6b4" : "#ffe9a8";
+        ctx.fillRect(x - 2, y - 1, 5, 3);
+        ctx.fillRect(x - 1, y - 2, 3, 5);
+        if (!veiled) {
+          ctx.fillStyle = "#fff8d8";
+          ctx.fillRect(x - 1, y - 1, 3, 3);
+        }
+        return;
+      }
+      ctx.fillStyle = veiled ? "#b9bcc8" : "#eef0ff";
       ctx.fillRect(x - 2, y - 1, 5, 3);
       ctx.fillRect(x - 1, y - 2, 3, 5);
-      if (!veiled) {
-        ctx.fillStyle = "#fff8d8";
-        ctx.fillRect(x - 1, y - 1, 3, 3);
-      }
-      ctx.restore();
-      return;
-    }
-    ctx.fillStyle = veiled ? "#b9bcc8" : "#eef0ff";
-    ctx.fillRect(x - 2, y - 1, 5, 3);
-    ctx.fillRect(x - 1, y - 2, 3, 5);
-    // A bite out of the disc reads as a crescent without another colour.
-    ctx.fillStyle = hex(themeFor(themeId).wall[0]);
-    ctx.fillRect(x + 1, y - 1, 2, 2);
-    ctx.restore();
+      // A bite out of the disc reads as a crescent without another colour.
+      ctx.fillStyle = hex(themeFor(themeId).wall[0]);
+      ctx.fillRect(x + 1, y - 1, 2, 2);
+    });
   }
 
   private renderClouds(

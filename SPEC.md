@@ -896,6 +896,7 @@ need, and it is fully unit-testable.
 | `engine/loop.ts` | Fixed-timestep accumulator driving `update(dt)` at 10Hz, decoupled from `render(now)` on a 15fps cadence of its own. Parks itself while the document is hidden **or** the window is unfocused. |
 | `engine/atlas.ts` | Sprite atlas: loads the sheet with retry, exposes named frames, blits them with integer-snapped bottom-center anchoring. |
 | `engine/particles.ts` | Pooled particle system — dust puffs, sparkles, hearts, Zs, crumbs. |
+| `engine/layer.ts` | `layer(ctx, draw)` — the only sanctioned way to stack canvas state. `save()`, then `draw()` in a `try`, then `restore()` in the `finally`. |
 | `anim/machine.ts` | Declarative animation state machine: `animKey → clip`, with transition rules, one-shot clips that return to idle, and interruption priorities. Pure and unit-tested. |
 | `anim/clips.ts` | Clip definitions: frame list, frame duration, loop mode. |
 | `scene/room.ts` | Composes the scene from state. |
@@ -911,12 +912,30 @@ lands a few milliseconds in that frame's future, and elapsed time goes
 negative. Anything measuring "how long has this been running" clamps at zero.
 Unclamped, a frame index reaches -1 and the clip names no frame at all.
 
-**`render()` starts from an identity transform.** The loop deliberately
+**A frame never leaves anything on the context.** The loop deliberately
 swallows a throwing frame so one bad frame cannot freeze the scene
-(`engine/loop.ts`), which means a throw between `save()` and `restore()` would
-leak that frame's transform into every frame after it — permanently, and
-compounding. Resetting at the top of `render()` bounds the damage to the frame
-that failed.
+(`engine/loop.ts`). That makes a bare `save()` … `restore()` pair a trap: the
+throw escapes between the two, and what stays behind is not one frame's
+mistake but the context's state for the life of the canvas — its transform,
+its clip, its `globalAlpha`, and the depth of its save stack. So **every push
+of canvas state goes through `layer(ctx, draw)`** (`engine/layer.ts`), which
+pairs the two calls in a `finally`, and `render()` is itself one `layer` — the
+frame's own state comes back off the context whether it finishes or dies.
+
+Resetting the transform at the top of `render()` is *not* that guarantee, and
+was tried first: `setTransform` moves the matrix and nothing else. It does not
+unwind the save stack, and there is no reset for a clip — only a `restore()`
+takes one off. A leaked sky clip therefore masks every later frame, including
+the architecture blit, which is the scene's **only** full-canvas paint. Once
+that blit stops covering the canvas, the surviving pixels of older frames stay
+welded into the room: two rugs, two windows, a wall lit from the wrong side.
+That is what "the broken backdrop" was. For the same reason the blit has no
+path that silently paints nothing — when no offscreen canvas is available to
+cache into, the composed pixels go straight onto the target instead.
+
+A fake context in a test is held to the real one's semantics on exactly these
+points, because a fake that clears the save stack on `setTransform` or treats
+`clip()` as a no-op will certify a fix that does not work.
 
 ### 10.2 The Atlas
 

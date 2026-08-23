@@ -16,6 +16,135 @@ import { HEALTH_MAX, NEED_MAX, STAGE_STARTS, TICKS_PER_DAY, type LifeStage } fro
 const ctx = testCtx();
 const RAMP: LifeStage[] = ["HATCHLING", "PUP", "JUVENILE", "ADULT", "ELDER"];
 
+type Matrix = { a: number; d: number; e: number; f: number };
+type Rect = { x: number; y: number; w: number; h: number };
+type CanvasState = { matrix: Matrix; clip: Rect | null; alpha: number };
+const IDENTITY: Matrix = { a: 1, d: 1, e: 0, f: 0 };
+
+/**
+ * A stand-in for CanvasRenderingContext2D that models the real one's state
+ * machine, because the parts a fake usually waves away are the parts that
+ * bite. Two of them, both verified against Chromium:
+ *
+ *   • `setTransform` replaces the matrix and touches nothing else. It does
+ *     not unwind the save stack, so it cannot undo a `save()` whose
+ *     `restore()` never ran.
+ *   • a clip, once installed, outlives every later transform change. Only a
+ *     `restore()` takes it off — there is no reset for it.
+ *
+ * `failAtCall` kills the frame on its Nth call, standing in for any throw the
+ * loop's guard swallows (engine/loop.ts).
+ */
+const recordingContext = (failAtCall = -1) => {
+  const drawn: { x0: number; x1: number }[] = [];
+  /** Every full-canvas paint, with the clip that was in force when it landed. */
+  const paints: (Rect | null)[] = [];
+  const stack: CanvasState[] = [];
+  let state: CanvasState = { matrix: { ...IDENTITY }, clip: null, alpha: 1 };
+  let path: Rect | null = null;
+  let calls = 0;
+  let failAt = failAtCall;
+
+  const step = (): void => {
+    calls += 1;
+    if (calls === failAt) throw new TypeError("the frame died mid-draw");
+  };
+
+  const ctx2d = {
+    imageSmoothingEnabled: false,
+    fillStyle: "",
+    font: "",
+    textAlign: "",
+    get globalAlpha(): number {
+      return state.alpha;
+    },
+    set globalAlpha(value: number) {
+      state.alpha = value;
+    },
+    setTransform: (a: number, _b: number, _c: number, d: number, e: number, f: number) => {
+      step();
+      state.matrix = { a, d, e, f };
+    },
+    save: () => void stack.push({ matrix: { ...state.matrix }, clip: state.clip, alpha: state.alpha }),
+    restore: () => {
+      const top = stack.pop();
+      if (top) state = top;
+    },
+    translate: (x: number, y: number) => {
+      step();
+      state.matrix.e += state.matrix.a * x;
+      state.matrix.f += state.matrix.d * y;
+    },
+    scale: (x: number, y: number) => {
+      step();
+      state.matrix.a *= x;
+      state.matrix.d *= y;
+    },
+    beginPath: () => {
+      step();
+      path = null;
+    },
+    rect: (x: number, y: number, w: number, h: number) => {
+      step();
+      path = { x, y, w, h };
+    },
+    clip: () => {
+      step();
+      if (path) state.clip = path;
+    },
+    fillRect: () => step(),
+    fillText: () => step(),
+    createImageData: (w: number, h: number) => {
+      step();
+      return { data: new Uint8ClampedArray(w * h * 4), width: w, height: h };
+    },
+    putImageData: () => {
+      step();
+      paints.push(state.clip);
+    },
+    drawImage: (...args: number[]) => {
+      step();
+      // The 9-argument form: the last four are the destination rectangle.
+      const [dx, , dw] = args.slice(5);
+      const a = state.matrix.e + state.matrix.a * dx!;
+      const b = state.matrix.e + state.matrix.a * (dx! + dw!);
+      drawn.push({ x0: Math.min(a, b), x1: Math.max(a, b) });
+    },
+  };
+
+  return {
+    ctx: ctx2d as unknown as CanvasRenderingContext2D,
+    drawn,
+    paints,
+    depth: () => stack.length,
+    current: () => state,
+    calls: () => calls,
+    /** Let the next frame run to completion on this same dirty context. */
+    survive: () => {
+      failAt = -1;
+      drawn.length = 0;
+      paints.length = 0;
+    },
+  };
+};
+
+const contentedRoom = () => {
+  const room = new Room();
+  // No image loads in a test; a stand-in makes the atlas draw.
+  (room.atlas as unknown as { image: unknown }).image = {};
+  const born = hatchedState(ctx);
+  const settled = projectImmortal(born, TICKS_PER_DAY, ctx);
+  const contented = {
+    ...settled,
+    needs: { hunger: NEED_MAX, energy: NEED_MAX, hygiene: NEED_MAX, joy: NEED_MAX },
+    healthRaw: HEALTH_MAX,
+    sick: false,
+    asleep: false,
+  };
+  room.syncAtmosphere({ hour: 13, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, ownedVenues: [] });
+  return { room, derived: derive(contented) };
+};
+
 describe("stage scale", () => {
   it("grows a hatchling into an adult and never shrinks along the way", () => {
     expect(stageScale("HATCHLING")).toBe(0.8);
@@ -64,67 +193,6 @@ describe("stage scale", () => {
 // the mirrored draw before its restore(), leaking that mirror into every
 // frame after it.
 describe("rendering a pet that was just petted", () => {
-  /** Records where sprites land, with the current transform applied. */
-  const recordingContext = () => {
-    const drawn: { x0: number; x1: number }[] = [];
-    let matrix = { a: 1, d: 1, e: 0, f: 0 };
-    const stack: (typeof matrix)[] = [];
-    const noop = (): void => {};
-    const ctx = {
-      imageSmoothingEnabled: false,
-      globalAlpha: 1,
-      fillStyle: "",
-      font: "",
-      textAlign: "",
-      setTransform: (a: number, _b: number, _c: number, d: number, e: number, f: number) => {
-        matrix = { a, d, e, f };
-        stack.length = 0;
-      },
-      save: () => void stack.push({ ...matrix }),
-      restore: () => {
-        matrix = stack.pop() ?? matrix;
-      },
-      translate: (x: number, y: number) => {
-        matrix.e += matrix.a * x;
-        matrix.f += matrix.d * y;
-      },
-      scale: (x: number, y: number) => {
-        matrix.a *= x;
-        matrix.d *= y;
-      },
-      beginPath: noop,
-      rect: noop,
-      clip: noop,
-      fillRect: noop,
-      fillText: noop,
-      drawImage: (...args: number[]) => {
-        // The 9-argument form: the last four are the destination rectangle.
-        const [dx, , dw] = args.slice(5);
-        const a = matrix.e + matrix.a * dx!;
-        const b = matrix.e + matrix.a * (dx! + dw!);
-        drawn.push({ x0: Math.min(a, b), x1: Math.max(a, b) });
-      },
-    };
-    return { ctx: ctx as unknown as CanvasRenderingContext2D, drawn };
-  };
-
-  const contentedRoom = () => {
-    const room = new Room();
-    // No image loads in a test; a stand-in makes the atlas draw.
-    (room.atlas as unknown as { image: unknown }).image = {};
-    const born = hatchedState(ctx);
-    const settled = projectImmortal(born, TICKS_PER_DAY, ctx);
-    const contented = {
-      ...settled,
-      needs: { hunger: NEED_MAX, energy: NEED_MAX, hygiene: NEED_MAX, joy: NEED_MAX },
-      healthRaw: HEALTH_MAX,
-      sick: false,
-      asleep: false,
-    };
-    room.syncAtmosphere({ hour: 13, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, ownedVenues: [] });
-    return { room, derived: derive(contented) };
-  };
-
   it("stays inside the room when the pet is stamped ahead of the frame clock", () => {
     const { ctx: canvas, drawn } = recordingContext();
     const { room, derived } = contentedRoom();
@@ -144,6 +212,74 @@ describe("rendering a pet that was just petted", () => {
       }
     }
     expect(drawn.length).toBeGreaterThan(0);
+  });
+});
+
+// The room came back mirrored, or shifted, or stitched together out of two
+// different frames — and stayed that way. Resetting the transform at the top
+// of render() was not enough, and could not have been: it is the wrong shape
+// of fix. The loop swallows a throwing frame, the throw escapes between a
+// save() and its restore(), and what leaks is the whole context state — the
+// transform, yes, but also the clip, the alpha, and the depth of the save
+// stack. setTransform only ever addressed the first of those, and a clip
+// cannot be reset from the inside at all. Meanwhile the scene's only
+// full-canvas paint is the backdrop blit, so a leaked transform or clip stops
+// the room from being repainted and the surviving pixels of older frames stay
+// welded into it for the life of the canvas.
+describe("a frame that dies half-drawn", () => {
+  it("hands the next frame a context in exactly the state it found it", () => {
+    const { room, derived } = contentedRoom();
+    room.syncDerived(derived, false, 0);
+    // How many calls a whole frame makes — every one of them a place to die.
+    const survey = recordingContext();
+    room.render(survey.ctx, 0);
+    const total = survey.calls();
+    expect(total).toBeGreaterThan(20);
+
+    for (let failAt = 1; failAt <= total; failAt++) {
+      const canvas = recordingContext(failAt);
+      // The loop's guard, exactly as engine/loop.ts does it.
+      try {
+        room.render(canvas.ctx, 16);
+      } catch {
+        // swallowed on purpose — one bad frame must not freeze the scene
+      }
+      const where = `died at call ${failAt} of ${total}`;
+      expect.soft(canvas.depth(), `${where}: save stack left deeper`).toBe(0);
+      expect.soft(canvas.current().matrix, `${where}: transform left dirty`).toEqual(IDENTITY);
+      expect.soft(canvas.current().clip, `${where}: clip left on`).toBeNull();
+      expect.soft(canvas.current().alpha, `${where}: alpha left faded`).toBe(1);
+    }
+  });
+
+  it("paints the whole room again on the very next frame", () => {
+    const { room, derived } = contentedRoom();
+    room.syncDerived(derived, false, 0);
+    const survey = recordingContext();
+    room.render(survey.ctx, 0);
+    const total = survey.calls();
+
+    for (let failAt = 1; failAt <= total; failAt++) {
+      // One context, two frames — which is what the browser hands the loop.
+      const canvas = recordingContext(failAt);
+      try {
+        room.render(canvas.ctx, 16);
+      } catch {
+        // swallowed on purpose
+      }
+      canvas.survive();
+      room.render(canvas.ctx, 32);
+
+      const where = `recovering from a frame that died at call ${failAt} of ${total}`;
+      // The architecture blit is the scene's only full-canvas paint. Land it
+      // under a leaked clip and the room stops being repainted at all.
+      expect.soft(canvas.paints.length, `${where}: the room was not repainted`).toBeGreaterThan(0);
+      expect.soft(canvas.paints[0], `${where}: the room was repainted through a clip`).toBeNull();
+      for (const { x0, x1 } of canvas.drawn) {
+        expect.soft(x0, `${where}: sprite crosses the left wall`).toBeGreaterThanOrEqual(0);
+        expect.soft(x1, `${where}: sprite crosses the right wall`).toBeLessThanOrEqual(ROOM_WIDTH);
+      }
+    }
   });
 });
 

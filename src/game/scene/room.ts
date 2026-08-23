@@ -3,6 +3,7 @@
 // by an integer factor with image-rendering: pixelated.
 
 import { Atlas } from "../engine/atlas";
+import { layer } from "../engine/layer";
 import { Particles, type ParticleKind } from "../engine/particles";
 import { Toasts } from "./toasts";
 import { AnimationMachine } from "../anim/machine";
@@ -295,14 +296,27 @@ export class Room {
     this.petX += Math.sign(delta) * WANDER_SPEED_PX_MS * dt;
   }
 
+  /**
+   * One frame, one layer (SPEC §10.1). The loop swallows a throwing frame to
+   * keep the scene alive (engine/loop.ts), so everything this frame does to
+   * the context — a mirror, a clip, a fade — has to come back off it even
+   * when the frame dies half-drawn. Nothing downstream repairs it: the
+   * backdrop blit is the only full-canvas paint, and a leaked transform or
+   * clip is precisely what stops that blit from covering the canvas, which
+   * welds the surviving pixels of older frames into the scene for good.
+   */
   render(ctx: CanvasRenderingContext2D, nowMs: number): void {
+    layer(ctx, () => this.paint(ctx, nowMs));
+  }
+
+  private paint(ctx: CanvasRenderingContext2D, nowMs: number): void {
     ctx.imageSmoothingEnabled = false;
-    // Start from a known transform. The loop swallows a throwing frame to keep
-    // the scene alive (engine/loop.ts), so a throw between save() and
-    // restore() below would otherwise leak that frame's mirror into every
-    // frame after it — the pet, and then the room itself, walking off the
-    // canvas and never coming back.
+    // The context is shared and its state is sticky, so the frame starts from
+    // a baseline rather than from whatever was left on it. The clip is the
+    // one piece that cannot be re-established from the inside — `layer` is
+    // what keeps one from ever leaking here.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
 
     // The room itself: architecture, sky, weather (SPEC §22).
     this.backdrop.render(
@@ -325,11 +339,11 @@ export class Room {
       const scale = this.petScale;
       if (this.facingRight) {
         // The art faces left; strolling right mirrors it around the anchor.
-        ctx.save();
-        ctx.translate(x, 0);
-        ctx.scale(-1, 1);
-        this.atlas.draw(ctx, frame, 0, PET_Y, scale);
-        ctx.restore();
+        layer(ctx, () => {
+          ctx.translate(x, 0);
+          ctx.scale(-1, 1);
+          this.atlas.draw(ctx, frame, 0, PET_Y, scale);
+        });
       } else {
         this.atlas.draw(ctx, frame, x, PET_Y, scale);
       }
@@ -460,12 +474,12 @@ export class Room {
    * underneath whatever cosmetic is on top of them (SPEC §21.9).
    */
   private renderHead(ctx: CanvasRenderingContext2D, x: number, scale: number): void {
-    ctx.save();
-    ctx.translate(x, PET_Y);
-    ctx.scale(scale, scale);
-    if (this.stage === "ELDER") this.atlas.draw(ctx, "elderBrows", -2, ELDER_BROWS_Y);
-    this.renderCosmetic(ctx);
-    ctx.restore();
+    layer(ctx, () => {
+      ctx.translate(x, PET_Y);
+      ctx.scale(scale, scale);
+      if (this.stage === "ELDER") this.atlas.draw(ctx, "elderBrows", -2, ELDER_BROWS_Y);
+      this.renderCosmetic(ctx);
+    });
   }
 
   /** The worn cosmetic, in head-anchored coordinates. */
