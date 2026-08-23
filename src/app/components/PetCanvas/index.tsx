@@ -106,6 +106,17 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
     };
     media.addEventListener("change", onMotionChange);
 
+    // The room only repaints when the next frame would differ from the one
+    // already on the canvas (scene/room.ts). That reasoning assumes the canvas
+    // still holds it — and it does not survive the backing store being thrown
+    // away, which browsers do under memory pressure and which the loop's
+    // parking makes likelier by leaving the canvas untouched for long
+    // stretches. Restoring it means telling the room what it is looking at is
+    // gone; without this the room stays blank because it believes it already
+    // painted.
+    const onContextRestored = (): void => room.invalidate();
+    canvas.addEventListener("contextrestored", onContextRestored);
+
     // The generation's taste is recomputable from the seed the state stream
     // already carries, so a meal needs no extra round trip (SPEC §21.4).
     const tasteOf = (itemId: string | undefined): FoodTaste | undefined => {
@@ -236,6 +247,7 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
       offMinigame();
       offReact();
       media.removeEventListener("change", onMotionChange);
+      canvas.removeEventListener("contextrestored", onContextRestored);
     };
   }, [onCare, onMilestone, onWant, onMinigame, onReact, projectNow]);
 

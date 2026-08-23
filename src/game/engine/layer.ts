@@ -12,7 +12,9 @@
 // instead of by discipline: the state comes back whether `draw` returns or
 // throws, and the throw still reaches the loop's guard.
 
-export const layer = (ctx: CanvasRenderingContext2D, draw: () => void): void => {
+import type { SceneContext } from "./digest";
+
+export const layer = (ctx: SceneContext, draw: () => void): void => {
   ctx.save();
   try {
     draw();

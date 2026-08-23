@@ -5,11 +5,12 @@
 import { Atlas } from "../engine/atlas";
 import { layer } from "../engine/layer";
 import { Particles, type ParticleKind } from "../engine/particles";
+import { DigestContext, type SceneContext } from "../engine/digest";
 import { Toasts } from "./toasts";
 import { AnimationMachine } from "../anim/machine";
 import { BASE_CLIPS, BUTTERFLY_CLIP, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP, type OneShotName } from "../anim/clips";
 import { SPRITE_FRAMES } from "../atlas.generated";
-import { Backdrop, ROOM_HEIGHT, ROOM_WIDTH, RUG, venueSpec, type BackdropKey, type Condition } from "./backdrop";
+import { Backdrop, keyOf, ROOM_HEIGHT, ROOM_WIDTH, RUG, venueSpec, type BackdropKey, type Condition } from "./backdrop";
 import { celestialAt, seasonFor, skyMomentAt, venueAt, weatherFor, type Celestial } from "@/sim/atmosphere";
 import type { DerivedState } from "@/sim/derive";
 import type { AmbientEvent } from "@/sim/ambient";
@@ -178,6 +179,11 @@ export class Room {
   private moment: { event: AmbientEvent; startedMs: number } | null = null;
   decor: RoomDecor = { decor: [], activeCosmetic: null };
 
+  /** The frame the canvas is currently showing, and the recorder that decides
+   *  whether the next one would differ from it (engine/digest.ts). */
+  private readonly digest = new DigestContext();
+  private painted: number | null = null;
+
   set reducedMotion(value: boolean) {
     this.machine.reducedMotion = value;
     if (value) this.particles.clear();
@@ -296,6 +302,16 @@ export class Room {
     this.petX += Math.sign(delta) * WANDER_SPEED_PX_MS * dt;
   }
 
+  /** Everything the frame changes about the room before anything is drawn.
+   *  Split out from painting so `paint` is a pure function of scene state and
+   *  can therefore be run twice in a frame — once to hash, once to draw —
+   *  without advancing the stroll twice or eating a rare moment. */
+  private advance(nowMs: number): void {
+    this.updateWander(nowMs);
+    const moment = this.moment;
+    if (moment && (nowMs - moment.startedMs < 0 || nowMs - moment.startedMs > AMBIENT_MS)) this.moment = null;
+  }
+
   /**
    * One frame, one layer (SPEC §10.1). The loop swallows a throwing frame to
    * keep the scene alive (engine/loop.ts), so everything this frame does to
@@ -304,12 +320,39 @@ export class Room {
    * backdrop blit is the only full-canvas paint, and a leaked transform or
    * clip is precisely what stops that blit from covering the canvas, which
    * welds the surviving pixels of older frames into the scene for good.
+   *
+   * A frame that would land the same pixels as the one already on the canvas
+   * is not drawn at all. At the loop's 15fps cadence most frames are exactly
+   * that — the pet's clips run about a frame a second and two clouds cross
+   * the sky at a pixel a second — and every needless paint costs a texture
+   * upload plus a re-blur of every frosted panel above it. What "the same
+   * pixels" means is decided by replaying the frame into a recorder rather
+   * than by predicting it from state, so the test cannot drift from the
+   * drawing (engine/digest.ts).
    */
-  render(ctx: CanvasRenderingContext2D, nowMs: number): void {
+  render(ctx: SceneContext, nowMs: number): void {
+    this.advance(nowMs);
+
+    this.digest.reset();
+    // The architecture arrives as a cached blit whose draw call says nothing
+    // about what is in it; the key that composed those pixels does.
+    this.digest.text(keyOf({ ...this.backdropKey, condition: this.condition }));
+    layer(this.digest, () => this.paint(this.digest, nowMs));
+    if (this.digest.value === this.painted) return;
+    this.painted = this.digest.value;
+
     layer(ctx, () => this.paint(ctx, nowMs));
   }
 
-  private paint(ctx: CanvasRenderingContext2D, nowMs: number): void {
+  /** Forces the next frame to paint, whatever it looks like. The canvas is
+   *  not ours alone — a resize or a context loss clears it out from under us,
+   *  and the room has to be put back even though nothing in it moved. */
+  invalidate(): void {
+    this.painted = null;
+    this.backdrop.invalidate();
+  }
+
+  private paint(ctx: SceneContext, nowMs: number): void {
     ctx.imageSmoothingEnabled = false;
     // The context is shared and its state is sticky, so the frame starts from
     // a baseline rather than from whatever was left on it. The clip is the
@@ -330,7 +373,6 @@ export class Room {
 
     this.renderDecor(ctx, nowMs);
 
-    this.updateWander(nowMs);
     if (this.atlas.ready) {
       const frame = this.walking
         ? WALK_CLIP.frames[Math.floor(nowMs / WALK_CLIP.frameMs) % WALK_CLIP.frames.length]!
@@ -365,16 +407,15 @@ export class Room {
   /**
    * The rare moment's six seconds of theatre: a streak across the night sky,
    * a butterfly on a sine path, or a beat of darkness. The dig needs nothing
-   * here — its one-shot and sparkles say it already.
+   * here — its one-shot and sparkles say it already. Retiring a moment that
+   * has run its course belongs to `advance`, not here: this draws, and draws
+   * the same thing however many times it is called for one frame.
    */
-  private renderAmbient(ctx: CanvasRenderingContext2D, nowMs: number): void {
+  private renderAmbient(ctx: SceneContext, nowMs: number): void {
     const moment = this.moment;
     if (!moment) return;
     const age = nowMs - moment.startedMs;
-    if (age < 0 || age > AMBIENT_MS) {
-      this.moment = null;
-      return;
-    }
+    if (age < 0 || age > AMBIENT_MS) return;
     if (moment.event === "shooting-star") {
       // Three streaks over the window, each falling left-to-right down the
       // wall; they stay above the wainscot line so they read as sky.
@@ -406,7 +447,7 @@ export class Room {
 
   /** Communal decor (SPEC §13.2, §21.8), drawn procedurally in the palette.
    *  It furnishes the room — away venues carry none of it (SPEC §22.8). */
-  private renderDecor(ctx: CanvasRenderingContext2D, nowMs: number): void {
+  private renderDecor(ctx: SceneContext, nowMs: number): void {
     if (!venueSpec(this.backdropKey.venueId).decor) return;
     const px = (x: number, y: number, w: number, h: number, color: string): void => {
       ctx.fillStyle = color;
@@ -473,7 +514,7 @@ export class Room {
    * a hatchling's hat is a hatchling-sized hat. An elder's brow tufts stack
    * underneath whatever cosmetic is on top of them (SPEC §21.9).
    */
-  private renderHead(ctx: CanvasRenderingContext2D, x: number, scale: number): void {
+  private renderHead(ctx: SceneContext, x: number, scale: number): void {
     layer(ctx, () => {
       ctx.translate(x, PET_Y);
       ctx.scale(scale, scale);
@@ -483,7 +524,7 @@ export class Room {
   }
 
   /** The worn cosmetic, in head-anchored coordinates. */
-  private renderCosmetic(ctx: CanvasRenderingContext2D): void {
+  private renderCosmetic(ctx: SceneContext): void {
     const hat = this.decor.activeCosmetic;
     if (!hat) return;
     const px = (dx: number, dy: number, w: number, h: number, color: string): void => {

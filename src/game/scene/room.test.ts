@@ -348,3 +348,243 @@ describe("the wander band", () => {
     expect(band.min).toBe(ROOM_WIDTH / 2);
   });
 });
+
+describe("skipping frames that would paint the same pixels", () => {
+  /** How many draw calls a render actually issued at the canvas. */
+  const paintedCalls = (recorder: ReturnType<typeof recordingContext>, render: () => void): number => {
+    const before = recorder.calls();
+    render();
+    return recorder.calls() - before;
+  };
+
+  it("paints the first frame it is ever given", () => {
+    const { room, derived } = contentedRoom();
+    const recorder = recordingContext();
+    room.syncDerived(derived, false, 0);
+    expect(paintedCalls(recorder, () => room.render(recorder.ctx, 1000))).toBeGreaterThan(0);
+  });
+
+  it("does not paint the same instant twice", () => {
+    const { room, derived } = contentedRoom();
+    const recorder = recordingContext();
+    room.syncDerived(derived, false, 0);
+    room.render(recorder.ctx, 1000);
+    expect(paintedCalls(recorder, () => room.render(recorder.ctx, 1000))).toBe(0);
+  });
+
+  it("paints again the moment the pet's clip advances", () => {
+    const { room, derived } = contentedRoom();
+    const recorder = recordingContext();
+    room.syncDerived(derived, false, 0);
+    room.render(recorder.ctx, 1000);
+    // Idle runs at 900ms a frame, so a second later is a different pose.
+    expect(paintedCalls(recorder, () => room.render(recorder.ctx, 1000 + 900))).toBeGreaterThan(0);
+  });
+
+  it("paints again when a toast arrives, though nothing else moved", () => {
+    const { room, derived } = contentedRoom();
+    const recorder = recordingContext();
+    room.syncDerived(derived, false, 0);
+    room.render(recorder.ctx, 1000);
+    room.onMilestone("all better!", 1000);
+    expect(paintedCalls(recorder, () => room.render(recorder.ctx, 1000))).toBeGreaterThan(0);
+  });
+
+  it("paints again when the room falls asleep and gains its dimming", () => {
+    const { room, derived } = contentedRoom();
+    const recorder = recordingContext();
+    room.syncDerived(derived, false, 0);
+    room.render(recorder.ctx, 1000);
+    room.syncDerived(derived, true, 1000);
+    expect(paintedCalls(recorder, () => room.render(recorder.ctx, 1000))).toBeGreaterThan(0);
+  });
+
+  it("paints again when the hour redresses the room", () => {
+    const { room, derived } = contentedRoom();
+    const recorder = recordingContext();
+    room.syncDerived(derived, false, 0);
+    room.render(recorder.ctx, 1000);
+    room.syncAtmosphere({ hour: 2, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, ownedVenues: [] });
+    expect(paintedCalls(recorder, () => room.render(recorder.ctx, 1000))).toBeGreaterThan(0);
+  });
+
+  it("paints again when the communal decor changes", () => {
+    const { room, derived } = contentedRoom();
+    const recorder = recordingContext();
+    room.syncDerived(derived, false, 0);
+    room.render(recorder.ctx, 1000);
+    room.decor = { decor: ["plant"], activeCosmetic: null };
+    expect(paintedCalls(recorder, () => room.render(recorder.ctx, 1000))).toBeGreaterThan(0);
+  });
+
+  it("paints again when a hat goes on", () => {
+    const { room, derived } = contentedRoom();
+    const recorder = recordingContext();
+    room.syncDerived(derived, false, 0);
+    room.render(recorder.ctx, 1000);
+    room.decor = { decor: [], activeCosmetic: "crown" };
+    expect(paintedCalls(recorder, () => room.render(recorder.ctx, 1000))).toBeGreaterThan(0);
+  });
+
+  it("repaints on demand when something outside the room clears the canvas", () => {
+    const { room, derived } = contentedRoom();
+    const recorder = recordingContext();
+    room.syncDerived(derived, false, 0);
+    room.render(recorder.ctx, 1000);
+    room.invalidate();
+    expect(paintedCalls(recorder, () => room.render(recorder.ctx, 1000))).toBeGreaterThan(0);
+  });
+
+  it("still unwinds the context when a skipped frame follows a painted one", () => {
+    const { room, derived } = contentedRoom();
+    const recorder = recordingContext();
+    room.syncDerived(derived, false, 0);
+    room.render(recorder.ctx, 1000);
+    room.render(recorder.ctx, 1000);
+    expect(recorder.depth()).toBe(0);
+    expect(recorder.current().clip).toBeNull();
+  });
+
+  it("keeps the stroll on real time rather than on frames painted", () => {
+    const { room, derived } = contentedRoom();
+    const recorder = recordingContext();
+    room.syncDerived(derived, false, 0);
+    // Two renders at the same instant must advance the pet exactly as far as
+    // one does — the second is a hash pass, not another step of the walk.
+    room.render(recorder.ctx, 1000);
+    room.render(recorder.ctx, 1000);
+    const twice = recorder.drawn.map((entry) => entry.x0);
+    const fresh = contentedRoom();
+    const other = recordingContext();
+    fresh.room.syncDerived(fresh.derived, false, 0);
+    fresh.room.render(other.ctx, 1000);
+    expect(twice).toEqual(other.drawn.map((entry) => entry.x0));
+  });
+});
+
+
+describe("the skip never hides a frame that differs", () => {
+  /**
+   * An oracle for "would these two frames look the same", written
+   * independently of the digest it is checking: every call is appended
+   * verbatim, with the effective transform and paint state that was in force
+   * when it happened. Where DigestContext folds all that into one 32-bit
+   * number, this keeps the whole stream, so a hash that collides — or a piece
+   * of context state the digest forgot to fold in — shows up as two logs that
+   * differ while the room thought the frames were the same.
+   */
+  const callLog = () => {
+    const log: string[] = [];
+    type State = { m: number[]; alpha: number; fill: string; font: string; align: string };
+    const stack: State[] = [];
+    let state: State = { m: [1, 0, 0, 1, 0, 0], alpha: 1, fill: "", font: "", align: "" };
+    const where = (): string => `[${state.m.join(",")}|${state.alpha}|${state.fill}|${state.font}|${state.align}]`;
+    const ctx = {
+      imageSmoothingEnabled: false,
+      get globalAlpha() {
+        return state.alpha;
+      },
+      set globalAlpha(value: number) {
+        state.alpha = value;
+      },
+      get fillStyle() {
+        return state.fill;
+      },
+      set fillStyle(value: string) {
+        state.fill = value;
+      },
+      get font() {
+        return state.font;
+      },
+      set font(value: string) {
+        state.font = value;
+      },
+      get textAlign() {
+        return state.align;
+      },
+      set textAlign(value: string) {
+        state.align = value;
+      },
+      save: () => {
+        log.push("save");
+        stack.push({ ...state, m: [...state.m] });
+      },
+      restore: () => {
+        log.push("restore");
+        const top = stack.pop();
+        if (top) state = top;
+      },
+      setTransform: (a: number, b: number, c: number, d: number, e: number, f: number) => {
+        state.m = [a, b, c, d, e, f];
+      },
+      translate: (x: number, y: number) => {
+        const [a, b, c, d, e, f] = state.m as [number, number, number, number, number, number];
+        state.m = [a, b, c, d, e + a * x + c * y, f + b * x + d * y];
+      },
+      scale: (x: number, y: number) => {
+        const [a, b, c, d, e, f] = state.m as [number, number, number, number, number, number];
+        state.m = [a * x, b * x, c * y, d * y, e, f];
+      },
+      beginPath: () => log.push("beginPath"),
+      rect: (x: number, y: number, w: number, h: number) => log.push(`rect ${x},${y},${w},${h}`),
+      clip: () => log.push("clip"),
+      fillRect: (x: number, y: number, w: number, h: number) => log.push(`fillRect ${x},${y},${w},${h} ${where()}`),
+      fillText: (text: string, x: number, y: number) => log.push(`fillText ${text} ${x},${y} ${where()}`),
+      drawImage: (_image: unknown, ...args: number[]) => log.push(`drawImage ${args.join(",")} ${where()}`),
+      createImageData: (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h }),
+      putImageData: (_image: unknown, dx: number, dy: number) => log.push(`putImageData ${dx},${dy}`),
+    };
+    return { ctx: ctx as unknown as CanvasRenderingContext2D, log };
+  };
+
+  it("skips only frames whose drawing is identical to what the canvas holds", () => {
+    const { room, derived } = contentedRoom();
+    room.syncDerived(derived, false, 0);
+
+    let onCanvas: string[] = [];
+    let painted = 0;
+    let skipped = 0;
+    let verified = 0;
+
+    // Twelve seconds at the loop's cadence: long enough to cross idle clip
+    // frames, drifting clouds, a full wander slot, and the pet resting again.
+    for (let nowMs = 1000; nowMs < 13_000; nowMs += 1000 / 15) {
+      const live = callLog();
+      room.render(live.ctx, nowMs);
+
+      if (live.log.length > 0) {
+        painted += 1;
+        onCanvas = live.log;
+        continue;
+      }
+
+      skipped += 1;
+      // Force the identical frame to draw and compare it, call for call,
+      // against what is actually on the canvas.
+      const forced = callLog();
+      room.invalidate();
+      room.render(forced.ctx, nowMs);
+      expect(forced.log.length, `forced repaint at ${Math.round(nowMs)}ms drew nothing`).toBeGreaterThan(0);
+      expect(forced.log, `frame at ${Math.round(nowMs)}ms was skipped but would have differed`).toEqual(onCanvas);
+      verified += 1;
+    }
+
+    // The run must have exercised both outcomes, or it proves nothing.
+    expect(painted).toBeGreaterThan(5);
+    expect(skipped).toBeGreaterThan(20);
+    expect(verified).toBe(skipped);
+  });
+
+  it("catches a scene that moved by a single pixel", () => {
+    // A guard on the guard: the oracle above must be able to fail. Nudging
+    // one drawn thing has to change the log it compares.
+    const { room, derived } = contentedRoom();
+    room.syncDerived(derived, false, 0);
+    const first = callLog();
+    room.render(first.ctx, 1000);
+    room.decor = { decor: ["plant"], activeCosmetic: null };
+    const second = callLog();
+    room.render(second.ctx, 1000);
+    expect(second.log).not.toEqual(first.log);
+  });
+});

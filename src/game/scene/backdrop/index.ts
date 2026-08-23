@@ -9,8 +9,9 @@ import { layer } from "../../engine/layer";
 import { keyOf, ROOM_HEIGHT, ROOM_WIDTH, type BackdropKey } from "./compose";
 import { venueSpec, type SkyRect } from "./venues";
 import { hex, themeFor, type RGB } from "./theme";
+import type { SceneContext } from "../../engine/digest";
 
-export { ROOM_WIDTH, ROOM_HEIGHT, RUG, WINDOW, GLASS, FLOOR_Y, type BackdropKey, type Condition } from "./compose";
+export { ROOM_WIDTH, ROOM_HEIGHT, RUG, WINDOW, GLASS, FLOOR_Y, keyOf, type BackdropKey, type Condition } from "./compose";
 export { FREE_VENUES, venueSpec, VENUES, type VenueSpec } from "./venues";
 export { themeFor, THEMES } from "./theme";
 export { petClock, type PetClock } from "./clock";
@@ -53,7 +54,7 @@ const makeCanvas = (width: number, height: number): HTMLCanvasElement | null => 
 };
 
 /** A full-size RGBA buffer, laid onto a context at the origin. */
-const lay = (target: CanvasRenderingContext2D, pixels: Uint8ClampedArray): void => {
+const lay = (target: SceneContext, pixels: Uint8ClampedArray): void => {
   const image = target.createImageData(ROOM_WIDTH, ROOM_HEIGHT);
   image.data.set(pixels);
   target.putImageData(image, 0, 0);
@@ -72,7 +73,7 @@ export class Backdrop {
   }
 
   render(
-    ctx: CanvasRenderingContext2D,
+    ctx: SceneContext,
     key: BackdropKey,
     celestial: Celestial,
     seed: number,
@@ -105,7 +106,7 @@ export class Backdrop {
     venue.renderLive?.(ctx, clock);
   }
 
-  private blitArchitecture(ctx: CanvasRenderingContext2D, key: BackdropKey): void {
+  private blitArchitecture(ctx: SceneContext, key: BackdropKey): void {
     const wanted = keyOf(key);
     if (wanted !== this.cacheKey || !this.pixels) {
       this.pixels = venueSpec(key.venueId).compose(key);
@@ -135,7 +136,7 @@ export class Backdrop {
 
   /** Fixed constellations that breathe, rather than a field of noise. */
   private renderStars(
-    ctx: CanvasRenderingContext2D,
+    ctx: SceneContext,
     sky: SkyRect,
     density: number,
     seed: number,
@@ -154,7 +155,7 @@ export class Backdrop {
 
   /** The sun or the moon, riding its arc across the venue's sky. */
   private renderCelestial(
-    ctx: CanvasRenderingContext2D,
+    ctx: SceneContext,
     sky: SkyRect,
     horizonAt: (theme: ReturnType<typeof themeFor>, sx: number) => number,
     celestial: Celestial,
@@ -192,7 +193,7 @@ export class Backdrop {
   }
 
   private renderClouds(
-    ctx: CanvasRenderingContext2D,
+    ctx: SceneContext,
     sky: SkyRect,
     density: number,
     weather: Weather,
@@ -214,7 +215,7 @@ export class Backdrop {
   }
 
   private renderRain(
-    ctx: CanvasRenderingContext2D,
+    ctx: SceneContext,
     sky: SkyRect,
     density: number,
     glassPane: boolean,
@@ -242,7 +243,7 @@ export class Backdrop {
     }
   }
 
-  private renderSnow(ctx: CanvasRenderingContext2D, sky: SkyRect, density: number, seed: number, nowMs: number): void {
+  private renderSnow(ctx: SceneContext, sky: SkyRect, density: number, seed: number, nowMs: number): void {
     ctx.fillStyle = "#f2f6ff";
     for (let index = 0; index < SNOW_FLAKES * density; index++) {
       const speed = 5200 + hash(seed + index * 29) * 3400;

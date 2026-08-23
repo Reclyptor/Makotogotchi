@@ -3,6 +3,7 @@
 // image request (flaky mobile network, tab restored mid-fetch) must degrade
 // to a late pet, never a permanently empty room.
 
+import type { SceneContext } from "./digest";
 import { SPRITE_FRAMES, type FrameName, type SpriteFrame } from "../atlas.generated";
 
 const LOAD_ATTEMPTS = 4;
@@ -68,7 +69,7 @@ export class Atlas {
   }
 
   /** Draw a frame with its bottom-center anchored at (x, y), snapped. */
-  draw(ctx: CanvasRenderingContext2D, name: FrameName, x: number, y: number, scale = 1): void {
+  draw(ctx: SceneContext, name: FrameName, x: number, y: number, scale = 1): void {
     if (!this.image) return;
     const frame = SPRITE_FRAMES[name];
     const { dx, dy, dw, dh } = drawRect(frame, x, y, scale);

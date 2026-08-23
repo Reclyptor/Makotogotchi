@@ -21,6 +21,7 @@ import {
   type BackdropKey,
 } from "./compose";
 import type { RGB } from "./theme";
+import type { SceneContext } from "../../engine/digest";
 
 /** Where ground meets sky at every outdoor venue. */
 export const HORIZON_Y = 92;
@@ -394,7 +395,7 @@ export const composeBeach = (key: BackdropKey): Uint8ClampedArray => {
 
 /** The surf breathes (SPEC §22.8): two foam runs sliding over the
  *  waterline. Reduced motion holds them at their settled position. */
-export const renderBeachLive = (ctx: CanvasRenderingContext2D, nowMs: number): void => {
+export const renderBeachLive = (ctx: SceneContext, nowMs: number): void => {
   ctx.fillStyle = "#e8f2f4";
   const reach = Math.round(Math.sin(nowMs / 1700) * 3);
   const lag = Math.round(Math.sin(nowMs / 1700 - 1.1) * 2);

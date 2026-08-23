@@ -3,6 +3,8 @@
 // resolution. The pool is fixed-size; spawning past capacity recycles the
 // oldest — no allocation in the hot path.
 
+import type { SceneContext } from "./digest";
+
 export type ParticleKind = "heart" | "sparkle" | "zzz" | "crumb" | "dust";
 
 type Particle = {
@@ -69,7 +71,7 @@ export class Particles {
     }
   }
 
-  render(ctx: CanvasRenderingContext2D): void {
+  render(ctx: SceneContext): void {
     for (const particle of this.pool) {
       if (particle.ageMs >= particle.lifeMs) continue;
       const fade = 1 - particle.ageMs / particle.lifeMs;

@@ -897,12 +897,48 @@ need, and it is fully unit-testable.
 | `engine/atlas.ts` | Sprite atlas: loads the sheet with retry, exposes named frames, blits them with integer-snapped bottom-center anchoring. |
 | `engine/particles.ts` | Pooled particle system — dust puffs, sparkles, hearts, Zs, crumbs. |
 | `engine/layer.ts` | `layer(ctx, draw)` — the only sanctioned way to stack canvas state. `save()`, then `draw()` in a `try`, then `restore()` in the `finally`. |
+| `engine/digest.ts` | `SceneContext`, the slice of the 2D API the scene uses, and `DigestContext`, a recording stand-in that hashes a frame instead of drawing it. What lets `Room.render` skip a frame identical to the one on the canvas. |
 | `anim/machine.ts` | Declarative animation state machine: `animKey → clip`, with transition rules, one-shot clips that return to idle, and interruption priorities. Pure and unit-tested. |
 | `anim/clips.ts` | Clip definitions: frame list, frame duration, loop mode. |
 | `scene/room.ts` | Composes the scene from state. |
 | `scene/toasts.ts` | Floating attributed action toasts. |
 
-Two rules the scene lives by, both learned the hard way:
+Three rules the scene lives by, all learned the hard way:
+
+**Nothing paints faster than the art needs, and nothing paints unwatched.**
+`update()` is a 10Hz fixed step, the fastest clip in the game is the butterfly
+at `frameMs: 130`, and the pet's own clips run 800–2000ms a frame. Painting
+that sixty or a hundred and forty times a second buys nothing visible, and it
+is not free: the canvas sits under a page of `backdrop-filter` panels, and
+every panel re-blurs on any frame where what is beneath it changes. Measured
+on the production build, the shipped loop plus two perpetual CSS animations
+held the GPU process at **35% busy indefinitely**; with both idle it sits at
+**0.2%**. The scene loop and a looping CSS animation are each *independently*
+sufficient to hold the compositor at full refresh rate, so fixing one alone
+measured no better than 1.1×. Hence two hard rules: `render()` runs on its own
+cadence (`RENDER_STEP_MS`, 15fps) rather than the display's, and the loop
+parks itself when the document is hidden *or* the window loses focus — a
+hidden tab already stops `requestAnimationFrame`, but a merely unfocused
+window does not. It always paints one frame before parking, so a page opened
+behind another window still has a room in it. In CSS the same rule reads: no
+animation loops forever (`globals.css`).
+
+Even at 15fps most frames are wasted: measured on the live build, only ~4
+frames a second put down different pixels under normal motion and ~0.1 under
+reduced motion — the pet's clips advance about once a second and two clouds
+cross the sky at a pixel a second. So `Room.render` replays the frame into
+`DigestContext` (`engine/digest.ts`) and hands it to the canvas only when the
+hash moves. The test is a *recording* rather than a prediction from scene
+state on purpose: there is no second implementation to drift out of step, and
+a false skip — the one failure that matters, a scene frozen on screen — would
+need the recorder to miss something the drawing does. Everything that can
+reach a pixel is folded in at the point of the call, including the effective
+transform: the pet is mirrored by `translate(x, 0); scale(-1, 1)` and then
+drawn at zero, so its draw call is byte-identical wherever it stands.
+
+This is why `paint()` may not mutate. Whatever the frame changes about the
+room — the stroll, a rare moment running out — belongs in `advance()`, which
+runs once; `paint()` runs twice and must draw the same thing both times.
 
 **A clip may start after the frame that draws it.** Care arrives over the
 stream and is stamped with `performance.now()` in the event handler; the scene

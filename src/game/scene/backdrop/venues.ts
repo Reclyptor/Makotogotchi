@@ -24,6 +24,7 @@ import {
   renderBeachLive,
 } from "./outdoors";
 import type { RoomTheme } from "./theme";
+import type { SceneContext } from "../../engine/digest";
 
 export type SkyRect = { x: number; y: number; w: number; h: number };
 
@@ -50,7 +51,7 @@ export type VenueSpec = {
   compose: (key: BackdropKey) => Uint8ClampedArray;
   /** A venue's own living touch, drawn each frame over the composed scene —
    *  the beach's surf. Passed 0 under reduced motion, which holds it still. */
-  renderLive?: (ctx: CanvasRenderingContext2D, nowMs: number) => void;
+  renderLive?: (ctx: SceneContext, nowMs: number) => void;
 };
 
 export const HOME: VenueSpec = {

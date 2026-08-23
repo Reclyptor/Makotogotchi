@@ -3,6 +3,8 @@
 // same information also lands in the DOM's aria-live log (SPEC §11.3) —
 // this is the decorative copy.
 
+import type { SceneContext } from "../engine/digest";
+
 export type Toast = {
   text: string;
   bornMs: number;
@@ -22,7 +24,7 @@ export class Toasts {
     while (this.items.length > MAX_TOASTS) this.items.shift();
   }
 
-  render(ctx: CanvasRenderingContext2D, nowMs: number, centerX: number, baseY: number): void {
+  render(ctx: SceneContext, nowMs: number, centerX: number, baseY: number): void {
     ctx.textAlign = "center";
     ctx.font = "7px 'Press Start 2P', monospace";
     for (const toast of this.items) {
