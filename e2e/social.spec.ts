@@ -9,6 +9,7 @@
 
 import { execFileSync } from "node:child_process";
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { MINIGAME_COUNTDOWN_MS } from "@/sim/minigames";
 
 const seedCoins = (caretakerId: string, coins: number): void => {
   execFileSync("docker", [
@@ -22,7 +23,11 @@ const seedCoins = (caretakerId: string, coins: number): void => {
   ]);
 };
 
-const RECORD_RUN_MS = 4000;
+// A run must outlast the pre-roll the server deducts before it scores the
+// result (SPEC §13.3.1, `plausibleRun`), or a four-second run reads as one
+// second of play and a seven-point score comes back implausible. Imported
+// rather than hardcoded so the test moves if the countdown does.
+const RECORD_RUN_MS = MINIGAME_COUNTDOWN_MS + 4000;
 const RECORD_RUN_SCORE = 7;
 
 /**
