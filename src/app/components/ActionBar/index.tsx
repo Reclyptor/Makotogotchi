@@ -11,7 +11,7 @@ import { useCallback, useState } from "react";
 import { canPerform } from "@/sim/validate";
 import { CARE_ACTIONS, TICK_SECONDS, type CareAction } from "@/sim/tuning";
 import type { PetState, ProjectionContext } from "@/sim/model";
-import { isLockReason, REASON_GLYPH, rejectionText } from "./copy";
+import { isLockReason, REASON_GLYPH, REASON_SHORT, rejectionText } from "./copy";
 
 const ACTION_META: Record<CareAction, { label: string; emoji: string }> = {
   FEED: { label: "Feed", emoji: "🍖" },
@@ -98,14 +98,21 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExa
         {CARE_ACTIONS.map((action) => {
           const verdict = canPerform(state, action, caretakerId, ctx);
           const meta = ACTION_META[action];
+          // Two registers for one reason: the sentence goes in the accessible
+          // name and the tooltip, the short form on the tile itself, which is
+          // too narrow for a sentence and used to truncate mid-word.
           let hint: string | null = null;
+          let label: string | null = null;
           let glyph: string | undefined;
           let cooldownFraction = 0; // 0 = ready, 1 = just used
           if (!verdict.ok) {
             hint = reasons[verdict.reason];
+            label = REASON_SHORT[verdict.reason];
             if (verdict.retryAtTick !== undefined && verdict.sinceTick !== undefined) {
               cooldownFraction = cooldownProgress(verdict.sinceTick, verdict.retryAtTick, nowTickExact);
-              hint = `${hint} (${cooldownSeconds(verdict.retryAtTick, nowTickExact)}s)`;
+              const seconds = cooldownSeconds(verdict.retryAtTick, nowTickExact);
+              hint = `${hint} (${seconds}s)`;
+              label = `${label} ${seconds}s`;
             } else {
               glyph = REASON_GLYPH[verdict.reason];
             }
@@ -146,9 +153,9 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExa
               </span>
               <span className={`text-[12px] font-semibold leading-tight ${verdict.ok ? "" : "text-muted"}`}>{meta.label}</span>
               <span
-                className={`min-h-3.5 max-w-full truncate px-1 text-[10px] leading-tight ${hint ? "text-foreground/85" : "text-muted"}`}
+                className={`min-h-3.5 max-w-full truncate px-1 text-[10px] leading-tight ${label ? "text-foreground/85" : "text-muted"}`}
               >
-                {hint ?? " "}
+                {label ?? " "}
               </span>
               {/* Cooldown drain track along the bottom edge. */}
               <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[3px] bg-white/5">

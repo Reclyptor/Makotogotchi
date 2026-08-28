@@ -1121,7 +1121,13 @@ The canvas is decorative. Everything it shows exists in the DOM:
   native `disabled` attribute, which removes it), carries its reason as
   *visible text* as well as in the accessible name — a `title` tooltip is not
   a carrier, since it does not exist on touch — and loses its press affordance
-  entirely rather than merely dimming. The last part is enforced in
+  entirely rather than merely dimming. Where the control is too narrow for a
+  sentence, the visible text is the **short** form of the reason and the
+  accessible name keeps the full one: a care tile is a sixth of a phone's
+  width, and "Makoto is asleep" truncated there to `Makoto is asl…`, so every
+  tile opened with the same three words and cut off before the one word that
+  differed. Abbreviating is allowed; truncating is not. The last part is
+  enforced in
   `globals.css` on `.press[aria-disabled="true"]`, not per component: a
   hover-brightened, sweep-animated button reads as live no matter how faint it
   is drawn.

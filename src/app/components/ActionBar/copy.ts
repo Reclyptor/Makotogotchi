@@ -27,6 +27,29 @@ export const rejectionText = (petName: string): Record<LockReason, string> => ({
   NO_ITEM: "None left",
 });
 
+/**
+ * The same reason with the pet's name taken out, for controls too narrow to
+ * hold a sentence.
+ *
+ * A care tile is a sixth of a phone's width. "Makoto is asleep" does not fit
+ * in one, and truncating it produced "Makoto is asl…" — every tile opening
+ * with the same three words and cutting off before the one word that differs,
+ * which is worse than useless. The name is redundant there anyway: it is the
+ * page's heading, six inches up. The full sentence still goes in the
+ * accessible name (SPEC §11.3), so nothing is lost to a screen reader.
+ */
+export const REASON_SHORT: Record<LockReason, string> = {
+  NOT_BORN: "Not hatched",
+  DEAD: "Gone",
+  ASLEEP: "Asleep",
+  TOO_TIRED: "Too tired",
+  NOT_SICK: "Not sick",
+  NOT_SLEEPY: "Wide awake",
+  COOLDOWN_GLOBAL: "Busy",
+  COOLDOWN_CARETAKER: "Wait",
+  NO_ITEM: "None left",
+};
+
 /** Whether a `reason` off the wire is one we have copy for. */
 export const isLockReason = (value: unknown): value is LockReason =>
   typeof value === "string" && value in rejectionText("");
