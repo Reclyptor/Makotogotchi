@@ -397,7 +397,9 @@ export default function GameView() {
         <span className="font-pixel text-[13px] tracking-tight text-accent drop-shadow-[0_0_12px_rgba(167,139,250,0.5)]">
           MAKOTOGOTCHI
         </span>
-        <div className="flex items-center gap-2">
+        {/* Four pills and a wordmark do not fit a narrow phone on one line, so
+            the cluster wraps rather than pushing "live" off the edge. */}
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {/* What caring has earned you, live (SPEC §13.1). It is the same
               number the shop's header shows, from the same place, so opening
               the shop can never disagree with the bar above it. Labelled, not
@@ -405,7 +407,7 @@ export default function GameView() {
           {stream.purse && (
             <span
               aria-label={`${stream.purse.coins} coins`}
-              className="panel !rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums text-gold"
+              className="panel shrink-0 whitespace-nowrap !rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums text-gold"
             >
               <span aria-hidden="true">🪙 </span>
               {stream.purse.coins}
@@ -420,7 +422,7 @@ export default function GameView() {
           <details className="relative">
             <summary
               aria-live="polite"
-              className="panel cursor-pointer list-none !rounded-full px-2.5 py-1 text-xs text-muted [&::-webkit-details-marker]:hidden"
+              className="panel cursor-pointer list-none whitespace-nowrap !rounded-full px-2.5 py-1 text-xs text-muted [&::-webkit-details-marker]:hidden"
             >
               <span aria-hidden="true">👥 </span>
               {stream.presenceCount} watching
