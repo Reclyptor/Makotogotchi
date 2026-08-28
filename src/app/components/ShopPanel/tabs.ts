@@ -82,12 +82,27 @@ export type ShopTab = {
   footnote?: string;
 };
 
+/**
+ * One glyph per item, so a long list is scannable without reading it.
+ *
+ * Two rules, both learned the hard way. **Name the actual object**: the
+ * Running Wheel wore 🎡, a Ferris wheel, which is a fairground ride and not
+ * the thing in the cage. And **no two rows should look alike**: Fish Feast
+ * wore 🐟 while the Aquarium wore 🐠, so the shop offered a fish to eat and a
+ * fish to keep with all but the same picture, a tab apart.
+ *
+ * tabs.test.ts holds only the mechanical half of the second rule — two items
+ * with the *identical* glyph. It could not have caught the fish, because 🐟
+ * and 🐠 are different characters that happen to look the same at 18px, and
+ * it cannot catch a Ferris wheel standing in for a hamster wheel at all.
+ * Those need eyes on the rendered tab.
+ */
 const ITEM_ICONS: Record<string, string> = {
   pepper_treat: "🌶️",
-  fish_feast: "🐟",
+  fish_feast: "🍣",
   super_medicine: "💊",
   teeter: "🛝",
-  wheel: "🎡",
+  wheel: "🛞",
   bow: "🎀",
   cap: "🧢",
   crown: "👑",
@@ -102,6 +117,32 @@ const ITEM_ICONS: Record<string, string> = {
   beach: "🏖️",
   forest: "🌲",
 };
+
+/**
+ * What a row shows when its item has no glyph of its own, so a catalog
+ * addition degrades to its category rather than to nothing.
+ *
+ * Where the game already has a symbol for the idea, these borrow it rather
+ * than inventing one: 🍖 is the FEED action's and the Hunger meter's, 💊 is
+ * MEDICATE's, 🎮 is PLAY's, 🧭 is the one the status line uses for an away
+ * day. The rest are generics chosen not to collide with any real item —
+ * cosmetics used to fall back to 🎀 and decor to 🪴, which are the Ribbon
+ * Bow's and the Potted Plant's, so a new item would have quietly
+ * impersonated an existing one in the same list.
+ */
+const CATEGORY_ICONS = {
+  food: "🍖",
+  medicine: "💊",
+  toy: "🎮",
+  cosmetic: "🎩",
+  decor: "🛋️",
+  grand: "🪑",
+  theme: "🎨",
+  venue: "🧭",
+} as const;
+
+/** Exported for the test that holds the no-two-items-alike rule. */
+export const iconTables = { items: ITEM_ICONS, categories: CATEGORY_ICONS };
 
 const icon = (itemId: string, fallback: string): string => ITEM_ICONS[itemId] ?? fallback;
 
@@ -186,7 +227,7 @@ const packTab = (shop: ShopModel, gate: CareGate): ShopTab => {
       const availability = usable(gate, care, itemId);
       return {
         id: itemId,
-        icon: icon(itemId, medicine ? "💊" : "🍖"),
+        icon: icon(itemId, CATEGORY_ICONS[medicine ? "medicine" : "food"]),
         name: `${itemLabel(shop.catalog, itemId)} ×${count}`,
         detail: medicine ? "Cures instantly, no cooldown" : "An extra-tasty meal",
         action: { kind: "use", itemId, care, availability },
@@ -219,7 +260,7 @@ const foodTab = (shop: ShopModel): ShopTab => ({
           ),
         ),
         ...Object.entries(shop.catalog.medicine).map(([itemId, item]) =>
-          buyRow(itemId, item, "Cures instantly, no cooldown", shop, "💊"),
+          buyRow(itemId, item, "Cures instantly, no cooldown", shop, CATEGORY_ICONS.medicine),
         ),
       ],
     },
@@ -233,7 +274,7 @@ const toysTab = (shop: ShopModel): ShopTab => ({
     {
       id: "toys",
       rows: Object.entries(shop.catalog.toys).map(([itemId, item]) => {
-        const row = buyRow(itemId, item, `Play restores +${item.playBonusPercent}% more`, shop, "🎮");
+        const row = buyRow(itemId, item, `Play restores +${item.playBonusPercent}% more`, shop, CATEGORY_ICONS.toy);
         return shop.toys.includes(itemId) ? badgeRow(row, "Owned", "Installed for this generation") : row;
       }),
     },
@@ -247,7 +288,7 @@ const styleTab = (shop: ShopModel): ShopTab => ({
     {
       id: "cosmetics",
       rows: Object.entries(shop.catalog.cosmetics).map(([itemId, item]): ShopRow => {
-        const row = buyRow(itemId, item, "Worn by Makoto, kept forever", shop, "🎀");
+        const row = buyRow(itemId, item, "Worn by Makoto, kept forever", shop, CATEGORY_ICONS.cosmetic);
         if (!shop.room.cosmetics.includes(itemId)) return row;
         return shop.room.activeCosmetic === itemId
           ? { ...row, detail: "Makoto is wearing this", action: { kind: "wear", itemId: null, label: "Take Off" } }
@@ -266,13 +307,13 @@ const roomTab = (shop: ShopModel): ShopTab => {
 
   const decorations: ShopRow[] = [
     ...Object.entries(shop.catalog.decor).map(([itemId, item]) => {
-      const row = buyRow(itemId, item, "Stays in the room for good", shop, "🪴");
+      const row = buyRow(itemId, item, "Stays in the room for good", shop, CATEGORY_ICONS.decor);
       return shop.room.decor.includes(itemId) ? badgeRow(row, "Placed", "Standing in the room") : row;
     }),
     ...grand
       .filter(([, item]) => item.group === "decor")
       .map(([itemId, item]) =>
-        grandRow(itemId, item.label, shop, "🪑", {
+        grandRow(itemId, item.label, shop, CATEGORY_ICONS.grand, {
           open: "Everyone chips in — then it's in the room",
           funded: "Everyone paid for this one",
           fundedBadge: "Placed",
@@ -283,7 +324,7 @@ const roomTab = (shop: ShopModel): ShopTab => {
   // Every style the room could wear, one row each, default first. A funded
   // style keeps its row and trades its pool for a switcher (SPEC §22.5).
   const styleRow = (themeId: string, itemId: string | null, name: string): ShopRow => {
-    const identity = { id: `theme-${themeId}`, icon: icon(itemId ?? "", "🎨"), name };
+    const identity = { id: `theme-${themeId}`, icon: icon(itemId ?? "", CATEGORY_ICONS.theme), name };
     if (shop.room.activeTheme === themeId) {
       return { ...identity, detail: "The room is wearing this", action: { kind: "badge", label: "In Use" } };
     }
@@ -293,7 +334,7 @@ const roomTab = (shop: ShopModel): ShopTab => {
     // Not owned yet, so the row is its pool. It keeps the same id either way,
     // so switching a style on is the same row it was funded through.
     return {
-      ...grandRow(itemId ?? themeId, name, shop, "🎨", {
+      ...grandRow(itemId ?? themeId, name, shop, CATEGORY_ICONS.theme, {
         open: "Repaints the room for everyone",
         funded: "Owned by the room",
         fundedBadge: "Owned",
@@ -320,7 +361,7 @@ const roomTab = (shop: ShopModel): ShopTab => {
   const places: ShopRow[] = grand
     .filter(([, item]) => item.group === "venue")
     .map(([itemId, item]) =>
-      grandRow(itemId, item.label, shop, "🧭", {
+      grandRow(itemId, item.label, shop, CATEGORY_ICONS.venue, {
         open: "A place Makoto could spend the day",
         funded: "Makoto spends some days here",
         fundedBadge: "In Rotation",

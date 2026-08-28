@@ -5,7 +5,7 @@
 // the balance was.
 
 import { describe, expect, it } from "vitest";
-import { shopTabs, initialTab, type CareGate, type ShopModel, type ShopRow, type ShopTab } from "./tabs";
+import { iconTables, shopTabs, initialTab, type CareGate, type ShopModel, type ShopRow, type ShopTab } from "./tabs";
 import { hatchedState, testCtx } from "@/sim/testkit";
 import { projectImmortal } from "@/sim/testkit";
 import type { RoomView } from "@/server/shop";
@@ -133,5 +133,46 @@ describe("shop tabs", () => {
   it("opens on the pack only when there is something in it", () => {
     expect(initialTab(shopTabs(model(), gate()))).toBe("food");
     expect(initialTab(shopTabs(model({ inventory: { pepper_treat: 1 } }), gate()))).toBe("pack");
+  });
+});
+
+describe("shop icons", () => {
+  // The mechanical half of "no two rows look alike". It would NOT have caught
+  // the case that prompted it — Fish Feast's 🐟 beside the Aquarium's 🐠 are
+  // different characters — but exact collisions are the cheap half to hold,
+  // and they are what happens when someone adds an item by copying a line.
+  it("gives no two items the same glyph", () => {
+    const seen = new Map<string, string>();
+    for (const [itemId, glyph] of Object.entries(iconTables.items)) {
+      const owner = seen.get(glyph);
+      expect(owner, `${itemId} and ${owner} both use ${glyph}`).toBeUndefined();
+      seen.set(glyph, itemId);
+    }
+  });
+
+  it("gives no two categories the same fallback", () => {
+    const glyphs = Object.values(iconTables.categories);
+    expect(new Set(glyphs).size).toBe(glyphs.length);
+  });
+
+  // A fallback that equals a real item's glyph means a newly added item shows
+  // up wearing an existing one's face. The exception is medicine, where the
+  // category symbol and the only item's symbol are both 💊 by design — 💊 is
+  // what MEDICATE uses, and picking something else to satisfy a test would be
+  // the tail wagging the dog.
+  it("keeps category fallbacks from impersonating an item", () => {
+    const items = new Set(Object.values(iconTables.items));
+    for (const [category, glyph] of Object.entries(iconTables.categories)) {
+      if (category === "medicine") continue;
+      expect(items.has(glyph), `the ${category} fallback ${glyph} is already an item's`).toBe(false);
+    }
+  });
+
+  it("draws a glyph for every catalog item the shop sells", () => {
+    const rows = shopTabs(model({ inventory: {} }), gate()).flatMap((tab) =>
+      tab.groups.flatMap((group) => group.rows),
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(row.icon, `${row.name} has no icon`).toBeTruthy();
   });
 });
