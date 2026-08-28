@@ -75,26 +75,38 @@ test.describe("social and economy", () => {
     await page.goto("/");
     await expect(page.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
 
-    await page.getByRole("button", { name: /Shop/ }).click();
-    await expect(page.getByRole("region", { name: "Shop" })).toBeVisible();
+    await page.getByRole("button", { name: "Shop", exact: true }).click();
+    const shop = page.getByRole("dialog", { name: "Shop" });
+    await expect(shop).toBeVisible();
+    await shop.getByRole("tab", { name: "Room" }).click();
 
-    // Broke: buying anything is refused with a reason.
-    await page.getByRole("region", { name: "Shop" }).getByRole("button", { name: /for 400 coins/ }).first().click();
-    await expect(page.getByText(/Not enough coins/)).toBeVisible({ timeout: 10_000 });
+    // Broke: the price is locked before it is ever clicked, and says why — in
+    // the row, not only in a tooltip (SPEC §11.3). Playwright will not click
+    // it at all, which is the same verdict a screen reader reaches.
+    const plant = shop.getByRole("button", { name: /Buy Potted Plant for 400 coins/ });
+    await expect(plant).toHaveAttribute("aria-disabled", "true");
+    await expect(plant).toHaveAccessibleName(/Needs 400 more/);
+    await expect(shop.getByText(/Needs 400 more/)).toBeVisible();
 
     // Funded: the potted plant becomes communal decor.
     const state = (await (await page.request.get("/api/state")).json()) as { caretakerId: string };
     seedCoins(state.caretakerId, 5000);
-    await page.getByRole("region", { name: "Shop" }).getByRole("button", { name: /for 400 coins/ }).first().click();
+    await shop.getByRole("button", { name: "Close shop" }).click();
+    await page.getByRole("button", { name: "Shop", exact: true }).click();
+    await shop.getByRole("tab", { name: "Room" }).click();
+    await expect(plant).toHaveAttribute("aria-disabled", "false");
+    await plant.click();
     await expect(page.getByText(/Bought/)).toBeVisible({ timeout: 10_000 });
 
-    // A second visitor's shop shows it owned — spending is communal.
+    // A second visitor's shop shows it standing in the room — spending is communal.
     const contextB = await browser.newContext();
     const pageB = await contextB.newPage();
     await pageB.goto("/");
     await expect(pageB.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
-    await pageB.getByRole("button", { name: /Shop/ }).click();
-    await expect(pageB.getByRole("region", { name: "Shop" }).getByText("owned").first()).toBeVisible({ timeout: 10_000 });
+    await pageB.getByRole("button", { name: "Shop", exact: true }).click();
+    const shopB = pageB.getByRole("dialog", { name: "Shop" });
+    await shopB.getByRole("tab", { name: "Room" }).click();
+    await expect(shopB.getByText("Placed").first()).toBeVisible({ timeout: 10_000 });
 
     await context.close();
     await contextB.close();
@@ -118,9 +130,12 @@ test.describe("social and economy", () => {
     // Each caretaker chips in through the shop, then empties their purse
     // into the pool — the Window Seat costs 500 and neither can afford it.
     for (const page of [pageA, pageB]) {
-      await page.getByRole("button", { name: /Shop/ }).click();
-      const shop = page.getByRole("region", { name: "Shop" });
+      await page.getByRole("button", { name: "Shop", exact: true }).click();
+      const shop = page.getByRole("dialog", { name: "Shop" });
       await expect(shop).toBeVisible();
+      // A pool lives in the tab of the thing it buys, not in a section of its
+      // own (SPEC §21.8) — the Window Seat is furniture, so it is under Room.
+      await shop.getByRole("tab", { name: "Room" }).click();
       await shop.getByRole("button", { name: /Chip in 50 coins toward Window Seat/ }).click();
       await expect(page.getByText(/Chipped in 50/)).toBeVisible({ timeout: 10_000 });
     }

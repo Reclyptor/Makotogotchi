@@ -545,6 +545,7 @@ export default function GameView() {
             type="button"
             onClick={() => setShopOpen((open) => !open)}
             aria-expanded={shopOpen}
+            aria-label="Shop"
             className="press panel !rounded-full px-4 py-1.5 text-sm font-semibold hover:border-gold/40"
           >
             🛒 Shop
