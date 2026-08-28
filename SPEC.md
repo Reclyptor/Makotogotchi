@@ -1446,7 +1446,7 @@ Makotogotchi/
     │   ├── social.ts votes.ts shop.ts snapshot.ts schedule.ts secret.ts
     │   └── runtime.ts testsetup.ts
     ├── game/                   # canvas engine, anim machine, room scene, audio
-    │                           # scene/party + scene/retro (SPEC §26.4, §26.5)
+    │                           # scene/party (SPEC §26.4)
     └── app/                    # Next.js App Router
         ├── layout.tsx page.tsx globals.css
         ├── memorial/ leaderboard/ about/
@@ -1456,6 +1456,7 @@ Makotogotchi/
         ├── hooks/              # usePetStream (client reconciliation, SPEC §7.4)
         │                       # konami (pure matcher) + useKonami (SPEC §26.1)
         └── components/         # GameView PetCanvas Meters FeedLog VotePanel
+                                # RetroOverlay (SPEC §26.5)
                                 # NicknameEditor PushToggle QuestBanner
                                 # WantBanner (+copy) minigames/ (Shell +
                                 # registry + ten games, §13.3)
@@ -2977,33 +2978,44 @@ to be told apart and nothing else does.
 
 Finding the code writes `"on"` and toasts `📺 RETRO MODE UNLOCKED`. A 📺
 button then joins the header cluster beside the 🔇 mute toggle, on this and
-every future visit, with `aria-pressed` and an `aria-label` of
-`Retro display` — same shape as the mute button it sits next to. Caretakers
-who have not found the code have no such button, and a 📺 in someone else's
+every future visit, carrying `aria-pressed` and an `aria-label` that names
+the direction of the press (`Turn the retro display on` / `…off`) — the same
+shape as the mute button it sits beside. Off, it is dimmed and desaturated,
+so the control reads as switched off rather than merely unlit. Caretakers who
+have not found the code have no such button, and a 📺 in someone else's
 screenshot is the only clue this feature exists anywhere in the product.
 
-Rendering is a post-pass at the end of `Room.paint`, in
-`src/game/scene/retro.ts`, over the canvas only — the canvas is the screen;
-the surrounding UI is not inside the television.
+**The whole app is inside the television, not just the room.** A single fixed
+overlay rendered from the root layout (`src/app/components/RetroOverlay`,
+styled in `globals.css`), `pointer-events: none` and `aria-hidden` — the
+memorial and the leaderboard get it too.
 
-- 1px scanlines on every other row, ~8% black.
-- A warm phosphor bloom: one low-alpha full-canvas rect.
-- A vignette built from a handful of nested translucent rects.
+- Scanlines on a three-pixel rhythm: one row at 34% black, two clear.
+- A warm phosphor bloom over the middle.
+- A vignette darkening into the corners.
 
-**The vignette must not use a `CanvasGradient`.** `DigestContext` stringifies
-any non-string `fillStyle` to the literal `"object-fill"` (`digest.ts`), so
-two different gradients hash identically — a gradient that changed
-appearance would never trigger a repaint and would freeze on screen. Static
-rects have no such trap. This is a real constraint of the render engine, not
-a style preference.
+This reverses the original decision, which confined the effect to a post-pass
+at the end of `Room.paint`. Two things were wrong with that. Scanlines at 8%
+over a 200px canvas were almost invisible, and — the real fault — the canvas
+is a small part of a tall page, so a caretaker who pressed the button saw
+nothing change anywhere they were looking and could not tell what the control
+did. A toggle whose effect is imperceptible has failed at the only job it
+has. Covering the app also makes the keepsake feel like a *mode* rather than
+a filter on one widget, which is what "retro display" promises.
 
-Roughly a hundred `fillRect`s per painted frame at `ROOM_HEIGHT/2` scanlines
-is acceptable: the loop runs at 15fps and the digest skips most frames
-outright, and the calls are identical every frame so they contribute a
-constant to the hash and cause no *extra* repaints. If profiling ever
-disagrees, the overlay becomes one cached offscreen blit — but not before,
-and `putImageData` is not the way to do it, since it replaces pixels rather
-than compositing.
+Moving it out of the render engine deleted more than it added: no
+`scene/retro.ts`, no `Room.retro` flag, no invalidation when it flips, and
+~150 `fillRect`s off every painted frame. It also retires a trap worth
+recording — inside the canvas the vignette could not use a `CanvasGradient`,
+because `DigestContext` stringifies any non-string `fillStyle` to the literal
+`"object-fill"` (`digest.ts`), so two different gradients hash identically
+and one whose appearance changed would never repaint. In CSS that constraint
+does not exist, and gradients are the right tool.
+
+Deliberately **no `backdrop-filter`** on the overlay. It would re-blur the
+whole page on every paint, and with nineteen frosted panels beneath it that
+is the single most expensive thing this app can do — the same reasoning that
+already holds the aurora field still (`globals.css`).
 
 ### 26.6 Reduced Motion
 
@@ -3055,7 +3067,6 @@ that leaking costs nothing:
 | Unit — `konami.test.ts` | the full sequence; a wrong key mid-way; the overlapping-prefix case (`↑↑↑↓↓…`); `B`/`b` case-insensitivity; repeats and typing-target events ignored |
 | Unit — mood derivation | dead → `stars`; egg → `party`; asleep → `stars`; awake → `party` |
 | Unit — `Spectacle` | inert before `start` and after expiry; identical draw calls for identical `nowMs` across two runs (the digest depends on it); `supersedesNightDim` only while a `stars` run is live |
-| Unit — retro pass | changes the frame, hashes identically every time, keeps every mark in bounds, leaves `globalAlpha` as it found it, and uses no gradient — the digest cannot tell two apart |
 | Unit — `Room` | the spectacle repaints while it runs and lets the room settle after; reduced motion draws none of it; retro survives reduced motion |
 | Unit — guard | one winner from a race; TTL set by the claim and not refreshed by losers (real Redis, §16.4) |
 | E2E — `e2e/konami.spec.ts` | type the sequence on `/`; **a second browser context sees the same feed line**, unattributed — the communal half is the part worth a browser; the 📺 toggle appears for the finder and not the witness, survives a reload, and survives being switched off; the code is inert while a dialog owns the keyboard, and listening again the moment it closes |
@@ -3085,7 +3096,7 @@ more than five files.
 | **K1** | Protocol + route | `sim/secret.ts`, `server/secret.ts`, `messages.ts`, `api/konami/route.ts` | the route publishes a `secret` message; mood derivation unit-tested; the guard proven against real Redis — one winner from a race, TTL set on the claim, not refreshed by losers |
 | **K2** | Detection + feed | `hooks/konami.ts`, `hooks/useKonami.ts`, `usePetStream.ts`, `GameView` | the sequence posts, the feed line lands on every open tab, matcher unit-tested; inert during a minigame |
 | **K3** | The spectacle | `scene/party.ts`, `room.ts`, `PetCanvas`, `audio.ts` | both moods draw; reduced motion falls back to the feed line; the digest still skips idle frames |
-| **K4** | Retro mode | `scene/retro.ts`, `room.ts`, `PetCanvas`, `GameView` | 📺 appears only once found, persists across reload, toggles the pass |
+| **K4** | Retro mode | `RetroOverlay`, `layout.tsx`, `globals.css`, `useRetro.ts`, `GameView` | 📺 appears only once found, persists across reload, and switches the whole app in and out of the television |
 | **K5** | E2E | `e2e/konami.spec.ts`, `global-setup.ts` | two contexts witness one spectacle; the keepsake reaches exactly one of them; the code is inert behind a dialog; guard flushed between runs |
 
 

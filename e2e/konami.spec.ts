@@ -24,7 +24,8 @@ const enterCode = async (page: Page): Promise<void> => {
   for (const key of KONAMI) await page.keyboard.press(key);
 };
 
-const retroToggle = (page: Page) => page.getByRole("button", { name: "Retro display" });
+// The label states which way the press goes, so it changes with the state.
+const retroToggle = (page: Page) => page.getByRole("button", { name: /retro display/i });
 
 const live = async (page: Page): Promise<void> => {
   await expect(page.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });

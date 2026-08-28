@@ -512,8 +512,8 @@ export default function GameView() {
               type="button"
               onClick={retro.toggle}
               aria-pressed={retro.on}
-              aria-label="Retro display"
-              className="press panel !rounded-full px-2.5 py-1 text-xs"
+              aria-label={retro.on ? "Turn the retro display off" : "Turn the retro display on"}
+              className={`press panel !rounded-full px-2.5 py-1 text-xs ${retro.on ? "" : "opacity-45 grayscale"}`}
             >
               📺
             </button>
@@ -559,7 +559,7 @@ export default function GameView() {
       {/* The habitat */}
       <div className="panel w-full overflow-hidden !rounded-3xl p-1.5">
         <div className="overflow-hidden rounded-[1.15rem] bg-[#2a2333]">
-          <PetCanvas stream={stream} localSecret={localSecret} retro={retro.on} />
+          <PetCanvas stream={stream} localSecret={localSecret} />
         </div>
         <p aria-live="polite" className="px-3 py-2 text-center text-sm text-muted">
           {statusText}

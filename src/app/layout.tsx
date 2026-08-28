@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Atkinson_Hyperlegible, Press_Start_2P } from "next/font/google";
+import RetroOverlay from "@/app/components/RetroOverlay";
 import "./globals.css";
 
 // The wordmark's retro face — used sparingly; body text stays a system
@@ -51,7 +52,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${pressStart.variable} ${atkinson.variable}`}>
-      <body className={`${atkinson.className} min-h-dvh antialiased`}>{children}</body>
+      <body className={`${atkinson.className} min-h-dvh antialiased`}>
+        {children}
+        <RetroOverlay />
+      </body>
     </html>
   );
 }

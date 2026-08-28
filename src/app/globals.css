@@ -84,6 +84,48 @@ body::after {
     radial-gradient(34rem 26rem at 55% 45%, rgba(167, 139, 250, 0.12), transparent 70%);
 }
 
+/* Retro display (SPEC §26.5): the ancient code's keepsake. The whole app sits
+   inside the television, not just the canvas — a pass confined to the room was
+   so faint against the surrounding UI that nobody could tell what the toggle
+   did, which is the only job a toggle has.
+
+   One fixed layer above everything, inert to the pointer. Deliberately no
+   backdrop-filter: it would re-blur the entire page on every paint, and the
+   nineteen frosted panels underneath already make that the most expensive
+   thing this app can do (see the aurora note above). */
+.retro {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+}
+
+/* Scanlines, on a three-pixel rhythm: one dark row, two clear. Strong enough
+   to be unmistakable at a glance — the previous 8% over the canvas alone was
+   invisible on anything but a dark backdrop. */
+.retro::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.34) 0px,
+    rgba(0, 0, 0, 0.34) 1px,
+    rgba(0, 0, 0, 0) 1px,
+    rgba(0, 0, 0, 0) 3px
+  );
+}
+
+/* Warm phosphor over the middle, dark into the corners. */
+.retro::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 90% at 50% 45%, rgba(255, 214, 156, 0.10), transparent 60%),
+    radial-gradient(110% 95% at 50% 50%, transparent 45%, rgba(0, 0, 0, 0.55) 100%);
+}
+
 /* Frosted panel: high blur, gradient fill, lit top edge, hairline stroke. */
 .panel {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.035));
