@@ -14,6 +14,8 @@ import { isDuplicateKeyError } from "./db/collections";
 import { caretakerProfile, caretakers, creditCoins } from "./social";
 import { invalidateRoomCache } from "./snapshot";
 import { announcePurse, purseOf } from "./purse";
+import { key, redis } from "./redis/client";
+import type { EngineMessage } from "./engine/messages";
 
 export const COSMETIC_ITEMS = {
   bow: { kind: "cosmetic", price: 300, label: "Ribbon Bow" },
@@ -108,6 +110,28 @@ export const roomState = async (db: Db): Promise<RoomView> => {
 };
 
 /**
+ * The room changed: drop the cached copy and tell everyone what it is now
+ * (SPEC §7.2, §22.5).
+ *
+ * Every mutation below calls this instead of invalidating alone. Invalidating
+ * only fixes what the *next* snapshot serves, which is up to a whole
+ * SNAPSHOT_INTERVAL away — long enough that a hat you just put on does not
+ * appear, on your own screen, for half a minute. The room is shared, so its
+ * changes are announced the same way the pet's are.
+ */
+const announceRoom = async (db: Db): Promise<void> => {
+  invalidateRoomCache();
+  const room = await roomState(db);
+  const message: EngineMessage = { type: "room", room };
+  try {
+    await redis().publish(key("events"), JSON.stringify(message));
+  } catch {
+    // The room is right in the database; only its echo was lost, and the next
+    // snapshot carries it anyway.
+  }
+};
+
+/**
  * Switch the room's style (SPEC §22.5). Any caretaker may change it among
  * the styles the room owns — it is a shared space, and the change lands for
  * everyone at once.
@@ -120,7 +144,7 @@ export const setActiveTheme = async (db: Db, themeId: string): Promise<boolean> 
     { $set: { activeTheme: themeId }, $setOnInsert: { cosmetics: [], activeCosmetic: null, decor: [] } },
     { upsert: true },
   );
-  invalidateRoomCache();
+  await announceRoom(db);
   return true;
 };
 
@@ -203,7 +227,7 @@ export const purchase = async (
   // has changed and every snapshot keeps serving the cached one for up to its
   // whole TTL — a plant paid for and not standing in the room, a hat bought
   // and not worn, for ten seconds (SPEC §22.5).
-  if (item.kind === "cosmetic" || item.kind === "decor") invalidateRoomCache();
+  if (item.kind === "cosmetic" || item.kind === "decor") await announceRoom(db);
   return { ok: true, kind: item.kind };
 };
 
@@ -211,11 +235,11 @@ export const purchase = async (
 export const wearCosmetic = async (db: Db, itemId: string | null): Promise<boolean> => {
   if (itemId === null) {
     await roomCollection(db).updateOne({ _id: "room" }, { $set: { activeCosmetic: null } });
-    invalidateRoomCache();
+    await announceRoom(db);
     return true;
   }
   const result = await roomCollection(db).updateOne({ _id: "room", cosmetics: itemId }, { $set: { activeCosmetic: itemId } });
-  if (result.modifiedCount === 1) invalidateRoomCache();
+  if (result.modifiedCount === 1) await announceRoom(db);
   return result.modifiedCount === 1;
 };
 
@@ -364,5 +388,5 @@ const placeCommunalDecor = async (db: Db, itemId: string): Promise<void> => {
     // already there, because $addToSet on the winner's document ran first.
     if (!isDuplicateKeyError(error)) throw error;
   }
-  invalidateRoomCache();
+  await announceRoom(db);
 };

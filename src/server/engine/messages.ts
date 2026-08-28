@@ -7,6 +7,7 @@ import type { CareEvent, Milestone } from "@/sim/events";
 import type { MinigameId } from "@/sim/minigames";
 import type { RecordScope } from "../records";
 import type { Purse } from "../purse";
+import type { RoomView } from "../shop";
 
 export type CareMessage = {
   type: "care";
@@ -105,11 +106,15 @@ export type FundedMessage = {
   contributors: { name: string; amount: number }[];
 };
 
-/** The room changed its style (SPEC §22.5): every room changes together. */
-export type ThemeMessage = {
-  type: "theme";
-  themeId: string;
-  caretakerName: string;
+/**
+ * The communal room changed (SPEC §22.5) — a style switched, a hat worn, a
+ * decoration bought or funded. Carries the whole room rather than the delta:
+ * it is five fields, it arrives rarely, and one message that always means
+ * "this is the room now" cannot drift from the room the next snapshot brings.
+ */
+export type RoomMessage = {
+  type: "room";
+  room: RoomView;
 };
 
 /** Emoji reactions (SPEC §2.11) — pure broadcast, no state. */
@@ -136,7 +141,7 @@ export type EngineMessage =
   | TitleMessage
   | RecordMessage
   | FundedMessage
-  | ThemeMessage
+  | RoomMessage
   | ReactMessage
   | PurseMessage;
 

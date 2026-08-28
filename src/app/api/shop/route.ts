@@ -8,10 +8,7 @@ import { db } from "@/server/db/client";
 import { runtime } from "@/server/runtime";
 import { caretakerProfile } from "@/server/social";
 import { catalog, fundingState, purchase, roomState, setActiveTheme, wearCosmetic } from "@/server/shop";
-import { anonymousName, nicknameMap } from "@/server/social";
-import { key, redis } from "@/server/redis/client";
 import { caretakerCookieHeader, resolveCaretaker } from "@/server/http";
-import type { EngineMessage } from "@/server/engine/messages";
 
 export const dynamic = "force-dynamic";
 
@@ -67,18 +64,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   if ("theme" in parsed.data) {
-    const ok = await setActiveTheme(database, parsed.data.theme);
-    if (!ok) return withCookie(NextResponse.json({ error: "NOT_OWNED" }, { status: 404 }));
     // The room is shared, so the redecoration is too: everyone's walls change
-    // at the same moment rather than on their next reload.
-    const names = await nicknameMap(database, [identity.caretakerId]);
-    const message: EngineMessage = {
-      type: "theme",
-      themeId: parsed.data.theme,
-      caretakerName: names.get(identity.caretakerId) ?? anonymousName(identity.caretakerId),
-    };
-    await redis().publish(key("events"), JSON.stringify(message));
-    return withCookie(NextResponse.json({ ok: true }));
+    // at the same moment rather than on their next reload. setActiveTheme
+    // announces it, as every room mutation does (SPEC §7.2) — the route does
+    // not have to remember to.
+    const ok = await setActiveTheme(database, parsed.data.theme);
+    return withCookie(ok ? NextResponse.json({ ok: true }) : NextResponse.json({ error: "NOT_OWNED" }, { status: 404 }));
   }
 
   const state = await engine.view(current);

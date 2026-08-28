@@ -15,13 +15,16 @@ import type { PetState, PhaseSchedule, ProjectionContext } from "@/sim/model";
 import type { CareAction } from "@/sim/tuning";
 import type { SnapshotPayload } from "@/server/snapshot";
 import type { RoomView } from "@/server/shop";
+import type { Purse } from "@/server/purse";
 import type {
   CareMessage,
   MilestoneMessage,
   MinigameMessage,
   PresenceMessage,
   PresenceView,
+  PurseMessage,
   ReactMessage,
+  RoomMessage,
   FundedMessage,
   RecordMessage,
   SnapshotMessage,
@@ -87,6 +90,12 @@ export type PetStream = {
   crownedId: string | null;
   /** Communal room decoration (SPEC §13.2), from the latest snapshot. */
   room: RoomView | null;
+  /**
+   * This caretaker's own coins and pack (SPEC §13.1) — the one part of the
+   * stream that is theirs alone. Opens with `hello` and is replaced whenever
+   * anything moves it, so nothing needs to poll for a balance.
+   */
+  purse: Purse | null;
   /** The pet's IANA zone, from the latest snapshot — its calendar, not ours. */
   timeZone: string | null;
   /** Authoritative state projected to the corrected current tick. */
@@ -116,6 +125,7 @@ export const usePetStream = (): PetStream => {
   const fundedListeners = useRef(new Set<(notice: FundedNotice) => void>());
   const reactListeners = useRef(new Set<(notice: ReactNotice) => void>());
   const [room, setRoom] = useState<RoomView | null>(null);
+  const [purse, setPurse] = useState<Purse | null>(null);
   const [timeZone, setTimeZone] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [caretakerId, setCaretakerId] = useState<string | null>(null);
@@ -174,6 +184,7 @@ export const usePetStream = (): PetStream => {
         streakDays: number;
         generationsSurvived: number;
         presence: PresenceView;
+        purse: Purse;
       };
       setCaretakerId(payload.caretakerId);
       // The opening count comes with the connect. Waiting for a `presence`
@@ -185,6 +196,9 @@ export const usePetStream = (): PetStream => {
         streakDays: payload.streakDays,
         generationsSurvived: payload.generationsSurvived,
       });
+      // Hello re-fires on every reconnect, which is also what corrects a purse
+      // that moved while this client was disconnected.
+      setPurse(payload.purse);
       acceptSnapshot(payload);
     });
     source.addEventListener("snapshot", (event) => {
@@ -246,9 +260,18 @@ export const usePetStream = (): PetStream => {
       const { type: _type, ...notice } = message;
       for (const listener of recordListeners.current) listener(notice);
     });
-    source.addEventListener("theme", (event) => {
-      const notice = JSON.parse((event as MessageEvent<string>).data) as { themeId: string };
-      setRoom((current) => (current ? { ...current, activeTheme: notice.themeId } : current));
+    // Any change to the communal room — a style, a worn hat, a new
+    // decoration. It replaces the room outright rather than patching a field,
+    // so this and the snapshot can never hold different rooms.
+    source.addEventListener("room", (event) => {
+      const message = JSON.parse((event as MessageEvent<string>).data) as RoomMessage;
+      setRoom(message.room);
+    });
+    // Only this caretaker's purse ever arrives here — the server drops the
+    // rest before they reach the socket (SPEC §7.2).
+    source.addEventListener("purse", (event) => {
+      const message = JSON.parse((event as MessageEvent<string>).data) as PurseMessage;
+      setPurse({ coins: message.coins, inventory: message.inventory });
     });
     source.addEventListener("funded", (event) => {
       const message = JSON.parse((event as MessageEvent<string>).data) as FundedMessage;
@@ -331,6 +354,7 @@ export const usePetStream = (): PetStream => {
     presenceCaretakers,
     crownedId,
     room,
+    purse,
     timeZone,
     projectNow,
     nowTickExact,
