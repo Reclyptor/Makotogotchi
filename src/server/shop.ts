@@ -193,6 +193,11 @@ export const purchase = async (
       { upsert: true },
     );
   }
+  // Buying is a redecoration like any other. Without this the room document
+  // has changed and every snapshot keeps serving the cached one for up to its
+  // whole TTL — a plant paid for and not standing in the room, a hat bought
+  // and not worn, for ten seconds (SPEC §22.5).
+  if (item.kind === "cosmetic" || item.kind === "decor") invalidateRoomCache();
   return { ok: true, kind: item.kind };
 };
 
