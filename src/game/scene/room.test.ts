@@ -4,7 +4,7 @@
 // recording stub rather than a real one.
 
 import { describe, expect, it } from "vitest";
-import { Room, ROOM_WIDTH, STAGE_SCALE, stageScale, wanderBand } from "./room";
+import { Room, ROOM_HEIGHT, ROOM_WIDTH, STAGE_SCALE, stageScale, wanderBand } from "./room";
 import { RUG } from "./backdrop";
 import { drawRect } from "../engine/atlas";
 import { BASE_CLIPS, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP } from "../anim/clips";
@@ -98,9 +98,13 @@ const recordingContext = (failAtCall = -1) => {
       step();
       return { data: new Uint8ClampedArray(w * h * 4), width: w, height: h };
     },
-    putImageData: () => {
+    putImageData: (image: ImageData, dx: number, dy: number) => {
       step();
-      paints.push(state.clip);
+      // The room is not the only thing laid down as pixels — the framed
+      // picture is too (scene/portrait.ts) — and this list is about the
+      // full-canvas paint, so a small blit is not one of them.
+      const whole = dx === 0 && dy === 0 && image.width === ROOM_WIDTH && image.height === ROOM_HEIGHT;
+      if (whole) paints.push(state.clip);
     },
     drawImage: (...args: number[]) => {
       step();

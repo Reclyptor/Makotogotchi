@@ -7,10 +7,11 @@ import { layer } from "../engine/layer";
 import { Particles, type ParticleKind } from "../engine/particles";
 import { DigestContext, type SceneContext } from "../engine/digest";
 import { Toasts } from "./toasts";
+import { Portrait, PORTRAIT_HEIGHT, PORTRAIT_WIDTH } from "./portrait";
 import { AnimationMachine } from "../anim/machine";
 import { BASE_CLIPS, BUTTERFLY_CLIP, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP, type OneShotName } from "../anim/clips";
 import { SPRITE_FRAMES } from "../atlas.generated";
-import { Backdrop, keyOf, ROOM_HEIGHT, ROOM_WIDTH, RUG, venueSpec, type BackdropKey, type Condition } from "./backdrop";
+import { Backdrop, keyOf, ROOM_HEIGHT, ROOM_WIDTH, RUG, venueSpec, WINDOW, type BackdropKey, type Condition } from "./backdrop";
 import { celestialAt, seasonFor, skyMomentAt, venueAt, weatherFor, type Celestial } from "@/sim/atmosphere";
 import type { DerivedState } from "@/sim/derive";
 import type { AmbientEvent } from "@/sim/ambient";
@@ -140,6 +141,16 @@ const ELDER_BROWS_Y = -112;
 /** How this generation feels about the meal it was just fed (SPEC §21.4). */
 export type FoodTaste = "favorite" | "disliked";
 
+// Where the framed picture hangs, and how wide its moulding is. It sits on the
+// bare wall left of the window and level with it — the two are the only things
+// on that wall, and hanging them off each other's centre line is the difference
+// between a room and a wall with objects on it. Above the picture rail, and
+// clear of the aquarium that stands against the same wall once the room funds
+// one (SPEC §22.3).
+const PICTURE_X = 40;
+const PICTURE_Y = WINDOW.y + Math.round((WINDOW.h - (PORTRAIT_HEIGHT + 4)) / 2);
+const PICTURE_MOULDING = 2;
+
 // A shared rare moment holds the room for six seconds (SPEC §21.5).
 const AMBIENT_MS = 6000;
 const STAR_FLIGHT_MS = 1200;
@@ -154,6 +165,7 @@ export class Room {
   private readonly particles = new Particles();
   private readonly toasts = new Toasts();
   private readonly backdrop = new Backdrop();
+  private readonly portrait = new Portrait();
   private condition: Condition = "well";
   private seed = 0;
   // Until the first sync lands, the room holds an ordinary clear midday.
@@ -445,8 +457,9 @@ export class Room {
     }
   }
 
-  /** Communal decor (SPEC §13.2, §21.8), drawn procedurally in the palette.
-   *  It furnishes the room — away venues carry none of it (SPEC §22.8). */
+  /** Communal decor (SPEC §13.2, §21.8), drawn procedurally save for the one
+   *  item that is a picture. It furnishes the room — away venues carry none
+   *  of it (SPEC §22.8). */
   private renderDecor(ctx: SceneContext, nowMs: number): void {
     if (!venueSpec(this.backdropKey.venueId).decor) return;
     const px = (x: number, y: number, w: number, h: number, color: string): void => {
@@ -460,9 +473,17 @@ export class Room {
       px(30, 132, 8, 8, "#4f9a4f");
     }
     if (this.decor.decor.includes("picture")) {
-      px(40, 40, 30, 24, "#6a5a3b"); // frame
-      px(43, 43, 24, 18, "#8fb3d9"); // sky
-      px(43, 55, 24, 6, "#5b7a4a"); // hills
+      // Only the moulding is furniture; the picture inside it is art, and
+      // comes from scene/portrait.ts as one blit. The bevel is lit along its
+      // top and left like every other frame in the room (SPEC §22.3).
+      const width = PORTRAIT_WIDTH + PICTURE_MOULDING * 2;
+      const height = PORTRAIT_HEIGHT + PICTURE_MOULDING * 2;
+      px(PICTURE_X, PICTURE_Y, width, height, "#6a5238");
+      px(PICTURE_X, PICTURE_Y, width, 1, "#8a6d4a");
+      px(PICTURE_X, PICTURE_Y, 1, height, "#8a6d4a");
+      px(PICTURE_X, PICTURE_Y + height - 1, width, 1, "#4a3828");
+      px(PICTURE_X + width - 1, PICTURE_Y, 1, height, "#4a3828");
+      this.portrait.render(ctx, PICTURE_X + PICTURE_MOULDING, PICTURE_Y + PICTURE_MOULDING);
     }
     if (this.decor.decor.includes("lamp")) {
       px(226, 96, 4, 66, "#57492f"); // pole
