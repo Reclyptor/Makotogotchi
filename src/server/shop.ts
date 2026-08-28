@@ -11,7 +11,7 @@
 import type { Collection, Db } from "mongodb";
 import { FOOD_ITEMS, MEDICINE_ITEMS, TOY_ITEMS } from "@/sim/economy";
 import { petClock } from "@/sim/clock";
-import type { DayBallot } from "@/sim/atmosphere";
+import type { DayBallot, VenueId } from "@/sim/atmosphere";
 import { ballotsAround } from "./ballot";
 import { env } from "./env";
 import { isDuplicateKeyError } from "./db/collections";
@@ -49,11 +49,30 @@ export const GRAND_ITEMS = {
   // and a new view out of the window, for everyone, forever.
   theme_cabin: { kind: "grand", group: "theme", themeId: "cabin", price: 900, label: "Log Cabin Walls" },
   theme_seaside: { kind: "grand", group: "theme", themeId: "seaside", price: 1100, label: "Seaside Walls" },
-  // Day-trip venues (SPEC §22.8). Funding one adds a whole place to the
-  // daily rotation, for everyone, forever — the ids ARE the venue ids.
+  // Day-trip venues (SPEC §22.8). Funding one opens a place the room can
+  // then vote itself to (§22.9), for everyone, forever — the ids ARE the
+  // venue ids, which `VENUE_CATALOG_IDS` below turns from a convention into
+  // a compile error.
+  blossom: { kind: "grand", group: "venue", price: 700, label: "Blossom Park" },
   beach: { kind: "grand", group: "venue", price: 800, label: "Beach Day" },
+  pond: { kind: "grand", group: "venue", price: 850, label: "Koi Pond" },
   forest: { kind: "grand", group: "venue", price: 950, label: "Forest Clearing" },
+  shrine: { kind: "grand", group: "venue", price: 1100, label: "Shrine Path" },
+  mountain: { kind: "grand", group: "venue", price: 1400, label: "Mount Fuji" },
 } as const;
+
+/**
+ * Every venue the shop sells must be a venue the scene can draw.
+ *
+ * Nothing else enforces that. A funded id that is not a `VenueId` is dropped
+ * silently by the rotation pool's filter, so the shop would take a room's
+ * coins for a place Makoto can never be sent to, and no test would notice.
+ * This is a type-level assertion rather than a runtime check on purpose: it
+ * costs nothing at runtime and it fails the build the day the two lists
+ * drift, which is the only moment anybody could still fix it cheaply.
+ */
+type SoldVenueIds = { [K in GrandId]: (typeof GRAND_ITEMS)[K]["group"] extends "venue" ? K : never }[GrandId];
+const _everyVenueSoldCanBeDrawn: SoldVenueIds extends VenueId ? true : never = true;
 
 /** The style every room starts with and can always return to. */
 export const DEFAULT_THEME = "cozy";

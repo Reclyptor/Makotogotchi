@@ -116,6 +116,12 @@ const ITEM_ICONS: Record<string, string> = {
   theme_seaside: "🌊",
   beach: "🏖️",
   forest: "🌲",
+  blossom: "🌸",
+  pond: "🎏",
+  shrine: "⛩️",
+  mountain: "🗻",
+  garden: "🌻",
+  meadow: "🦋",
 };
 
 /**
