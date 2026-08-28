@@ -3055,11 +3055,24 @@ that leaking costs nothing:
 | Unit — `konami.test.ts` | the full sequence; a wrong key mid-way; the overlapping-prefix case (`↑↑↑↓↓…`); `B`/`b` case-insensitivity; repeats and typing-target events ignored |
 | Unit — mood derivation | dead → `stars`; egg → `party`; asleep → `stars`; awake → `party` |
 | Unit — `Spectacle` | inert before `start` and after expiry; identical draw calls for identical `nowMs` across two runs (the digest depends on it); `supersedesNightDim` only while a `stars` run is live |
-| Unit — retro pass | contributes nothing to the frame when disabled |
-| E2E — `e2e/konami.spec.ts` | type the sequence on `/`; the 📺 toggle appears and survives a reload; the feed line lands; **a second browser context sees the same feed line** — the communal half is the part worth an e2e |
+| Unit — retro pass | changes the frame, hashes identically every time, keeps every mark in bounds, leaves `globalAlpha` as it found it, and uses no gradient — the digest cannot tell two apart |
+| Unit — `Room` | the spectacle repaints while it runs and lets the room settle after; reduced motion draws none of it; retro survives reduced motion |
+| Unit — guard | one winner from a race; TTL set by the claim and not refreshed by losers (real Redis, §16.4) |
+| E2E — `e2e/konami.spec.ts` | type the sequence on `/`; **a second browser context sees the same feed line**, unattributed — the communal half is the part worth a browser; the 📺 toggle appears for the finder and not the witness, survives a reload, and survives being switched off; the code is inert while a dialog owns the keyboard, and listening again the moment it closes |
 
-The e2e must clear `mgc:konami:guard` in `global-setup.ts`; a 5-minute guard
-outlives a test run and would fail the second spec to touch it.
+Two constraints the e2e has to respect.
+
+`global-setup.ts` clears `mgc:konami:guard`, and each test that needs a
+broadcast clears it again: the guard holds for five minutes, which outlives a
+whole run, so the second test to want one would silently take the local-only
+path and fail for a reason unrelated to the code.
+
+The inertness test drives the **shop** dialog, not a minigame, even though it
+is the minigames that bind the arrow keys. `social.spec.ts` owns every test
+that starts a run — the pet is shared and `PLAY` carries a global cooldown, so
+a second spec file racing for one would be refused and flake. Nothing is lost:
+the gate is a single `!playing && !shopOpen`, and it does not know which
+dialog set it.
 
 ### 26.9 Delivery Phases
 
@@ -3073,7 +3086,7 @@ more than five files.
 | **K2** | Detection + feed | `hooks/konami.ts`, `hooks/useKonami.ts`, `usePetStream.ts`, `GameView` | the sequence posts, the feed line lands on every open tab, matcher unit-tested; inert during a minigame |
 | **K3** | The spectacle | `scene/party.ts`, `room.ts`, `PetCanvas`, `audio.ts` | both moods draw; reduced motion falls back to the feed line; the digest still skips idle frames |
 | **K4** | Retro mode | `scene/retro.ts`, `room.ts`, `PetCanvas`, `GameView` | 📺 appears only once found, persists across reload, toggles the pass |
-| **K5** | E2E | `e2e/konami.spec.ts`, `global-setup.ts` | two contexts witness one spectacle; guard flushed between runs |
+| **K5** | E2E | `e2e/konami.spec.ts`, `global-setup.ts` | two contexts witness one spectacle; the keepsake reaches exactly one of them; the code is inert behind a dialog; guard flushed between runs |
 
 
 ---

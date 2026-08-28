@@ -36,6 +36,13 @@ export default async function globalSetup(): Promise<void> {
   const engine = new PetEngine({ db: await db(), redis: redis(), key, timeZone: "America/Chicago" });
   await engine.hatch(generation, "Makoto");
   await engine.openWant(generation, 0, { kind: "dust-bath" });
+
+  // The ancient code's guard holds the room for five minutes (SPEC §26.2),
+  // which outlives a run. A leftover from the previous one would send the
+  // first spectacle down the local-only path and fail its spec for a reason
+  // that has nothing to do with the code.
+  await redis().del(key("konami:guard"));
+
   await closeDb();
   await closeRedis();
 
