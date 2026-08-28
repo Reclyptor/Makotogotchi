@@ -26,23 +26,30 @@ export const DECOR_ITEMS = {
   lamp: { kind: "decor", price: 800, label: "Cozy Lamp" },
 } as const;
 
+/**
+ * Grand items are alike in how they are paid for and unlike in everything
+ * else, so each one carries the `group` that says what funding it actually
+ * does: furniture lands in the room, a style repaints it, a venue joins the
+ * day-trip rotation. The shop files them by that rather than by their funding
+ * model (SPEC §21.8), and the group travels with the catalog so no reader has
+ * to infer a room style from the spelling of an id.
+ */
 export const GRAND_ITEMS = {
-  window_seat: { kind: "grand", price: 500, label: "Window Seat" },
-  aquarium: { kind: "grand", price: 650, label: "Aquarium" },
-  kotatsu: { kind: "grand", price: 800, label: "Kotatsu" },
+  window_seat: { kind: "grand", group: "decor", price: 500, label: "Window Seat" },
+  aquarium: { kind: "grand", group: "decor", price: 650, label: "Aquarium" },
+  kotatsu: { kind: "grand", group: "decor", price: 800, label: "Kotatsu" },
   // Room styles (SPEC §22.5). Funding one buys the whole room a new palette
   // and a new view out of the window, for everyone, forever.
-  theme_cabin: { kind: "grand", price: 900, label: "Log Cabin Walls" },
-  theme_seaside: { kind: "grand", price: 1100, label: "Seaside Walls" },
+  theme_cabin: { kind: "grand", group: "theme", themeId: "cabin", price: 900, label: "Log Cabin Walls" },
+  theme_seaside: { kind: "grand", group: "theme", themeId: "seaside", price: 1100, label: "Seaside Walls" },
   // Day-trip venues (SPEC §22.8). Funding one adds a whole place to the
   // daily rotation, for everyone, forever — the ids ARE the venue ids.
-  beach: { kind: "grand", price: 800, label: "Beach Day" },
-  forest: { kind: "grand", price: 950, label: "Forest Clearing" },
+  beach: { kind: "grand", group: "venue", price: 800, label: "Beach Day" },
+  forest: { kind: "grand", group: "venue", price: 950, label: "Forest Clearing" },
 } as const;
 
 /** The style every room starts with and can always return to. */
 export const DEFAULT_THEME = "cozy";
-const THEME_PREFIX = "theme_";
 
 export type CosmeticId = keyof typeof COSMETIC_ITEMS;
 export type DecorId = keyof typeof DECOR_ITEMS;
@@ -70,10 +77,17 @@ export type RoomView = {
   themes: string[];
 };
 
+/** The style a funded item bought the room, or null if it bought something else. */
+export const themeOfItem = (itemId: string): string | null => {
+  if (!isGrandId(itemId)) return null;
+  const item = GRAND_ITEMS[itemId];
+  return item.group === "theme" ? item.themeId : null;
+};
+
 /** A funded style is owned forever; the default is owned from the start. */
 export const ownedThemes = (decor: string[]): string[] => [
   DEFAULT_THEME,
-  ...decor.filter((item) => item.startsWith(THEME_PREFIX)).map((item) => item.slice(THEME_PREFIX.length)),
+  ...decor.map(themeOfItem).filter((themeId) => themeId !== null),
 ];
 
 export const roomState = async (db: Db): Promise<RoomView> => {
