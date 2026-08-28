@@ -8,6 +8,14 @@ import { skyMomentAt, SEASONS, WEATHERS, type Season } from "@/sim/atmosphere";
 import { ROOM_HEIGHT, ROOM_WIDTH, type BackdropKey } from "./compose";
 import {
   BEACH,
+  BEACH_HORIZON,
+  BLOSSOM_HORIZON,
+  FOREST_HORIZON,
+  GARDEN_HORIZON,
+  MEADOW_HORIZON,
+  MOUNTAIN_HORIZON,
+  POND_HORIZON,
+  SHRINE_HORIZON,
   beachHorizonAt,
   BLOSSOM,
   blossomHorizonAt,
@@ -23,7 +31,6 @@ import {
   forestHorizonAt,
   GARDEN,
   gardenHorizonAt,
-  HORIZON_Y,
   MEADOW,
   meadowHorizonAt,
   MOUNTAIN,
@@ -32,6 +39,7 @@ import {
   pondHorizonAt,
   SHRINE,
   shrineHorizonAt,
+  WINTER_COVER,
 } from "./outdoors";
 import { hex, type RGB } from "./theme";
 
@@ -56,178 +64,104 @@ const pixelAt = (buffer: Uint8ClampedArray, x: number, y: number): RGB => {
   return [buffer[i]!, buffer[i + 1]!, buffer[i + 2]!];
 };
 
+/**
+ * Every colour a venue's palette can paint, walked out of the palette
+ * object itself — flat RGBs, three-value ramps, and the per-season ground
+ * records alike. Enumerating rather than hand-listing is the point: the
+ * hand-written version drifted every time a palette changed, and a stale
+ * list turns this check into a rubber stamp.
+ */
+const paletteOf = (palette: object): RGB[] => {
+  const found: RGB[] = [];
+  const walk = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      if (typeof value[0] === "number") found.push(value as unknown as RGB);
+      else value.forEach(walk);
+      return;
+    }
+    if (value && typeof value === "object") Object.values(value).forEach(walk);
+  };
+  walk(palette);
+  return found;
+};
+
 const SNOW = [
   [186, 196, 214],
   [204, 214, 228],
   [222, 230, 242],
+  ...paletteOf(WINTER_COVER),
 ] as const;
+
+
 
 const VENUES = [
   {
     id: "garden",
+    horizonY: GARDEN_HORIZON,
     compose: composeGarden,
     horizonAt: gardenHorizonAt,
     growing: GARDEN.grass,
-    named: [
-      ...Object.values(GARDEN.grass).flat(),
-      ...SNOW,
-      GARDEN.blade,
-      GARDEN.hedge,
-      GARDEN.hedgeLight,
-      GARDEN.fence,
-      GARDEN.fenceLight,
-      GARDEN.path,
-      GARDEN.pathEdge,
-      GARDEN.soil,
-      GARDEN.soilDark,
-      GARDEN.leaf,
-      GARDEN.fruit,
-      GARDEN.bloomPink,
-      GARDEN.bloomGold,
-      GARDEN.sunPatch,
-      GARDEN.moonPatch,
-    ],
+    named: [...paletteOf(GARDEN), ...SNOW],
   },
   {
     id: "meadow",
+    horizonY: MEADOW_HORIZON,
     compose: composeMeadow,
     horizonAt: meadowHorizonAt,
     growing: MEADOW.grass,
-    named: [
-      ...Object.values(MEADOW.grass).flat(),
-      ...SNOW,
-      MEADOW.blade,
-      MEADOW.hillFar,
-      MEADOW.treeline,
-      MEADOW.poppy,
-      MEADOW.daisy,
-      MEADOW.violet,
-      MEADOW.stalk,
-      MEADOW.sunPatch,
-      MEADOW.moonPatch,
-    ],
+    named: [...paletteOf(MEADOW), ...SNOW],
   },
   {
     id: "beach",
+    horizonY: BEACH_HORIZON,
     compose: composeBeach,
     horizonAt: beachHorizonAt,
-    growing: BEACH.sand,
-    named: [
-      ...Object.values(BEACH.sand).flat(),
-      ...SNOW,
-      BEACH.pebble,
-      ...BEACH.sea,
-      BEACH.sparkle,
-      BEACH.foam,
-      BEACH.sunPatch,
-      BEACH.moonPatch,
-    ],
+    growing: BEACH.shelf,
+    named: [...paletteOf(BEACH), ...SNOW],
   },
   {
     id: "forest",
+    horizonY: FOREST_HORIZON,
     compose: composeForest,
     horizonAt: forestHorizonAt,
     growing: FOREST.floor,
-    named: [
-      ...Object.values(FOREST.floor).flat(),
-      ...SNOW,
-      FOREST.fern,
-      FOREST.canopy,
-      FOREST.canopyLight,
-      FOREST.trunk,
-      FOREST.trunkLight,
-      FOREST.stumpTop,
-      FOREST.stumpRing,
-      FOREST.stumpSide,
-      FOREST.stumpShadow,
-      FOREST.sunPatch,
-      FOREST.moonPatch,
-    ],
+    named: [...paletteOf(FOREST), ...SNOW],
   },
   {
     id: "shrine",
+    horizonY: SHRINE_HORIZON,
     compose: composeShrine,
     horizonAt: shrineHorizonAt,
     growing: SHRINE.stone,
-    named: [
-      ...Object.values(SHRINE.stone).flat(),
-      ...SNOW,
-      SHRINE.moss,
-      SHRINE.cedar,
-      SHRINE.cedarLight,
-      SHRINE.vermilion,
-      SHRINE.vermilionDark,
-      SHRINE.tread,
-      SHRINE.riser,
-      SHRINE.lantern,
-      SHRINE.lanternLight,
-      SHRINE.lanternDark,
-      SHRINE.sunPatch,
-      SHRINE.moonPatch,
-    ],
+    named: [...paletteOf(SHRINE), ...SNOW],
   },
   {
     id: "pond",
+    horizonY: POND_HORIZON,
     compose: composePond,
     horizonAt: pondHorizonAt,
     growing: POND.bank,
-    named: [
-      ...Object.values(POND.bank).flat(),
-      ...SNOW,
-      POND.blade,
-      POND.reed,
-      POND.reedLight,
-      ...POND.water,
-      ...POND.ice,
-      POND.glint,
-      POND.pad,
-      POND.padLight,
-      POND.bloom,
-      POND.sunPatch,
-      POND.moonPatch,
-    ],
+    named: [...paletteOf(POND), ...SNOW],
   },
   {
     id: "blossom",
+    horizonY: BLOSSOM_HORIZON,
     compose: composeBlossom,
     horizonAt: blossomHorizonAt,
     growing: BLOSSOM.lawn,
-    named: [
-      ...Object.values(BLOSSOM.lawn).flat(),
-      ...SNOW,
-      BLOSSOM.blade,
-      ...BLOSSOM.canopy,
-      BLOSSOM.trunk,
-      BLOSSOM.trunkLight,
-      BLOSSOM.gravel,
-      BLOSSOM.gravelEdge,
-      BLOSSOM.bench,
-      BLOSSOM.benchDark,
-      BLOSSOM.fallen,
-      BLOSSOM.sunPatch,
-      BLOSSOM.moonPatch,
-    ],
+    named: [...paletteOf(BLOSSOM), ...SNOW],
   },
   {
     id: "mountain",
+    horizonY: MOUNTAIN_HORIZON,
     compose: composeMountain,
     horizonAt: mountainHorizonAt,
     growing: MOUNTAIN.shore,
-    named: [
-      ...Object.values(MOUNTAIN.shore).flat(),
-      ...SNOW,
-      MOUNTAIN.pebble,
-      ...MOUNTAIN.lake,
-      MOUNTAIN.lakeIce,
-      MOUNTAIN.reflectSnow,
-      MOUNTAIN.reflectRock,
-      MOUNTAIN.sunPatch,
-      MOUNTAIN.moonPatch,
-    ],
+    named: [...paletteOf(MOUNTAIN), ...SNOW],
   },
 ] as const;
 
-describe.each(VENUES)("the $id venue", ({ compose, horizonAt, growing, named }) => {
+describe.each(VENUES)("the $id venue", ({ compose, horizonAt, growing, named, horizonY }) => {
   it("fills every pixel opaquely at every hour, weather, and season", () => {
     for (const hour of [3, 9, 13, 20]) {
       for (const weather of WEATHERS) {
@@ -251,7 +185,7 @@ describe.each(VENUES)("the $id venue", ({ compose, horizonAt, growing, named }) 
     for (const season of SEASONS) {
       const buffer = compose(keyAt(13, { season }));
       const strays = new Set<string>();
-      for (let y = HORIZON_Y; y < ROOM_HEIGHT; y++) {
+      for (let y = horizonY; y < ROOM_HEIGHT; y++) {
         for (let x = 0; x < ROOM_WIDTH; x++) {
           const color = hex(pixelAt(buffer, x, y));
           if (!allowed.has(color)) strays.add(`${color} @${x},${y} (${season})`);
@@ -273,7 +207,7 @@ describe.each(VENUES)("the $id venue", ({ compose, horizonAt, growing, named }) 
     const winter = compose(keyAt(13, { season: "winter" }));
     const growingSeasons = ["spring", "summer", "autumn"] as const;
     const growingGround = new Set(growingSeasons.flatMap((season) => [...growing[season]]).map((color) => hex(color as RGB)));
-    for (let y = HORIZON_Y; y < ROOM_HEIGHT; y += 7) {
+    for (let y = horizonY; y < ROOM_HEIGHT; y += 7) {
       for (let x = 0; x < ROOM_WIDTH; x += 7) {
         expect(growingGround.has(hex(pixelAt(winter, x, y)))).toBe(false);
       }
@@ -285,7 +219,7 @@ describe.each(VENUES)("the $id venue", ({ compose, horizonAt, growing, named }) 
     for (let x = 0; x < ROOM_WIDTH; x++) {
       const height = horizonAt(x);
       expect(height).toBeGreaterThanOrEqual(4);
-      expect(height).toBeLessThan(HORIZON_Y);
+      expect(height).toBeLessThan(horizonY);
       heights.add(height);
     }
     expect(heights.size).toBeGreaterThan(1);

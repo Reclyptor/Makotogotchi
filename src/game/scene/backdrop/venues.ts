@@ -9,9 +9,11 @@
 // back to home rather than to a blank canvas.
 
 import type { VenueId } from "@/sim/atmosphere";
-import { composeBackdrop, GLASS, RUG, skylineAt, type BackdropKey } from "./compose";
+import { composeBackdrop, GLASS, ROOM_WIDTH, RUG, skylineAt, type BackdropKey } from "./compose";
 import {
+  BEACH_HORIZON,
   beachHorizonAt,
+  BLOSSOM_HORIZON,
   blossomHorizonAt,
   composeBeach,
   composeBlossom,
@@ -21,16 +23,21 @@ import {
   composeMountain,
   composePond,
   composeShrine,
+  FOREST_HORIZON,
   forestHorizonAt,
+  GARDEN_HORIZON,
   gardenHorizonAt,
+  MEADOW_HORIZON,
   meadowHorizonAt,
+  MOUNTAIN_HORIZON,
   mountainHorizonAt,
-  OUTDOOR_SKY,
   OUTDOOR_SPAN,
+  POND_HORIZON,
   pondHorizonAt,
   renderBeachLive,
   renderBlossomLive,
   renderPondLive,
+  SHRINE_HORIZON,
   shrineHorizonAt,
 } from "./outdoors";
 import type { RoomTheme } from "./theme";
@@ -78,30 +85,49 @@ export const HOME: VenueSpec = {
   compose: composeBackdrop,
 };
 
-const outdoor = (id: VenueId, label: string, horizonAt: (sx: number) => number, compose: VenueSpec["compose"]): VenueSpec => ({
+/**
+ * An outdoor venue. Each one sets its own `horizonY` — the roofed forest and
+ * the almost-all-sky meadow are different *places* rather than different
+ * tints precisely because their eye lines are nowhere near each other
+ * (SPEC §22.8), and the sky the weather falls through has to follow.
+ *
+ * Weather density scales with the sky it has to fill: three clouds in the
+ * meadow's enormous sky is a clear day, and the same three in the forest's
+ * torn canopy gap is an overcast one.
+ */
+const outdoor = (
+  id: VenueId,
+  label: string,
+  horizonY: number,
+  horizonAt: (sx: number) => number,
+  compose: VenueSpec["compose"],
+): VenueSpec => ({
   id,
   label,
-  sky: OUTDOOR_SKY,
+  sky: { x: 0, y: 0, w: ROOM_WIDTH, h: horizonY },
   // Outdoor horizons belong to the venue, not the room's theme.
   horizonAt: (_theme: RoomTheme, sx: number) => horizonAt(sx),
   span: OUTDOOR_SPAN,
   decor: false,
   glassPane: false,
-  weatherDensity: 3,
+  weatherDensity: Math.max(1.5, (horizonY / 92) * 3),
   compose,
 });
 
 /** Scenes land here as they are drawn (§22.7 B6/B7). */
 export const VENUES: Partial<Record<VenueId, VenueSpec>> = {
   home: HOME,
-  garden: outdoor("garden", "the garden", gardenHorizonAt, composeGarden),
-  meadow: outdoor("meadow", "the meadow", meadowHorizonAt, composeMeadow),
-  beach: { ...outdoor("beach", "the beach", beachHorizonAt, composeBeach), renderLive: renderBeachLive },
-  forest: outdoor("forest", "the forest clearing", forestHorizonAt, composeForest),
-  blossom: { ...outdoor("blossom", "the blossom park", blossomHorizonAt, composeBlossom), renderLive: renderBlossomLive },
-  pond: { ...outdoor("pond", "the koi pond", pondHorizonAt, composePond), renderLive: renderPondLive },
-  shrine: outdoor("shrine", "the shrine path", shrineHorizonAt, composeShrine),
-  mountain: outdoor("mountain", "the mountain", mountainHorizonAt, composeMountain),
+  garden: outdoor("garden", "the garden", GARDEN_HORIZON, gardenHorizonAt, composeGarden),
+  meadow: outdoor("meadow", "the meadow", MEADOW_HORIZON, meadowHorizonAt, composeMeadow),
+  beach: { ...outdoor("beach", "the beach", BEACH_HORIZON, beachHorizonAt, composeBeach), renderLive: renderBeachLive },
+  forest: outdoor("forest", "the forest clearing", FOREST_HORIZON, forestHorizonAt, composeForest),
+  blossom: {
+    ...outdoor("blossom", "the blossom park", BLOSSOM_HORIZON, blossomHorizonAt, composeBlossom),
+    renderLive: renderBlossomLive,
+  },
+  pond: { ...outdoor("pond", "the koi pond", POND_HORIZON, pondHorizonAt, composePond), renderLive: renderPondLive },
+  shrine: outdoor("shrine", "the shrine path", SHRINE_HORIZON, shrineHorizonAt, composeShrine),
+  mountain: outdoor("mountain", "the mountain", MOUNTAIN_HORIZON, mountainHorizonAt, composeMountain),
 };
 
 /** The venues every room owns from the start (SPEC §22.8), re-exported from
