@@ -383,7 +383,7 @@ export default function GameView() {
   }, [onCare, onMilestone, onWant, onTitle, onMinigame, onRecord, onFunded, onReact, onSecret, projectNow]);
 
   // The ancient code (SPEC §26). Inert while a dialog owns the keyboard:
-  // four of the five minigames bind arrow keys, and GameView is the only
+  // five of the ten minigames bind arrow keys, and GameView is the only
   // place that knows both dialogs' open state.
   const onKonami = useCallback(() => {
     // The keepsake first, and unconditionally: it is this caretaker's alone,

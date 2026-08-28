@@ -18,7 +18,7 @@ const isTyping = (target: EventTarget | null): boolean => {
 /**
  * Watches for the ancient code and calls `onFound` once per completed entry.
  *
- * `enabled` is not a nicety. Four of the five minigames bind arrow keys and
+ * `enabled` is not a nicety. Five of the ten minigames bind arrow keys and
  * the shop is a modal, so a live dialog owns the keyboard and the code must
  * be genuinely inert rather than merely unlikely to complete — the window is
  * dropped on the way out, so a half-entered sequence cannot survive a game

@@ -2759,8 +2759,9 @@ lock does not eat the secret.
 
 The listener is inert unless every one of these holds:
 
-- **No dialog owns the keyboard.** Four of the five minigames bind arrow
-  keys (`DustDash`, `SnackCatch`, `WheelSprint`, `BubblePop`), and the shop
+- **No dialog owns the keyboard.** Five of the ten minigames bind arrow
+  keys (`DustDash`, `SnackCatch`, `SausageParty`, `NatsumisWatch`,
+  `MakotoShuffle`), and the shop
   is a modal. A live game must never half-arm the buffer, so the hook takes
   an `enabled` flag and `GameView` passes `!playing && !shopOpen`.
 - **The event is not typing.** Keydowns whose `target` is an `input`,
