@@ -5,6 +5,7 @@
 import type { PetState } from "@/sim/model";
 import type { CareEvent, Milestone } from "@/sim/events";
 import type { MinigameId } from "@/sim/minigames";
+import type { SpectacleMood } from "@/sim/secret";
 import type { RecordScope } from "../records";
 import type { Purse } from "../purse";
 import type { RoomView } from "../shop";
@@ -131,6 +132,20 @@ export type ReactMessage = {
  */
 export type PurseMessage = { type: "purse"; caretakerId: string } & Purse;
 
+/**
+ * Someone entered the ancient code (SPEC §26.2) — pure broadcast, no state,
+ * never appended to the log.
+ *
+ * There is no `caretakerId` here on purpose. Nothing to attribute is nothing
+ * to farm and nothing to harass with, and it leaves the only field crossing
+ * the wire a two-value enum, which is the same "zero moderation surface by
+ * construction" the reaction route is built on.
+ */
+export type SecretMessage = {
+  type: "secret";
+  mood: SpectacleMood;
+};
+
 export type EngineMessage =
   | CareMessage
   | MilestoneMessage
@@ -143,7 +158,8 @@ export type EngineMessage =
   | FundedMessage
   | RoomMessage
   | ReactMessage
-  | PurseMessage;
+  | PurseMessage
+  | SecretMessage;
 
 /**
  * Whether a broadcast message belongs on this caretaker's socket (SPEC §7.2).
