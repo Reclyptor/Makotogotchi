@@ -12,16 +12,26 @@ import type { VenueId } from "@/sim/atmosphere";
 import { composeBackdrop, GLASS, RUG, skylineAt, type BackdropKey } from "./compose";
 import {
   beachHorizonAt,
+  blossomHorizonAt,
   composeBeach,
+  composeBlossom,
   composeForest,
   composeGarden,
   composeMeadow,
+  composeMountain,
+  composePond,
+  composeShrine,
   forestHorizonAt,
   gardenHorizonAt,
   meadowHorizonAt,
+  mountainHorizonAt,
   OUTDOOR_SKY,
   OUTDOOR_SPAN,
+  pondHorizonAt,
   renderBeachLive,
+  renderBlossomLive,
+  renderPondLive,
+  shrineHorizonAt,
 } from "./outdoors";
 import type { RoomTheme } from "./theme";
 import type { SceneContext } from "../../engine/digest";
@@ -50,8 +60,10 @@ export type VenueSpec = {
   weatherDensity: number;
   compose: (key: BackdropKey) => Uint8ClampedArray;
   /** A venue's own living touch, drawn each frame over the composed scene —
-   *  the beach's surf. Passed 0 under reduced motion, which holds it still. */
-  renderLive?: (ctx: SceneContext, nowMs: number) => void;
+   *  the beach's surf, the pond's koi. Passed 0 under reduced motion, which
+   *  holds it still, and the day's key so a touch can be seasonal: the
+   *  park's petals fall in spring and nowhere else. */
+  renderLive?: (ctx: SceneContext, nowMs: number, key: BackdropKey) => void;
 };
 
 export const HOME: VenueSpec = {
@@ -86,6 +98,10 @@ export const VENUES: Partial<Record<VenueId, VenueSpec>> = {
   meadow: outdoor("meadow", "the meadow", meadowHorizonAt, composeMeadow),
   beach: { ...outdoor("beach", "the beach", beachHorizonAt, composeBeach), renderLive: renderBeachLive },
   forest: outdoor("forest", "the forest clearing", forestHorizonAt, composeForest),
+  blossom: { ...outdoor("blossom", "the blossom park", blossomHorizonAt, composeBlossom), renderLive: renderBlossomLive },
+  pond: { ...outdoor("pond", "the koi pond", pondHorizonAt, composePond), renderLive: renderPondLive },
+  shrine: outdoor("shrine", "the shrine path", shrineHorizonAt, composeShrine),
+  mountain: outdoor("mountain", "the mountain", mountainHorizonAt, composeMountain),
 };
 
 /** The venues every room owns from the start (SPEC §22.8), re-exported from

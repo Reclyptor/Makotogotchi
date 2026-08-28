@@ -9,10 +9,16 @@ import { ROOM_HEIGHT, ROOM_WIDTH, type BackdropKey } from "./compose";
 import {
   BEACH,
   beachHorizonAt,
+  BLOSSOM,
+  blossomHorizonAt,
   composeBeach,
+  composeBlossom,
   composeForest,
   composeGarden,
   composeMeadow,
+  composeMountain,
+  composePond,
+  composeShrine,
   FOREST,
   forestHorizonAt,
   GARDEN,
@@ -20,6 +26,12 @@ import {
   HORIZON_Y,
   MEADOW,
   meadowHorizonAt,
+  MOUNTAIN,
+  mountainHorizonAt,
+  POND,
+  pondHorizonAt,
+  SHRINE,
+  shrineHorizonAt,
 } from "./outdoors";
 import { hex, type RGB } from "./theme";
 
@@ -132,6 +144,87 @@ const VENUES = [
       FOREST.moonPatch,
     ],
   },
+  {
+    id: "shrine",
+    compose: composeShrine,
+    horizonAt: shrineHorizonAt,
+    growing: SHRINE.stone,
+    named: [
+      ...Object.values(SHRINE.stone).flat(),
+      ...SNOW,
+      SHRINE.moss,
+      SHRINE.cedar,
+      SHRINE.cedarLight,
+      SHRINE.vermilion,
+      SHRINE.vermilionDark,
+      SHRINE.tread,
+      SHRINE.riser,
+      SHRINE.lantern,
+      SHRINE.lanternLight,
+      SHRINE.lanternDark,
+      SHRINE.sunPatch,
+      SHRINE.moonPatch,
+    ],
+  },
+  {
+    id: "pond",
+    compose: composePond,
+    horizonAt: pondHorizonAt,
+    growing: POND.bank,
+    named: [
+      ...Object.values(POND.bank).flat(),
+      ...SNOW,
+      POND.blade,
+      POND.reed,
+      POND.reedLight,
+      ...POND.water,
+      ...POND.ice,
+      POND.glint,
+      POND.pad,
+      POND.padLight,
+      POND.bloom,
+      POND.sunPatch,
+      POND.moonPatch,
+    ],
+  },
+  {
+    id: "blossom",
+    compose: composeBlossom,
+    horizonAt: blossomHorizonAt,
+    growing: BLOSSOM.lawn,
+    named: [
+      ...Object.values(BLOSSOM.lawn).flat(),
+      ...SNOW,
+      BLOSSOM.blade,
+      ...BLOSSOM.canopy,
+      BLOSSOM.trunk,
+      BLOSSOM.trunkLight,
+      BLOSSOM.gravel,
+      BLOSSOM.gravelEdge,
+      BLOSSOM.bench,
+      BLOSSOM.benchDark,
+      BLOSSOM.fallen,
+      BLOSSOM.sunPatch,
+      BLOSSOM.moonPatch,
+    ],
+  },
+  {
+    id: "mountain",
+    compose: composeMountain,
+    horizonAt: mountainHorizonAt,
+    growing: MOUNTAIN.shore,
+    named: [
+      ...Object.values(MOUNTAIN.shore).flat(),
+      ...SNOW,
+      MOUNTAIN.pebble,
+      ...MOUNTAIN.lake,
+      MOUNTAIN.lakeIce,
+      MOUNTAIN.reflectSnow,
+      MOUNTAIN.reflectRock,
+      MOUNTAIN.sunPatch,
+      MOUNTAIN.moonPatch,
+    ],
+  },
 ] as const;
 
 describe.each(VENUES)("the $id venue", ({ compose, horizonAt, growing, named }) => {
@@ -214,7 +307,23 @@ describe.each(VENUES)("the $id venue", ({ compose, horizonAt, growing, named }) 
 });
 
 describe("the venues differ", () => {
-  it("a garden day and a meadow day are different places", () => {
-    expect(Array.from(composeGarden(keyAt(13)))).not.toEqual(Array.from(composeMeadow(keyAt(13))));
+  it("every venue is somewhere else — no two days out look the same", () => {
+    // Cheap to get wrong when a new venue is copied from an old one and its
+    // distinguishing features are then drawn off-screen or under the ground.
+    const scenes = new Map<string, string>();
+    for (const venue of VENUES) {
+      const fingerprint = Array.from(venue.compose(keyAt(13))).join(",");
+      const twin = [...scenes].find(([, other]) => other === fingerprint)?.[0];
+      if (twin !== undefined) throw new Error(`${venue.id} draws exactly what ${twin} draws`);
+      scenes.set(venue.id, fingerprint);
+    }
+    expect(scenes.size).toBe(VENUES.length);
+  });
+
+  it("gives each venue its own skyline rather than one shared silhouette", () => {
+    const skylines = VENUES.map((venue) =>
+      Array.from({ length: ROOM_WIDTH }, (_, x) => venue.horizonAt(x)).join(","),
+    );
+    expect(new Set(skylines).size).toBe(VENUES.length);
   });
 });

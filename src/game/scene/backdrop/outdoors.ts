@@ -490,3 +490,547 @@ export const composeForest = (key: BackdropKey): Uint8ClampedArray => {
   paintLight(key, put, FOREST.sunPatch, FOREST.moonPatch);
   return buffer;
 };
+
+// ── the shrine path ─────────────────────────────────────────────────────────
+
+export const SHRINE = {
+  stone: {
+    spring: [
+      [78, 88, 74],
+      [98, 108, 90],
+      [120, 128, 108],
+    ],
+    summer: [
+      [74, 84, 70],
+      [94, 104, 86],
+      [116, 124, 104],
+    ],
+    autumn: [
+      [96, 90, 68],
+      [118, 110, 82],
+      [140, 130, 98],
+    ],
+    winter: SNOW_RAMP,
+  } as Record<Season, readonly [RGB, RGB, RGB]>,
+  moss: [62, 86, 58] as RGB,
+  cedar: [28, 48, 40] as RGB,
+  cedarLight: [40, 66, 50] as RGB,
+  vermilion: [186, 62, 48] as RGB,
+  vermilionDark: [140, 42, 34] as RGB,
+  tread: [152, 148, 136] as RGB,
+  riser: [112, 108, 98] as RGB,
+  lantern: [136, 132, 118] as RGB,
+  lanternLight: [166, 162, 148] as RGB,
+  lanternDark: [92, 90, 82] as RGB,
+  sunPatch: [140, 146, 104] as RGB,
+  moonPatch: [70, 80, 96] as RGB,
+};
+
+/** The torii, in scene coordinates. Its posts stand on the ground, so they
+ *  run a few pixels past the horizon rather than resting on it. */
+const TORII = { left: 84, right: 172, post: 7, top: 46, beam: 8 } as const;
+
+/**
+ * Cedars all along the ridge, with the gate's two posts spiking through
+ * them. The span *between* the posts stays at cedar height on purpose: the
+ * sun is clipped to whatever stands in its column, so a low horizon there is
+ * what lets it drop into the gateway at dusk instead of vanishing behind a
+ * solid block of red.
+ */
+export const shrineHorizonAt = (sx: number): number => {
+  const onPost =
+    (sx >= TORII.left && sx < TORII.left + TORII.post) || (sx >= TORII.right - TORII.post && sx < TORII.right);
+  if (onPost) return HORIZON_Y - TORII.top;
+  return 12 + Math.floor(Math.abs(((sx + 5) % 22) - 11) / 3);
+};
+
+export const composeShrine = (key: BackdropKey): Uint8ClampedArray => {
+  const { buffer, put } = makeBuffer();
+  const worn = (color: RGB): RGB => wear(color, key.condition);
+  const winter = key.season === "winter";
+
+  paintSky(key, put);
+
+  // The cedar ridge, scalloped like the horizon promises.
+  for (let x = 0; x < ROOM_WIDTH; x++) {
+    const top = HORIZON_Y - (12 + Math.floor(Math.abs(((x + 5) % 22) - 11) / 3));
+    for (let y = top; y < HORIZON_Y; y++) put(x, y, worn(y === top ? SHRINE.cedarLight : SHRINE.cedar));
+    if (winter) put(x, top, worn(SNOW_RAMP[2]));
+  }
+
+  paintGround(key, put, SHRINE.stone, SHRINE.moss, winter);
+
+  // The steps, climbing away from the viewer and narrowing with distance.
+  // Kept right of centre so they never cover the patch of open ground the
+  // seasonal-change check samples.
+  for (let y = HORIZON_Y; y < ROOM_HEIGHT; y++) {
+    const depth = (y - HORIZON_Y) / (ROOM_HEIGHT - HORIZON_Y);
+    const centre = 134 + depth * 8;
+    const half = 6 + depth * 16;
+    // A riser every few rows reads as treads without drawing every step.
+    const face = Math.floor(y / 6) % 2 === 0;
+    for (let x = Math.max(0, Math.floor(centre - half)); x < Math.min(ROOM_WIDTH, centre + half); x++) {
+      const offset = Math.abs(x - centre) / half;
+      if (offset > 1) continue;
+      // Snow settles on the treads but the risers stay swept stone, or the
+      // whole stair disappears into the white it is standing on.
+      const color = winter ? (face ? SNOW_RAMP[2] : SHRINE.riser) : face ? SHRINE.tread : SHRINE.riser;
+      if (offset <= 0.8 || threshold(x, y, 3) < 0.5) put(x, y, worn(color));
+    }
+  }
+
+  // The gate: two posts and the beam they carry, planted in the ground.
+  for (const postX of [TORII.left, TORII.right - TORII.post]) {
+    for (let y = TORII.top; y < HORIZON_Y + 6; y++) {
+      for (let x = postX; x < postX + TORII.post; x++) {
+        put(x, y, worn(x === postX ? SHRINE.vermilion : SHRINE.vermilionDark));
+      }
+    }
+  }
+  for (let y = TORII.top; y < TORII.top + TORII.beam; y++) {
+    // The lintel oversails the posts, which is what makes it a torii and not
+    // a doorframe; the tie-beam below it is thinner and set inside them.
+    const lintel = y < TORII.top + 4;
+    const from = lintel ? TORII.left - 8 : TORII.left + 2;
+    const to = lintel ? TORII.right + 8 : TORII.right - 2;
+    for (let x = Math.max(0, from); x < Math.min(ROOM_WIDTH, to); x++) {
+      put(x, y, worn(y === TORII.top ? SHRINE.vermilion : SHRINE.vermilionDark));
+    }
+  }
+
+  // A stone lantern either side of the path, the near one larger. Drawn as
+  // four stacked slabs — footing, post, fire box, roof — because a lantern
+  // only reads at this size if each part is clearly a different width.
+  const lantern = (baseX: number, baseY: number, scale: number): void => {
+    const slab = (top: number, height: number, half: number, color: RGB): void => {
+      for (let y = top; y < top + height; y++) {
+        for (let x = Math.max(0, baseX - half); x < Math.min(ROOM_WIDTH, baseX + half); x++) put(x, y, worn(color));
+      }
+    };
+    const unit = scale;
+    slab(baseY - 3 * unit, 3 * unit, 4 * unit, SHRINE.lanternDark); // footing
+    slab(baseY - 8 * unit, 5 * unit, 2 * unit, SHRINE.lantern); // post
+    slab(baseY - 14 * unit, 6 * unit, 5 * unit, SHRINE.lantern); // fire box
+    // The window the light would come out of, and the eaves over it.
+    slab(baseY - 13 * unit, 3 * unit, 2 * unit, SHRINE.lanternLight);
+    slab(baseY - 17 * unit, 3 * unit, 7 * unit, SHRINE.lanternLight); // roof
+    slab(baseY - 19 * unit, 2 * unit, 2 * unit, SHRINE.lanternDark); // finial
+  };
+  lantern(40, 178, 2);
+  lantern(228, 150, 1);
+
+  paintLight(key, put, SHRINE.sunPatch, SHRINE.moonPatch);
+  return buffer;
+};
+
+// ── the koi pond ────────────────────────────────────────────────────────────
+
+export const POND = {
+  bank: {
+    spring: [
+      [64, 96, 62],
+      [84, 118, 72],
+      [106, 142, 86],
+    ],
+    summer: [
+      [58, 90, 58],
+      [78, 112, 68],
+      [100, 136, 82],
+    ],
+    autumn: [
+      [98, 92, 50],
+      [122, 112, 60],
+      [148, 134, 74],
+    ],
+    winter: SNOW_RAMP,
+  } as Record<Season, readonly [RGB, RGB, RGB]>,
+  blade: [48, 82, 52] as RGB,
+  reed: [56, 78, 48] as RGB,
+  reedLight: [78, 102, 60] as RGB,
+  water: [
+    [26, 54, 66],
+    [36, 76, 90],
+    [52, 100, 112],
+  ] as readonly [RGB, RGB, RGB],
+  ice: [
+    [150, 172, 184],
+    [176, 196, 206],
+    [202, 218, 226],
+  ] as readonly [RGB, RGB, RGB],
+  glint: [122, 162, 172] as RGB,
+  pad: [44, 96, 62] as RGB,
+  padLight: [62, 120, 74] as RGB,
+  bloom: [226, 168, 196] as RGB,
+  sunPatch: [128, 148, 88] as RGB,
+  moonPatch: [64, 82, 96] as RGB,
+};
+
+/** Where the near bank takes over from the water. */
+const POND_BOTTOM = HORIZON_Y + 44;
+
+/** Reeds on the far bank — low, and never level for long. */
+export const pondHorizonAt = (sx: number): number => 6 + Math.floor(Math.abs(((sx + 3) % 16) - 8) / 2);
+
+export const composePond = (key: BackdropKey): Uint8ClampedArray => {
+  const { buffer, put } = makeBuffer();
+  const worn = (color: RGB): RGB => wear(color, key.condition);
+  const winter = key.season === "winter";
+
+  paintSky(key, put);
+
+  for (let x = 0; x < ROOM_WIDTH; x++) {
+    const top = HORIZON_Y - pondHorizonAt(x);
+    for (let y = top; y < HORIZON_Y; y++) put(x, y, worn(y === top ? POND.reedLight : POND.reed));
+  }
+
+  paintGround(key, put, POND.bank, POND.blade, winter);
+
+  // The water, laid over the near end of the ground: it deepens toward the
+  // viewer, and freezes pale rather than merely darkening come winter.
+  const surface = (winter ? POND.ice : POND.water).map(worn);
+  for (let y = HORIZON_Y; y < POND_BOTTOM; y++) {
+    const t = (y - HORIZON_Y) / (POND_BOTTOM - HORIZON_Y);
+    for (let x = 0; x < ROOM_WIDTH; x++) {
+      let color = pickRamp(surface, t, x, y);
+      // Glints lie flat on still water, but a fixed row spacing draws a
+      // barcode: the row they pick wanders with the column instead.
+      const band = (y - HORIZON_Y + Math.floor(hash(x * 3) * 3)) % 7;
+      if (!winter && band === 4 && hash(x * 29 + y * 13) < 0.45) color = worn(POND.glint);
+      put(x, y, color);
+    }
+  }
+
+  // Lily pads: whole discs rather than single pixels, and wider the nearer
+  // they float. A one-pixel pad is invisible at this size — the pond needs
+  // to read as a pond from the first glance, not on inspection.
+  if (!winter) {
+    for (let index = 0; index < 9; index++) {
+      const from = HORIZON_Y + 5;
+      const y = from + Math.floor(hash(index * 53) * (POND_BOTTOM - from - 6));
+      const x = 16 + Math.floor(hash(index * 31) * (ROOM_WIDTH - 32));
+      // Perspective: pads near the bottom of the water band are closest.
+      const near = (y - from) / (POND_BOTTOM - from);
+      const half = 3 + Math.round(near * 4);
+      const rows = 2 + Math.round(near);
+      for (let row = 0; row < rows; row++) {
+        // The disc narrows top and bottom, and carries the wedge notch that
+        // makes a lily pad a lily pad.
+        const shrink = row === 0 || row === rows - 1 ? 1 : 0;
+        for (let dx = -half + shrink; dx <= half - shrink; dx++) {
+          const notch = dx > half - 3 && row < rows - 1;
+          if (notch) continue;
+          const px = x + dx;
+          if (px < 0 || px >= ROOM_WIDTH) continue;
+          put(px, y + row, worn(row === 0 ? POND.padLight : POND.pad));
+        }
+      }
+      if (index % 3 === 0) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const px = x + dx;
+          if (px >= 0 && px < ROOM_WIDTH) put(px, y - 1, worn(POND.bloom));
+        }
+        if (x >= 0 && x < ROOM_WIDTH) put(x, y - 2, worn(POND.bloom));
+      }
+    }
+  }
+
+  // Reeds standing out of the near edge, so the water has a bank rather than
+  // a cut line where it stops.
+  for (let index = 0; index < 16; index++) {
+    const x = 4 + Math.floor(hash(index * 83) * (ROOM_WIDTH - 8));
+    const tall = 4 + Math.floor(hash(index * 41) * 5);
+    for (let y = POND_BOTTOM - tall; y < POND_BOTTOM + 1; y++) {
+      put(x, y, worn(winter ? SNOW_RAMP[0] : POND.reed));
+    }
+    put(x, POND_BOTTOM - tall, worn(winter ? SNOW_RAMP[2] : POND.reedLight));
+  }
+
+  paintLight(key, put, POND.sunPatch, POND.moonPatch);
+  return buffer;
+};
+
+/** Koi, drifting under the surface (SPEC §22.8). They are drawn over the
+ *  composed scene rather than into it, so they cost nothing to cache; under
+ *  reduced motion the clock is held at zero and they simply sit still. */
+export const renderPondLive = (ctx: SceneContext, nowMs: number): void => {
+  const fish = [
+    { color: "#d9743c", y: HORIZON_Y + 12, period: 21_000, phase: 0.1, len: 7 },
+    { color: "#e8e2d4", y: HORIZON_Y + 24, period: 27_000, phase: 0.5, len: 6 },
+    { color: "#c8543c", y: HORIZON_Y + 34, period: 18_000, phase: 0.8, len: 8 },
+  ];
+  for (const koi of fish) {
+    const drift = ((nowMs / koi.period + koi.phase) % 1 + 1) % 1;
+    const x = Math.round(-10 + drift * (ROOM_WIDTH + 20));
+    ctx.fillStyle = koi.color;
+    ctx.fillRect(x, koi.y, koi.len, 2);
+    // A tail that trails the body, so it reads as swimming rather than sliding.
+    ctx.fillRect(x - 2, koi.y + (Math.floor(nowMs / 700 + koi.phase * 10) % 2 === 0 ? 0 : 1), 2, 1);
+  }
+};
+
+// ── the blossom park ────────────────────────────────────────────────────────
+
+/** The canopy, which is the whole point of the place: it is a different tree
+ *  in every season, and bare enough in winter to see the sky through. */
+const CANOPY: Record<Season, { light: RGB; shade: RGB }> = {
+  spring: { light: [244, 186, 208], shade: [212, 138, 172] },
+  // Summer's crown has to sit clearly *in front of* a green lawn, so it runs
+  // much darker than the ground it stands on rather than merely a different
+  // green — at this size, similar values read as one shape.
+  summer: { light: [58, 104, 54], shade: [28, 62, 36] },
+  autumn: { light: [214, 126, 62], shade: [156, 74, 42] },
+  winter: { light: [96, 80, 70], shade: [58, 46, 42] },
+};
+
+export const BLOSSOM = {
+  lawn: {
+    spring: [
+      [62, 104, 64],
+      [82, 128, 74],
+      [104, 152, 88],
+    ],
+    summer: [
+      [56, 98, 60],
+      [76, 122, 70],
+      [98, 146, 84],
+    ],
+    autumn: [
+      [102, 96, 52],
+      [126, 116, 62],
+      [152, 140, 76],
+    ],
+    winter: SNOW_RAMP,
+  } as Record<Season, readonly [RGB, RGB, RGB]>,
+  blade: [50, 88, 54] as RGB,
+  /** Every colour the crown can wear, so the readability check has the set. */
+  canopy: Object.values(CANOPY).flatMap((season) => [season.light, season.shade]) as RGB[],
+  trunk: [72, 56, 48] as RGB,
+  trunkLight: [98, 78, 64] as RGB,
+  gravel: [158, 150, 136] as RGB,
+  gravelEdge: [124, 118, 106] as RGB,
+  bench: [124, 88, 56] as RGB,
+  benchDark: [92, 64, 42] as RGB,
+  fallen: [222, 158, 186] as RGB,
+  sunPatch: [146, 156, 96] as RGB,
+  moonPatch: [70, 84, 98] as RGB,
+};
+
+/** An avenue of crowns: high at each tree, dipping to the gaps between. */
+export const blossomHorizonAt = (sx: number): number => 8 + Math.max(0, 10 - Math.abs(((sx + 12) % 34) - 17));
+
+export const composeBlossom = (key: BackdropKey): Uint8ClampedArray => {
+  const { buffer, put } = makeBuffer();
+  const worn = (color: RGB): RGB => wear(color, key.condition);
+  const winter = key.season === "winter";
+  const canopy = CANOPY[key.season];
+
+  paintSky(key, put);
+
+  for (let x = 0; x < ROOM_WIDTH; x++) {
+    const top = HORIZON_Y - blossomHorizonAt(x);
+    for (let y = top; y < HORIZON_Y; y++) {
+      // Bare winter branches let the sky through in the gaps; in leaf the
+      // crown is solid, lit along its upper edge.
+      if (winter && hash(x * 41 + y * 97) > 0.42) continue;
+      put(x, y, worn(y < top + 2 ? canopy.light : canopy.shade));
+    }
+  }
+  // Trunks under the crowns, on the avenue's own beat and standing a little
+  // proud of the horizon so the trees are planted rather than floating.
+  for (let trunkX = 5; trunkX < ROOM_WIDTH - 3; trunkX += 34) {
+    for (let y = HORIZON_Y - 9; y < HORIZON_Y + 3; y++) {
+      put(trunkX, y, worn(BLOSSOM.trunkLight));
+      put(trunkX + 1, y, worn(BLOSSOM.trunk));
+      put(trunkX + 2, y, worn(BLOSSOM.trunk));
+    }
+  }
+
+  paintGround(key, put, BLOSSOM.lawn, BLOSSOM.blade, winter);
+
+  // The gravel walk, running away to the right of the sampled ground.
+  for (let y = HORIZON_Y + 2; y < ROOM_HEIGHT; y++) {
+    const depth = (y - HORIZON_Y) / (ROOM_HEIGHT - HORIZON_Y);
+    const centre = 150 + depth * 26;
+    const half = 4 + depth * 18;
+    for (let x = Math.max(0, Math.floor(centre - half)); x < Math.min(ROOM_WIDTH, centre + half); x++) {
+      const offset = Math.abs(x - centre) / half;
+      if (offset > 1) continue;
+      const color = winter ? SNOW_RAMP[1] : offset > 0.74 ? BLOSSOM.gravelEdge : BLOSSOM.gravel;
+      if (offset <= 0.74 || threshold(x, y, 3) < 0.55) put(x, y, worn(color));
+    }
+  }
+
+  // Petals settle on the ground in spring, the way they do everywhere else.
+  if (key.season === "spring") {
+    for (let index = 0; index < 34; index++) {
+      const x = 4 + Math.floor(hash(index * 19) * (ROOM_WIDTH - 8));
+      const y = HORIZON_Y + 8 + Math.floor(hash(index * 67) ** 1.4 * (ROOM_HEIGHT - HORIZON_Y - 12));
+      put(x, y, worn(BLOSSOM.fallen));
+    }
+  }
+
+  // A bench under the trees, left of the walk and drawn heavily enough to
+  // read as furniture at this size: a solid seat, thick legs, and a back
+  // whose slats are separated by ground rather than by a darker brown.
+  const bench = { left: 34, right: 96, seat: 150 };
+  for (let y = bench.seat; y < bench.seat + 5; y++) {
+    for (let x = bench.left; x < bench.right; x++) {
+      put(x, y, worn(y === bench.seat ? BLOSSOM.bench : BLOSSOM.benchDark));
+    }
+  }
+  for (const legX of [bench.left + 4, bench.right - 8]) {
+    for (let y = bench.seat + 5; y < bench.seat + 17; y++) {
+      for (let x = legX; x < legX + 4; x++) put(x, y, worn(BLOSSOM.benchDark));
+    }
+  }
+  for (const railY of [bench.seat - 16, bench.seat - 10]) {
+    for (let x = bench.left + 2; x < bench.right - 2; x++) {
+      put(x, railY, worn(BLOSSOM.bench));
+      put(x, railY + 3, worn(BLOSSOM.benchDark));
+    }
+  }
+  for (const postX of [bench.left + 2, bench.right - 6]) {
+    for (let y = bench.seat - 16; y < bench.seat; y++) {
+      for (let x = postX; x < postX + 4; x++) put(x, y, worn(BLOSSOM.benchDark));
+    }
+  }
+
+  paintLight(key, put, BLOSSOM.sunPatch, BLOSSOM.moonPatch);
+  return buffer;
+};
+
+/** Petals coming down, in spring only (SPEC §22.8). Held still by reduced
+ *  motion like every other living touch. */
+export const renderBlossomLive = (ctx: SceneContext, nowMs: number, key: BackdropKey): void => {
+  if (key.season !== "spring") return;
+  ctx.fillStyle = "#f2c2d8";
+  for (let index = 0; index < 18; index++) {
+    const fall = 9000 + hash(index * 37) * 6000;
+    const progress = ((nowMs / fall + hash(index * 71)) % 1 + 1) % 1;
+    // Each petal swings on its own phase, so they drift rather than drop.
+    const sway = Math.sin(nowMs / 1600 + index * 1.9) * 5;
+    const x = Math.round(hash(index * 23) * ROOM_WIDTH + sway);
+    const y = Math.round(progress * (ROOM_HEIGHT - 20));
+    ctx.fillRect(x, y, 2, 1);
+  }
+};
+
+// ── the mountain ────────────────────────────────────────────────────────────
+
+export const MOUNTAIN = {
+  shore: {
+    spring: [
+      [84, 88, 78],
+      [110, 112, 98],
+      [138, 136, 120],
+    ],
+    summer: [
+      [92, 90, 78],
+      [118, 114, 98],
+      [146, 140, 120],
+    ],
+    autumn: [
+      [86, 74, 58],
+      [110, 96, 74],
+      [136, 120, 94],
+    ],
+    winter: SNOW_RAMP,
+  } as Record<Season, readonly [RGB, RGB, RGB]>,
+  pebble: [66, 64, 58] as RGB,
+  lake: [
+    [30, 52, 78],
+    [42, 72, 100],
+    [58, 96, 124],
+  ] as readonly [RGB, RGB, RGB],
+  lakeIce: [162, 178, 196] as RGB,
+  reflectSnow: [96, 118, 142] as RGB,
+  reflectRock: [52, 66, 88] as RGB,
+  ridgeFar: [96, 114, 140] as RGB,
+  ridgeNear: [50, 66, 88] as RGB,
+  rock: [78, 74, 88] as RGB,
+  rockLight: [102, 98, 112] as RGB,
+  snowCap: [238, 242, 250] as RGB,
+  snowShade: [206, 214, 232] as RGB,
+  sunPatch: [148, 144, 122] as RGB,
+  moonPatch: [72, 84, 104] as RGB,
+};
+
+const FUJI = { centre: 130, peak: 64, slope: 0.55, summit: 6, snowline: 30 } as const;
+
+// Two ranks of ridges, scalloped rather than stepped: a silhouette built out
+// of `Math.floor(x / n) % m` draws rectangular blocks, which read as a wall
+// with crenellations instead of hills behind a lake.
+const farRidgeAt = (sx: number): number => 12 + Math.floor(Math.abs(((sx + 13) % 46) - 23) / 3);
+const nearRidgeAt = (sx: number): number => 6 + Math.floor(Math.abs(((sx + 31) % 34) - 17) / 4);
+
+/** The ridges, and the cone standing well above them. The peak reaches 64 of
+ *  the sky's 92 rows — high enough that the sun sets behind the mountain
+ *  rather than beside it. */
+export const mountainHorizonAt = (sx: number): number => {
+  const fromCentre = Math.abs(sx - FUJI.centre);
+  // A summit that is flat and a little wide, which is what stops the cone
+  // reading as a triangle.
+  const cone = FUJI.peak - Math.max(0, fromCentre - FUJI.summit) * FUJI.slope;
+  return Math.max(farRidgeAt(sx), Math.round(cone));
+};
+
+/** Where the near shore takes over from the lake. */
+const LAKE_BOTTOM = HORIZON_Y + 34;
+
+export const composeMountain = (key: BackdropKey): Uint8ClampedArray => {
+  const { buffer, put } = makeBuffer();
+  const worn = (color: RGB): RGB => wear(color, key.condition);
+  const winter = key.season === "winter";
+
+  paintSky(key, put);
+
+  // The cone first, then the ridges in front of it: the near range overlaps
+  // the mountain's foot, which is what puts it *behind* them rather than
+  // standing on the same line.
+  const snowline = winter ? 40 : FUJI.snowline;
+  for (let x = 0; x < ROOM_WIDTH; x++) {
+    const cone = mountainHorizonAt(x);
+    // Snow lies lower in some gullies than others, so the line wanders by
+    // column before it is dithered. A snowline that is only dithered is
+    // still a ruled line — it just has a checkered edge.
+    const wander = hash(x * 7) * 6 - 3;
+    for (let y = HORIZON_Y - cone; y < HORIZON_Y; y++) {
+      const capped = HORIZON_Y - y > snowline + wander - threshold(x, y, 1) * 5;
+      // The sunward face, handed over across a dithered band rather than a
+      // hard seam down the middle of the cone.
+      const lit = (FUJI.centre + 7 - x) / 14 > threshold(x, y, 3);
+      if (capped) put(x, y, worn(lit ? MOUNTAIN.snowCap : MOUNTAIN.snowShade));
+      else put(x, y, worn(lit ? MOUNTAIN.rockLight : MOUNTAIN.rock));
+    }
+  }
+  for (let x = 0; x < ROOM_WIDTH; x++) {
+    for (let y = HORIZON_Y - farRidgeAt(x); y < HORIZON_Y; y++) put(x, y, worn(MOUNTAIN.ridgeFar));
+    for (let y = HORIZON_Y - nearRidgeAt(x); y < HORIZON_Y; y++) put(x, y, worn(MOUNTAIN.ridgeNear));
+  }
+
+  paintGround(key, put, MOUNTAIN.shore, MOUNTAIN.pebble, winter);
+
+  // The lake, and the mountain lying upside down in it.
+  const water = MOUNTAIN.lake.map(worn);
+  for (let y = HORIZON_Y; y < LAKE_BOTTOM; y++) {
+    const t = (y - HORIZON_Y) / (LAKE_BOTTOM - HORIZON_Y);
+    for (let x = 0; x < ROOM_WIDTH; x++) {
+      let color = winter ? worn(MOUNTAIN.lakeIce) : pickRamp(water, t, x, y);
+      // The mountain lying upside down in the water. The lake is shallower
+      // than the mountain is tall, so the image is squashed two-to-one:
+      // `mirrored` is the height up the cone that this row is showing.
+      const depth = y - HORIZON_Y;
+      const mirrored = depth * 2;
+      if (!winter && mirrored < mountainHorizonAt(x)) {
+        // Broken into bands and fading with distance from the shoreline, the
+        // way a reflection on water that is moving at all actually behaves.
+        const settled = depth % 5 !== 4 && threshold(x, y, 2) > depth / 26;
+        if (settled) color = worn(mirrored > snowline ? MOUNTAIN.reflectSnow : MOUNTAIN.reflectRock);
+      }
+      put(x, y, color);
+    }
+  }
+
+  paintLight(key, put, MOUNTAIN.sunPatch, MOUNTAIN.moonPatch);
+  return buffer;
+};
