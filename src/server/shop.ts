@@ -13,6 +13,7 @@ import { FOOD_ITEMS, MEDICINE_ITEMS, TOY_ITEMS } from "@/sim/economy";
 import { isDuplicateKeyError } from "./db/collections";
 import { caretakerProfile, caretakers, creditCoins } from "./social";
 import { invalidateRoomCache } from "./snapshot";
+import { announcePurse, purseOf } from "./purse";
 
 export const COSMETIC_ITEMS = {
   bow: { kind: "cosmetic", price: 300, label: "Ribbon Bow" },
@@ -150,11 +151,16 @@ const priceOf = (itemId: string): { price: number; kind: ItemKind } | null => {
 
 /** Atomically spend coins; the filter is the balance check. */
 const spendCoins = async (db: Db, caretakerId: string, price: number, alsoInc: Record<string, number> = {}): Promise<boolean> => {
-  const result = await caretakers(db).updateOne(
+  const updated = await caretakers(db).findOneAndUpdate(
     { _id: caretakerId, coins: { $gte: price } },
     { $inc: { coins: -price, ...alsoInc } },
+    { returnDocument: "after" },
   );
-  return result.modifiedCount === 1;
+  // Null means the filter did not match, i.e. the balance was short — nothing
+  // moved, so there is nothing to announce.
+  if (updated === null) return false;
+  await announcePurse(caretakerId, purseOf(updated));
+  return true;
 };
 
 export const purchase = async (
@@ -215,15 +221,23 @@ export const wearCosmetic = async (db: Db, itemId: string | null): Promise<boole
 
 /** Consume one unit of a consumable; false if none owned. */
 export const consumeItem = async (db: Db, caretakerId: string, itemId: string): Promise<boolean> => {
-  const result = await caretakers(db).updateOne(
+  const updated = await caretakers(db).findOneAndUpdate(
     { _id: caretakerId, [`inventory.${itemId}`]: { $gte: 1 } },
     { $inc: { [`inventory.${itemId}`]: -1 } },
+    { returnDocument: "after" },
   );
-  return result.modifiedCount === 1;
+  if (updated === null) return false;
+  await announcePurse(caretakerId, purseOf(updated));
+  return true;
 };
 
 export const refundItem = async (db: Db, caretakerId: string, itemId: string): Promise<void> => {
-  await caretakers(db).updateOne({ _id: caretakerId }, { $inc: { [`inventory.${itemId}`]: 1 } });
+  const updated = await caretakers(db).findOneAndUpdate(
+    { _id: caretakerId },
+    { $inc: { [`inventory.${itemId}`]: 1 } },
+    { returnDocument: "after" },
+  );
+  await announcePurse(caretakerId, purseOf(updated));
 };
 
 // ── Co-op purchases (SPEC §21.8) ────────────────────────────────────────────

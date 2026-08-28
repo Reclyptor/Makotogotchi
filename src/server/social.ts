@@ -8,6 +8,7 @@ import { contributionScore, petDay } from "@/sim/score";
 import { NICKNAME_PATTERN } from "@/sim/events";
 import type { CareAction } from "@/sim/tuning";
 import { isDuplicateKeyError } from "./db/collections";
+import { announcePurse, purseOf } from "./purse";
 
 export type CaretakerDoc = {
   _id: string;
@@ -130,15 +131,19 @@ export const recordContribution = async (
         ? existing.streakDays + 1
         : 1;
 
-  await caretakers(db).updateOne(
+  // findOneAndUpdate rather than updateOne: the new balance comes back on the
+  // same round trip the earning already costs, which is what lets the purse be
+  // announced without a second read (SPEC §7.2).
+  const updated = await caretakers(db).findOneAndUpdate(
     { _id: input.caretakerId },
     {
       $set: { streakDays, lastActiveDay: day },
       $inc: { score, coins, [`actionCounts.${input.action}`]: 1 },
       $setOnInsert: { nickname: null, nicknameLower: null, nicknameChangedAt: null, generationsSurvived: 0, inventory: {}, createdAt: new Date() },
     },
-    { upsert: true },
+    { upsert: true, returnDocument: "after" },
   );
+  await announcePurse(input.caretakerId, purseOf(updated));
   await contributions(db).updateOne(
     { caretakerId: input.caretakerId, generationId: input.generationId, day },
     { $inc: { score, actions: 1 } },
@@ -212,14 +217,15 @@ export const caretakerProfile = async (db: Db, caretakerId: string): Promise<Car
 export const creditCoins = async (db: Db, caretakerId: string, amount: number): Promise<void> => {
   if (amount <= 0) return;
   const { coins: _coins, ...defaults } = emptyProfileFields();
-  await caretakers(db).updateOne(
+  const updated = await caretakers(db).findOneAndUpdate(
     { _id: caretakerId },
     {
       $inc: { coins: amount },
       $setOnInsert: { ...defaults, nickname: null, nicknameLower: null, nicknameChangedAt: null },
     },
-    { upsert: true },
+    { upsert: true, returnDocument: "after" },
   );
+  await announcePurse(caretakerId, purseOf(updated));
 };
 
 /** Everyone who contributed to a generation gets survival tenure (SPEC §2.10). */

@@ -6,6 +6,7 @@ import type { PetState } from "@/sim/model";
 import type { CareEvent, Milestone } from "@/sim/events";
 import type { MinigameId } from "@/sim/minigames";
 import type { RecordScope } from "../records";
+import type { Purse } from "../purse";
 
 export type CareMessage = {
   type: "care";
@@ -119,6 +120,12 @@ export type ReactMessage = {
   caretakerName: string;
 };
 
+/**
+ * One caretaker's coins and pack (SPEC §13.1). The only message on this
+ * channel addressed to a person rather than to the room — see deliverableTo.
+ */
+export type PurseMessage = { type: "purse"; caretakerId: string } & Purse;
+
 export type EngineMessage =
   | CareMessage
   | MilestoneMessage
@@ -130,4 +137,17 @@ export type EngineMessage =
   | RecordMessage
   | FundedMessage
   | ThemeMessage
-  | ReactMessage;
+  | ReactMessage
+  | PurseMessage;
+
+/**
+ * Whether a broadcast message belongs on this caretaker's socket (SPEC §7.2).
+ *
+ * The events channel is one Redis subscription per process fanned out to every
+ * local client, so a per-caretaker payload reaches every connection and has to
+ * be dropped at the edge. Kept pure and here, beside the messages themselves,
+ * because it is a privacy boundary and deserves a test that does not need a
+ * socket to run.
+ */
+export const deliverableTo = (message: EngineMessage, caretakerId: string): boolean =>
+  message.type !== "purse" || message.caretakerId === caretakerId;

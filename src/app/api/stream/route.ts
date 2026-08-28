@@ -15,7 +15,8 @@ import { anonymousName, caretakerProfile, leaderboard, nicknameMap } from "@/ser
 import { holderChips } from "@/server/titles";
 import { snapshotPayload } from "@/server/snapshot";
 import { caretakerCookieHeader, clientIp, resolveCaretaker } from "@/server/http";
-import type { EngineMessage, PresenceView } from "@/server/engine/messages";
+import { deliverableTo, type EngineMessage, type PresenceView } from "@/server/engine/messages";
+import { purseOf } from "@/server/purse";
 
 export const dynamic = "force-dynamic";
 
@@ -121,12 +122,21 @@ export async function GET(request: NextRequest): Promise<Response> {
         streakDays: profile?.streakDays ?? 0,
         generationsSurvived: profile?.generationsSurvived ?? 0,
         presence: await presenceView(),
+        // The opening balance comes with the connect, for the same reason the
+        // presence count does: waiting for the next `purse` broadcast would
+        // leave the chip reading zero until this caretaker happens to earn or
+        // spend something (SPEC §7.4).
+        purse: purseOf(profile),
         ...payload,
       });
       send("snapshot", payload);
 
       unsubscribe = await subscribeToEvents((raw) => {
         const message = JSON.parse(raw) as EngineMessage;
+        // The hub fans every message out to every local client, so a
+        // per-caretaker payload reaches this socket too and is dropped here
+        // rather than on the wire (SPEC §7.2).
+        if (!deliverableTo(message, identity.caretakerId)) return;
         send(message.type, message);
       });
 
