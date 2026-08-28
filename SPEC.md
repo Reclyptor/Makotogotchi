@@ -1264,7 +1264,7 @@ centred card from `sm:` up.
 
 ### 13.3 Minigames
 
-`PLAY` launches a short skill game from a five-game roster, picked at random
+`PLAY` launches a short skill game from a ten-game roster, picked at random
 per run (a `?game=` query pins the choice — for sharing a favourite and for
 deterministic e2e runs). The player's score determines the joy restored and
 the coins earned. While a run is live, every other connected client sees the
@@ -1279,15 +1279,121 @@ time, world-wide, by design.
 | Bubble Bath Pop | 25s: pop the bath bubbles before they escape | +1 per pop |
 | Simon Squeaks | memory: repeat Makoto's pose sequence on four pads | +1 per completed round; a miss ends the run |
 | Wheel Sprint | 30s rhythm: tap as the spark crosses the wheel's top | +1 per on-beat hit |
+| Makoto Shuffle | shell game: keep your eye on Makoto under three shuffling bowls | +1 per correct bowl; a wrong pick ends the run |
+| Natsumi's Watch | 30s sneak: scurry for the treat only while Natsumi looks away | +1 per treat reached; caught moving means back to the start |
+| Coffee Run | 30s: brew a pot, and hide the machine before Natsumi reaches it | +1 per cup poured; a smashed machine costs the pot in progress |
+| Sausage Party | 35s: serve each guest the plate they are holding up | +1 per plate matched; a wrong plate costs that guest's patience |
+| Don't Get Sausaged | reaction: do what Natsumi says, before she finishes saying it | +1 per command obeyed; one miss and he is a sausage |
+
+### 13.3.1 The three-second pre-roll
+
+Every run opens with a **three-second countdown** (`MINIGAME_COUNTDOWN_MS` in
+`src/sim/minigames.ts`). The game component mounts and paints its opening
+frame immediately — the real board, with its real props in their starting
+positions — but its clock is held at zero and its inputs are ignored until the
+count expires, so a player who has just been handed a random game gets to read
+it before it moves. The numerals are the Shell's, drawn over the canvas; the
+freeze belongs to the shared game loop, so no game implements its own.
+
+The constant lives in the shared roster module because both ends need it: the
+client paints the countdown, and the server subtracts it from the elapsed wall
+time before judging a run, so the pre-roll can never be spent as play time and
+the envelopes below keep meaning exactly what they meant before.
+
+### 13.3.2 Natsumi
+
+**Natsumi is Makoto's owner, and she torments him.** Natsumi's Watch is her
+debut, and she is the sheet's first character besides the pet. Her frames are
+authored as letter grids in `scripts/art/natsumi.mjs` — one head per state
+stamped onto a shared body — and `npm run art:natsumi` writes them into
+`art/natsumi/` for the same `npm run atlas` run that packs everything else.
+
+She is a witch: lavender hair that runs through pink to blonde at the very
+tips, a spiky fringe over two side locks, yellow skin, and eyes that are two
+pixels curving upward so she reads as pleased with herself. Her dress opens in
+a V that shows the cream underneath, with a ribbon tied at the point of it and
+shoes dyed to match; from behind there is no V and no ribbon, because a bow at
+her throat cannot be seen from the back.
+
+Four states, each drawn twice — bare-headed, and under the witch hat:
+
+| Frame | She is | Makoto may |
+| --- | --- | --- |
+| `natsumiAway` | turned around: all hair, plain dress | run |
+| `natsumiTurn` | mid-swing, one eye clear of the hair | run, briefly |
+| `natsumiWatch` | facing him | not move |
+| `natsumiGrin` | eyes bulging, teeth bared, having caught him | nothing — he is back at the start |
+
+`natsumiHatAway`, `natsumiHatTurn`, `natsumiHatWatch` and `natsumiHatGrin` are
+the same four under the hat, which the generator stamps over the top rows of
+her crown; the hatted frames are correspondingly taller, and a game that wants
+them only has to name them.
+
+The frames carry the whole rule, so their readability is load-bearing rather
+than decorative: a player who cannot tell `natsumiAway` from `natsumiWatch` at
+a glance cannot play at all. Two details exist purely to serve that — the
+`turn` frame's face is half-covered rather than merely different, and the
+grin's eyes are white with an iris so the state reads even at a glance.
+
+Three more things are true about her, and each one is a game below. **When a
+Makoto displeases her, she turns it into a sausage.** **She destroys the drip
+coffee machine every single time they try to make coffee.** And **Makotos hold
+sausage parties** — tea parties, but with sausages, which are the Makotos who
+misbehaved, a fact the guests are entirely oblivious to. The games play the
+joke straight and never explain it; the sausage on the plate in Natsumi's
+Watch is the same sausage the party is eating.
+
+### 13.3.3 How the newer games play
+
+**Makoto Shuffle.** Three bowls sit overturned on the floor. Makoto ducks
+under one in plain sight, the bowls drop, and then they swap in pairs — more
+swaps and faster ones every round — until the player picks the bowl he is
+under. A correct pick is a point and the next round starts harder; a wrong
+pick ends the run, so the tension is cumulative rather than per-round. The run
+also ends at twelve rounds or eighty seconds, whichever comes first. It is the
+only game in the roster that asks the player to *track* rather than react,
+remember a sequence, or keep a beat.
+
+**Natsumi's Watch.** A treat sits at the far end of the desk and Natsumi looms
+over it. Hold the pointer (or space) and Makoto scurries; release and he
+freezes. While her back is turned he can run freely; a moment before she turns
+she telegraphs it, and if she catches him moving she flicks him back to the
+start and he sits dizzy for a beat. Reaching the treat is a point, after which
+she resets him herself and dangles the next one. Thirty seconds, no score
+penalty for being caught — the punishment is the lost ground, which is
+punishment enough. It is the roster's only hold-and-release game.
+
+**Coffee Run.** The pot fills while the player holds, up to five cups, and
+letting go pours it — banking those cups as points. Natsumi walks in from the
+right on her own schedule, and a pot still brewing when she arrives is a
+machine on the floor and a pot worth nothing. One button, and the only
+question it ever asks is when to stop: the roster's only press-your-luck game.
+
+**Sausage Party.** Guests around the table hold up what they want; serve the
+guest who wants the dish currently on the tray. A right guest is a point, a
+wrong one costs that guest's patience, and an empty patience bar ends their
+visit unserved. The tray takes a beat to plate the next dish, and that reload
+is what paces the game — without it the only limit on scoring would be how
+fast a player can tap, which is not a skill this roster tests. Pure
+order-matching, and the only game that asks the player to read several things
+at once rather than time one thing.
+
+**Don't Get Sausaged.** Natsumi gives a command — sit, spin, sleep, cheer —
+and Makoto has a shrinking window to obey it on the four pads. Obeying is a
+point and the window tightens; one wrong move or one hesitation and she turns
+him into a sausage on a plate, which ends the run. It is Simon Squeaks' pads
+with the memory replaced by pure reaction, and the roster's best fail state.
 
 Each game is scored client-side but validated server-side against a
 **per-game plausibility envelope** (`src/sim/minigames.ts`: max duration, max
 score, max score per second, minimum inputs per point), because a fully
 authoritative implementation is disproportionate for a friends' toy while an
-unbounded client score is not acceptable either. The chosen game is fixed at
-`start` and stored in the server's session, so a client cannot start a cheap
-envelope and finish an expensive one; per-game curves translate the score
-into the `PLAY` performance multiplier (50–150) and the coin payout.
+unbounded client score is not acceptable either. The envelope judges *play*
+time: the server measures wall time from `start` and deducts the pre-roll
+(§13.3.1) before applying the duration and rate ceilings. The chosen game is
+fixed at `start` and stored in the server's session, so a client cannot start
+a cheap envelope and finish an expensive one; per-game curves translate the
+score into the `PLAY` performance multiplier (50–150) and the coin payout.
 
 ---
 
@@ -1313,9 +1419,12 @@ Makotogotchi/
 ├── art/                        # one PNG per frame (SPEC §10.2)
 │   ├── pet/                    # pet poses and expressions
 │   ├── food/                   # meal and snack items
-│   └── games/                  # minigame props
+│   ├── games/                  # minigame props
+│   └── natsumi/                # Makoto's owner, four frames (SPEC §13.3.2)
 ├── scripts/
 │   ├── atlas.ts                # packs art/ into the sheet + typed atlas
+│   ├── art/                    # letter-grid sources for the drawn frames:
+│   │                           # natsumi.mjs, props.mjs → art/, then re-pack
 │   └── cloudflare-setup.sh     # idempotent edge config (SPEC §19.3)
 ├── e2e/                        # Playwright suite + dockerized-store stack
 ├── public/
@@ -1343,7 +1452,7 @@ Makotogotchi/
         └── components/         # GameView PetCanvas Meters FeedLog VotePanel
                                 # NicknameEditor PushToggle QuestBanner
                                 # WantBanner (+copy) minigames/ (Shell +
-                                # registry + five games)
+                                # registry + ten games, §13.3)
                                 # ActionBar/  index + copy + cooldown.test
                                 # ShopPanel/  index (dialog shell) + useShop
                                 #             + tabs (pure row model) + rows
