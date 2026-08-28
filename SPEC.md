@@ -1842,12 +1842,45 @@ One shared goal per pet-day, derived deterministically:
 `quest(seed, dayIndex)` — `dayIndex` = days since genesis in the pet's
 timezone — picks from a table in `src/sim/quests.ts` (pure, tested):
 
-| Quest | Target | Measured by |
-| --- | --- | --- |
-| Full bellies | every meter ≥ 70% at the evening check (1h before sleep) | projection at the check tick |
-| Game night | combined minigame score ≥ 40 today | sum of plausible finishes |
-| Many hands | ≥ 4 distinct caretakers perform care today | distinct caretakerIds in today's care events |
-| Feast day | ≥ 10 FEEDs today | count of FEED events |
+| Quest | Bar at the baseline community | Grows by | Measured by |
+| --- | --- | --- | --- |
+| Full bellies | every meter ≥ 70% at the evening check (1h before sleep) | nothing — a meter percentage has nothing to multiply | projection at the check tick |
+| Game night | combined minigame score ≥ 40 today | §23's care multiplier | sum of plausible finishes |
+| Many hands | ≥ `hands(P)` distinct caretakers perform care today | it *is* the hand count | distinct caretakerIds in today's care events |
+| Feast day | ≥ 10 FEEDs today | §23's care multiplier | count of FEED events |
+
+**The bar answers the size of the room, twice.** A flat target is a target a
+crowd outgrows: at nine caretakers §23 makes the pet three times hungrier
+while ten meals stays ten meals, and one person on a three-minute FEED
+cooldown clears it in half an hour. So:
+
+- **Counts scale with appetite.** A count quest's target is
+  `round(base × careMultiplier(P) )` — the same per-mille integer arithmetic
+  `decayRates` uses, for the reason §23.2 gives. Ten meals at two caretakers
+  is thirty at nine. Full bellies is exempt: 70% of a meter cannot be
+  multiplied, and the 3× decay underneath it is already the scaling.
+- **Every goal wants hands.** Completion additionally requires
+  `hands(P) = clamp(ceil(P / 2), 2, 5)` distinct caretakers to have performed
+  care today — half the week's active community, floored so a quiet room still
+  has a goal it can reach and capped where §23 caps the multiplier. Because
+  completion is a conjunction and not a sum, **no amount of solo effort
+  finishes a communal day**: a lone caretaker can serve fifty meals and the
+  goal stays open. Nothing is discarded or capped — the room simply has to turn
+  up. Many hands is the degenerate case where the bar and the requirement are
+  the same number.
+
+`P` is the population **frozen at pet-midnight**: the `count` of the newest
+`POPULATION` event before the day's first tick (a point read on a partial
+index over that rare event type), not the live figure. `PetState.population`
+is set by nothing but those events (§23.2), so this is exact rather than an
+approximation, and it means an afternoon newcomer raises *tomorrow's* goal
+instead of moving a bar the room is already halfway up. A generation older
+than its first `POPULATION` event reads as the baseline, so quiet rooms keep
+the numbers that shipped before this rule.
+
+A deliberate consequence: a day's goal can now be missed because too few
+people showed up. That is what makes it communal, and it costs nothing but the
+day's 15 coins.
 
 Progress is **computed, not stored**: `GET /api/quest` derives progress by
 scanning today's slice of the event log (bounded — one pet-day of events)
@@ -1862,10 +1895,13 @@ Completion must be idempotent: the `QUEST_DONE` milestone for a given
 marker keyed by day in Mongo — prefer the marker, unique index on dayIndex).
 
 UI: a slim glass banner between the meters and the action bar — quest text
-and a progress fraction ("Game night — 26/40"), sourced from `/api/quest`
-on load and nudged by relevant SSE messages (recompute lazily; exactness
-between refreshes is not required). Completed state: gold check + "done!
-+15 🪙 to today's caretakers".
+and two fractions, the count and the hands ("Game night — 120 points today ·
+60/120 · 3/5 🙋"), sourced from `/api/quest` on load and nudged by
+relevant SSE messages (recompute lazily; exactness between refreshes is not
+required). The quest text names the day's actual target, so it is generated
+from the number rather than stored as prose. Many hands shows one fraction:
+its two are the same. Completed state: gold check + "done! +15 🪙 to today's
+caretakers".
 
 ### 21.8 Co-op Purchases (server + UI)
 
