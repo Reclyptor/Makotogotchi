@@ -6,6 +6,7 @@
 
 import type { Celestial, Weather } from "@/sim/atmosphere";
 import { layer } from "../../engine/layer";
+import { lay, makeCanvas } from "../../engine/offscreen";
 import { keyOf, ROOM_HEIGHT, ROOM_WIDTH, type BackdropKey } from "./compose";
 import { venueSpec, type SkyRect } from "./venues";
 import { hex, themeFor, type RGB } from "./theme";
@@ -43,21 +44,6 @@ const hash = (n: number): number => {
   let h = Math.imul(n ^ 0x9e3779b9, 2654435761);
   h ^= h >>> 15;
   return (h >>> 0) / 4294967296;
-};
-
-const makeCanvas = (width: number, height: number): HTMLCanvasElement | null => {
-  if (typeof document === "undefined") return null;
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  return canvas;
-};
-
-/** A full-size RGBA buffer, laid onto a context at the origin. */
-const lay = (target: SceneContext, pixels: Uint8ClampedArray): void => {
-  const image = target.createImageData(ROOM_WIDTH, ROOM_HEIGHT);
-  image.data.set(pixels);
-  target.putImageData(image, 0, 0);
 };
 
 export class Backdrop {
@@ -122,7 +108,7 @@ export class Backdrop {
     // canvas. Lay the composed pixels straight onto the target rather than
     // returning: this is the scene's only full-canvas paint, and skipping it
     // leaves the room showing whatever last managed to land on it.
-    lay(ctx, this.pixels);
+    lay(ctx, this.pixels, ROOM_WIDTH, ROOM_HEIGHT);
   }
 
   /** The composed pixels on a canvas of their own, so a frame costs one blit. */
@@ -130,7 +116,7 @@ export class Backdrop {
     const canvas = this.canvas ?? makeCanvas(ROOM_WIDTH, ROOM_HEIGHT);
     const target = canvas?.getContext("2d");
     if (!canvas || !target) return null;
-    lay(target, pixels);
+    lay(target, pixels, ROOM_WIDTH, ROOM_HEIGHT);
     return canvas;
   }
 
