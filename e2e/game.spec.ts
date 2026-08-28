@@ -29,15 +29,21 @@ test.describe("the shared pet", () => {
     await expect(pageA.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
     await expect(pageB.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
 
-    // B pets; A sees the attributed feed entry appear without reloading.
-    // The pet is shared and PET carries a global cooldown, so the titles spec
-    // running beside this one can have it mid-cooldown when we arrive — wait
-    // for the tile to free up rather than matching only its idle name, which
-    // is what made this test fail whenever the two files overlapped.
+    // B pets; A sees B's attributed feed entry appear without reloading.
+    //
+    // Two things about the shared pet bite here. PET carries a global
+    // cooldown, so the titles spec running beside this one can have it
+    // mid-cooldown when we arrive — hence waiting for the tile rather than
+    // matching only its idle accessible name. And that spec's caretaker pets
+    // Makoto too, so a feed already holding "Friend abcd petted Makoto" makes
+    // any /Friend \w{4}/ match ambiguous. Name the caretaker we mean: an
+    // un-nicknamed one shows as "Friend " + the first four of their id
+    // (GameView's care handler).
+    const idB = ((await (await pageB.request.get("/api/state")).json()) as { caretakerId: string }).caretakerId;
     const pet = pageB.getByRole("button", { name: /^Pet/ });
     await expect(pet).not.toHaveAttribute("aria-disabled", "true", { timeout: 60_000 });
     await pet.click();
-    await expect(pageA.getByText(/Friend \w{4} petted Makoto/)).toBeVisible({ timeout: 10_000 });
+    await expect(pageA.getByText(`Friend ${idB.slice(0, 4)} petted Makoto`)).toBeVisible({ timeout: 10_000 });
     await expect(pageB.getByText(/You petted Makoto/)).toBeVisible({ timeout: 10_000 });
 
     // Presence counts both watchers on both screens. Match the whole badge:
