@@ -123,6 +123,20 @@ body::after {
   transform: translateX(130%);
 }
 
+/* A locked control keeps none of that (SPEC §11.3). Dimming alone never read
+   as unavailable, because the press affordance kept answering: the button
+   still brightened under the cursor, still shrank on click, still fired its
+   specular sweep. Whatever a component does about opacity, the invitation is
+   withdrawn here, once, for everything wearing .press. */
+.press[aria-disabled="true"]:hover,
+.press[aria-disabled="true"]:active {
+  transform: none;
+  filter: none;
+}
+.press[aria-disabled="true"]:hover::after {
+  transform: translateX(-130%);
+}
+
 /* Tailwind v4's preflight leaves buttons with the default cursor; a game
    wants every live control to invite the click — and every disabled one to
    say why it won't. */

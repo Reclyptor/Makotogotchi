@@ -11,6 +11,7 @@ import { useCallback, useState } from "react";
 import { canPerform } from "@/sim/validate";
 import { CARE_ACTIONS, TICK_SECONDS, type CareAction } from "@/sim/tuning";
 import type { PetState, ProjectionContext } from "@/sim/model";
+import { isLockReason, REASON_GLYPH, rejectionText } from "./copy";
 
 const ACTION_META: Record<CareAction, { label: string; emoji: string }> = {
   FEED: { label: "Feed", emoji: "🍖" },
@@ -20,15 +21,6 @@ const ACTION_META: Record<CareAction, { label: string; emoji: string }> = {
   LULLABY: { label: "Lullaby", emoji: "🎵" },
   PET: { label: "Pet", emoji: "💛" },
 };
-
-const REASON_TEXT = (petName: string): Record<string, string> => ({
-  NOT_BORN: `${petName} hasn't hatched yet`,
-  DEAD: `${petName} is gone`,
-  ASLEEP: `${petName} is asleep`,
-  TOO_TIRED: `${petName} is too tired to play`,
-  NOT_SICK: `${petName} isn't sick`,
-  NOT_SLEEPY: `${petName} isn't sleepy`,
-});
 
 /**
  * How far a cooldown has left to run, 1 just after the action to 0 when it is
@@ -88,7 +80,8 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExa
         setNotice("Easy! You're moving too fast.");
       } else if (response.status === 409) {
         const body = (await response.json().catch(() => null)) as { reason?: string } | null;
-        setNotice(REASON_TEXT(petName)[body?.reason ?? ""] ?? `${petName} can't do that right now.`);
+        const reason = body?.reason;
+        setNotice(isLockReason(reason) ? `${rejectionText(petName)[reason]}.` : `${petName} can't do that right now.`);
       } else if (response.ok) {
         const body = (await response.json().catch(() => null)) as { applied?: number } | null;
         if (body && body.applied === 0) setNotice(`${petName} wants someone else's attention.`);
@@ -97,7 +90,7 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExa
     [petName],
   );
 
-  const reasons = REASON_TEXT(petName);
+  const reasons = rejectionText(petName);
 
   return (
     <div className="flex w-full flex-col gap-2">
@@ -106,17 +99,15 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExa
           const verdict = canPerform(state, action, caretakerId, ctx);
           const meta = ACTION_META[action];
           let hint: string | null = null;
+          let glyph: string | undefined;
           let cooldownFraction = 0; // 0 = ready, 1 = just used
           if (!verdict.ok) {
+            hint = reasons[verdict.reason];
             if (verdict.retryAtTick !== undefined && verdict.sinceTick !== undefined) {
               cooldownFraction = cooldownProgress(verdict.sinceTick, verdict.retryAtTick, nowTickExact);
-              const seconds = cooldownSeconds(verdict.retryAtTick, nowTickExact);
-              hint =
-                verdict.reason === "COOLDOWN_GLOBAL"
-                  ? `${petName} is busy (${seconds}s)`
-                  : `Catch your breath (${seconds}s)`;
+              hint = `${hint} (${cooldownSeconds(verdict.retryAtTick, nowTickExact)}s)`;
             } else {
-              hint = reasons[verdict.reason] ?? "Not right now";
+              glyph = REASON_GLYPH[verdict.reason];
             }
           }
           return (
@@ -134,14 +125,31 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExa
               className={`press panel relative flex min-h-16 flex-col items-center justify-center gap-0.5 overflow-hidden !rounded-xl px-1 py-2 text-sm ${
                 verdict.ok
                   ? "hover:border-accent/40 hover:shadow-[0_0_18px_-6px_var(--color-accent)]"
-                  : "cursor-not-allowed opacity-45"
+                  : "cursor-not-allowed opacity-70"
               }`}
             >
-              <span aria-hidden="true" className="text-xl leading-none drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]">
+              {/* The reason marks the tile it belongs to; it is already in the
+                  accessible name, so this is decoration for sighted players. */}
+              {glyph && (
+                <span aria-hidden="true" className="absolute right-1 top-1 text-[11px] leading-none">
+                  {glyph}
+                </span>
+              )}
+              {/* A locked tile fades its icon and *sharpens* its reason. Fading
+                  the whole tile uniformly, as this did at 45%, made the one
+                  line that explains the lock the hardest thing on it to read. */}
+              <span
+                aria-hidden="true"
+                className={`text-xl leading-none drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)] ${verdict.ok ? "" : "opacity-50 grayscale"}`}
+              >
                 {meta.emoji}
               </span>
-              <span className="text-[12px] font-semibold leading-tight">{meta.label}</span>
-              <span className="min-h-3 max-w-full truncate px-1 text-[9px] leading-none text-muted">{hint ?? " "}</span>
+              <span className={`text-[12px] font-semibold leading-tight ${verdict.ok ? "" : "text-muted"}`}>{meta.label}</span>
+              <span
+                className={`min-h-3.5 max-w-full truncate px-1 text-[10px] leading-tight ${hint ? "text-foreground/85" : "text-muted"}`}
+              >
+                {hint ?? " "}
+              </span>
               {/* Cooldown drain track along the bottom edge. */}
               <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[3px] bg-white/5">
                 <span
