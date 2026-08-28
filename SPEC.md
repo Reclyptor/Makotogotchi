@@ -1091,6 +1091,15 @@ The canvas is decorative. Everything it shows exists in the DOM:
 - All controls keyboard-operable with visible focus rings.
 - Colour is never the only carrier of meaning — critical needs get an icon and
   text, not just red.
+- **A control that cannot be used says so, and stops inviting the click.** One
+  rule, everywhere: it stays in the tab order via `aria-disabled` (never the
+  native `disabled` attribute, which removes it), carries its reason as
+  *visible text* as well as in the accessible name — a `title` tooltip is not
+  a carrier, since it does not exist on touch — and loses its press affordance
+  entirely rather than merely dimming. The last part is enforced in
+  `globals.css` on `.press[aria-disabled="true"]`, not per component: a
+  hover-brightened, sweep-animated button reads as live no matter how faint it
+  is drawn.
 
 ### 11.4 Mobile
 
@@ -1160,6 +1169,50 @@ top-3 caretaker at a generation's end.
 Cosmetics and decor are the interesting sink: they are **visible to everybody**,
 which turns spending into a form of contribution rather than a private
 inventory.
+
+**Presentation.** The shop is a modal overlay over the game screen, not an
+inline panel — it is a place you go, and while you are there the game screen
+should not be scrolling away underneath you. A bottom sheet on phones, a
+centred card from `sm:` up.
+
+```
+┌──────────────────────────────────┐
+│ 🛒 Shop            🪙 1,240    ✕ │  sticky
+│ [Pack] Food  Toys  Style  Room   │  sticky, role="tablist"
+├──────────────────────────────────┤
+│ 🍖 Fish Feast                    │
+│    Feeds ×1.45 · +3.5% joy       │
+│                        [ 🪙 150 ]│
+│ 💊 Super Medicine       ~🪙 250~ │  ← locked
+│    Needs 90 more 🪙              │
+├──────────────────────────────────┤
+│ Bought Fish Feast!               │  sticky, aria-live
+└──────────────────────────────────┘
+```
+
+- **Five tabs, one visible at a time**, filed by what an item *does* rather
+  than by how it is paid for: **Pack** (consumables you own, used from here),
+  **Food** (food + medicine), **Toys** (this generation), **Style**
+  (cosmetics Makoto wears), **Room** (everything everyone sees — decor, wall
+  styles §22.5, and places §22.8). Pack keeps its slot when empty, carrying an
+  empty state, so tab positions never move under the thumb.
+- **The balance never scrolls away.** It lives in the sticky header beside the
+  title; the result notice lives in a sticky `aria-live` footer. Both are
+  visible from any row.
+- **One row anatomy** for every item in every tab: icon · name over a muted
+  detail line · a fixed-width action slot. This is what keeps prices, badges
+  and buttons aligned down the whole list.
+- **Availability is decided before the click, not after it.** Every action
+  resolves to available or unavailable-with-a-reason *before* it renders, and
+  an unavailable one follows the §11.3 locked-control rule — the reason
+  replaces the row's detail line. Actions on the pet (using pack food or
+  medicine) gate on `canPerform()`, the same authority the server enforces
+  with (§4.1); purchases gate on the balance. A reason is always player-facing
+  copy — never a raw `RejectionReason` enum, which is what
+  `Makoto can't right now (ASLEEP)` was.
+- Dialog chrome: `role="dialog"`, `aria-modal`, Escape and backdrop close,
+  focus enters on open and returns to the shop button on close, and the item
+  list — not the page — is what scrolls.
 
 ### 13.3 Minigames
 
@@ -1239,9 +1292,13 @@ Makotogotchi/
         ├── api/                # care state stream react nickname leaderboard
         │                       # memorial name-vote push shop play
         ├── hooks/              # usePetStream (client reconciliation, SPEC §7.4)
-        └── components/         # GameView PetCanvas Meters ActionBar FeedLog
-                                # VotePanel NicknameEditor PushToggle ShopPanel
-                                # DustDash
+        └── components/         # GameView PetCanvas Meters FeedLog VotePanel
+                                # NicknameEditor PushToggle QuestBanner
+                                # WantBanner (+copy) minigames/ (Shell +
+                                # registry + five games)
+                                # ActionBar/  index + copy + cooldown.test
+                                # ShopPanel/  index (dialog shell) + useShop
+                                #             + tabs (pure row model) + rows
 ```
 
 ---
@@ -1670,9 +1727,22 @@ itemId) fans out, the feed lists the top three contributors, and everyone's
 room celebrates. A funded item's pool row is retained for the memorial
 (generations remember who built the room).
 
-UI: a "Together" section in the Shop panel — item row + progress bar
-(`pooled/price`) + two press buttons (+10, +50). Contributions are
-non-refundable; the section says so in one quiet line.
+UI: **being funded together is a state a row is in, not a section it lives
+in.** A grand item sits in the tab of the thing it affects (§13.2) —
+furniture under Room · Decorations, a wall style under Room · Wall Styles, a
+venue under Room · Places — and while its pool is open the row carries the
+progress bar (`pooled/price`) and two press buttons, +10 and +50. When the
+pool needs less than a button offers, the pair collapses to a single **Finish
+it** that posts `amount: "all"`, so the last stretch is one tap and no
+overshoot. A funded row shows what it became. Contributions are
+non-refundable; each group of co-op rows says so in one quiet line.
+
+Filing them this way is deliberate. A "Together" section groups items by
+their *payment model*, which is the one thing a player does not shop by — it
+put a wall colour, a piece of furniture and a day out at the beach in one
+undifferentiated list, and made a funded wall style appear twice: once in the
+section that funded it and again wherever it is switched on. A funded style
+has exactly one row, and that row's action becomes its switcher.
 
 ### 21.9 Visible Growth (presentation + art)
 
@@ -1827,6 +1897,11 @@ Makoto lives. Once funded, a theme is owned forever; `roomState.activeTheme`
 selects among the owned ones and any caretaker may switch it, which is
 broadcast so every room changes together.
 
+In the shop, themes are the **Wall Styles** group of the Room tab (§13.2).
+One row per theme, for its whole life: unfunded it carries the §21.8 pool,
+funded it carries the switcher, and the one in use carries a badge instead of
+a button.
+
 ### 22.6 Craft Rules
 
 The backdrop obeys the same pixel-art discipline as the sprites, and these
@@ -1924,7 +1999,9 @@ room.
 `funding` collection, the contribute route, the `FUNDED` milestone, the
 top-three-contributors feed line — with one distinct effect: on funding they
 join the rotation pool via `roomState` instead of placing an object in the
-room. No new economy mechanics.
+room. No new economy mechanics. In the shop they are the **Places to Visit**
+group of the Room tab (§13.2), where a funded one reads as somewhere Makoto
+can now go rather than as something bought.
 
 **Visibility.** A small caption beside the difficulty line names the day's
 location — *"Makoto is at the meadow today"* — so an away day reads as an
