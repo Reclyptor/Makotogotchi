@@ -15,7 +15,11 @@ export const RNG_PURPOSE = {
   wantOdds: 9,
   wantPick: 10,
   wantItem: 11,
-  venueOdds: 12,
+  // 12 was venueOdds, the home-or-away roll. Makoto now stays home unless
+  // the room votes it out (SPEC §22.9), so there is nothing left to roll.
+  // The number stays retired rather than reused: every other purpose is
+  // pinned to its own value, and recycling one would silently re-key an
+  // existing stream.
   venuePick: 13,
 } as const;
 

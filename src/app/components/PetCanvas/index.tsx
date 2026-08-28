@@ -11,8 +11,8 @@ import { isAmbientEvent } from "@/sim/ambient";
 import type { CareAction } from "@/sim/tuning";
 import { SPRITE_SHEET_URL } from "@/game/atlas.generated";
 import { Room, ROOM_HEIGHT, ROOM_WIDTH, type FoodTaste } from "@/game/scene/room";
-import { FREE_VENUES, petClock } from "@/game/scene/backdrop";
-import { isVenueId } from "@/sim/atmosphere";
+import { petClock } from "@/game/scene/backdrop";
+import { sceneVenueAt } from "@/sim/atmosphere";
 import { startLoop } from "@/game/engine/loop";
 import { wantToast } from "@/app/components/WantBanner/copy";
 import type { PetStream } from "@/app/hooks/usePetStream";
@@ -228,7 +228,7 @@ export default function PetCanvas({ stream, localSecret = null }: PetCanvasProps
         // The room dresses itself for the pet's hour, weather and season
         // (SPEC §22.1) — all of it derived from the shared clock and seed.
         if (state && zone) {
-          const clock = petClock(zone);
+          const clock = petClock(zone, Date.now());
           room.syncAtmosphere({
             hour: clock.hour,
             minute: clock.minute,
@@ -236,9 +236,17 @@ export default function PetCanvas({ stream, localSecret = null }: PetCanvasProps
             dayIndex: clock.dayIndex,
             seed: state.generation.seed,
             themeId: roomViewRef.current?.activeTheme ?? null,
-            // The rotation pool (SPEC §22.8): the free venues plus any
-            // funded grand-item venues the room owns (§22.7 B7).
-            ownedVenues: [...FREE_VENUES, ...(roomViewRef.current?.decor ?? []).filter(isVenueId)],
+            // Where the day is being spent (SPEC §22.8), weighted by the
+            // day's ballot (§22.9) and overridden to home for the night's
+            // sleep. The caption calls this same function with these same
+            // inputs, which is what keeps the two from ever disagreeing.
+            venueId: sceneVenueAt({
+              seed: state.generation.seed,
+              dayIndex: clock.dayIndex,
+              decor: roomViewRef.current?.decor ?? [],
+              ballots: roomViewRef.current?.ballots ?? [],
+              sleepReason: state.sleepReason,
+            }),
           });
         }
         if (state) {

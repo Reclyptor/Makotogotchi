@@ -15,7 +15,10 @@ import type { SceneContext } from "../../engine/digest";
 export { ROOM_WIDTH, ROOM_HEIGHT, RUG, WINDOW, GLASS, FLOOR_Y, keyOf, type BackdropKey, type Condition } from "./compose";
 export { FREE_VENUES, venueSpec, VENUES, type VenueSpec } from "./venues";
 export { themeFor, THEMES } from "./theme";
-export { petClock, type PetClock } from "./clock";
+// The pet's clock lives in the sim: the server stamps the venue ballot with
+// the same day index the scene draws with, and two implementations of that
+// arithmetic is two ways for them to land on different days (SPEC §22.9).
+export { petClock, type PetClock } from "@/sim/clock";
 
 const STAR_COUNT = 14;
 const CLOUD_DRIFT_MS = 90_000;

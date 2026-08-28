@@ -27,8 +27,8 @@ import MinigameShell from "@/app/components/minigames/Shell";
 import { isMinigameId, MINIGAME_IDS, MINIGAMES, type MinigameId } from "@/sim/minigames";
 import { isAmbientEvent, type AmbientEvent } from "@/sim/ambient";
 import { isTitleId, TITLES } from "@/sim/titles";
-import { isVenueId, venueAt } from "@/sim/atmosphere";
-import { FREE_VENUES, petClock, venueSpec } from "@/game/scene/backdrop";
+import { sceneVenueAt } from "@/sim/atmosphere";
+import { petClock, venueSpec } from "@/game/scene/backdrop";
 import { usePetStream } from "@/app/hooks/usePetStream";
 import { useKonami } from "@/app/hooks/useKonami";
 import { useRetro } from "@/app/hooks/useRetro";
@@ -161,7 +161,16 @@ export default function GameView() {
     caretakerId,
     profile,
   } = stream;
-  const [ui, setUi] = useState<{ state: PetState; derived: DerivedState; nowTickExact: number } | null>(null);
+  // `petDay` rides this tick rather than being read during render: the pet's
+  // calendar day comes off the wall clock, and reading a clock while
+  // rendering is impure — the same value would change between two renders
+  // React is entitled to treat as identical.
+  const [ui, setUi] = useState<{
+    state: PetState;
+    derived: DerivedState;
+    nowTickExact: number;
+    petDay: number | null;
+  } | null>(null);
   // Play launches a random game from the roster; a ?game= query pins it —
   // handy for sharing a favourite and for deterministic e2e runs.
   const pickGame = (): MinigameId => {
@@ -194,6 +203,7 @@ export default function GameView() {
   const localId = useRef(0);
   const maxSeqRef = useRef(-1);
   const caretakerRef = useRef<string | null>(null);
+  const timeZoneRef = useRef<string | null>(null);
   const petNameRef = useRef("Makoto");
   const greetedRef = useRef(false);
   const historyLoadedRef = useRef(false);
@@ -201,6 +211,12 @@ export default function GameView() {
   useEffect(() => {
     caretakerRef.current = caretakerId;
   }, [caretakerId]);
+
+  // The projection tick reads the zone rather than depending on it, so a
+  // late-arriving timezone does not tear down and rebuild the interval.
+  useEffect(() => {
+    timeZoneRef.current = stream.timeZone;
+  }, [stream.timeZone]);
 
   useEffect(() => {
     audioRef.current = new GameAudio();
@@ -215,7 +231,13 @@ export default function GameView() {
       const exact = nowTickExact();
       if (state && exact !== null) {
         petNameRef.current = state.generation.name ?? "Makoto";
-        setUi({ state, derived: derive(state), nowTickExact: exact });
+        const zone = timeZoneRef.current;
+        setUi({
+          state,
+          derived: derive(state),
+          nowTickExact: exact,
+          petDay: zone ? petClock(zone, Date.now()).dayIndex : null,
+        });
       }
     };
     tick();
@@ -425,10 +447,18 @@ export default function GameView() {
 
   // Where the day is being spent (SPEC §22.8) — the same pure draw the
   // canvas dresses itself with, so caption and scene can never disagree.
+  // Overnight that answer is home, and a caption naming the meadow over a
+  // picture of the room is exactly the disagreement this shares a function
+  // to avoid.
   const venueLabel = (() => {
-    if (!ui || !stream.timeZone || isEgg || isDead) return null;
-    const owned = [...FREE_VENUES, ...(stream.room?.decor ?? []).filter(isVenueId)];
-    const venueId = venueAt(ui.state.generation.seed, petClock(stream.timeZone).dayIndex, owned);
+    if (!ui || ui.petDay === null || isEgg || isDead) return null;
+    const venueId = sceneVenueAt({
+      seed: ui.state.generation.seed,
+      dayIndex: ui.petDay,
+      decor: stream.room?.decor ?? [],
+      ballots: stream.room?.ballots ?? [],
+      sleepReason: ui.state.sleepReason,
+    });
     return venueId === "home" ? null : venueSpec(venueId).label;
   })();
 

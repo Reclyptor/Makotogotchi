@@ -29,6 +29,7 @@ const ROOM: RoomView = {
   cosmetics: [],
   activeTheme: "cozy",
   themes: ["cozy"],
+  ballots: [],
 };
 
 const model = (overrides: Partial<ShopModel> = {}): ShopModel => ({

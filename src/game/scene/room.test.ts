@@ -146,7 +146,7 @@ const contentedRoom = () => {
     sick: false,
     asleep: false,
   };
-  room.syncAtmosphere({ hour: 13, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, ownedVenues: [] });
+  room.syncAtmosphere({ hour: 13, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, venueId: "home" });
   return { room, derived: derive(contented) };
 };
 
@@ -409,7 +409,7 @@ describe("skipping frames that would paint the same pixels", () => {
     const recorder = recordingContext();
     room.syncDerived(derived, false, 0);
     room.render(recorder.ctx, 1000);
-    room.syncAtmosphere({ hour: 2, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, ownedVenues: [] });
+    room.syncAtmosphere({ hour: 2, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, venueId: "home" });
     expect(paintedCalls(recorder, () => room.render(recorder.ctx, 1000))).toBeGreaterThan(0);
   });
 

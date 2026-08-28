@@ -10,6 +10,10 @@
 
 import type { Collection, Db } from "mongodb";
 import { FOOD_ITEMS, MEDICINE_ITEMS, TOY_ITEMS } from "@/sim/economy";
+import { petClock } from "@/sim/clock";
+import type { DayBallot } from "@/sim/atmosphere";
+import { ballotsAround } from "./ballot";
+import { env } from "./env";
 import { isDuplicateKeyError } from "./db/collections";
 import { caretakerProfile, caretakers, creditCoins } from "./social";
 import { invalidateRoomCache } from "./snapshot";
@@ -78,6 +82,13 @@ export type RoomView = {
   /** The style the room is wearing, and every style it may wear. */
   activeTheme: string;
   themes: string[];
+  /**
+   * The day ballots in play (SPEC §22.9): yesterday's, today's closed one
+   * that weights the scene on screen, and tomorrow's open one taking votes.
+   * Read by MATCHING `forDay`, never by position — that is what makes the
+   * midnight turn seamless through this view's cache.
+   */
+  ballots: DayBallot[];
 };
 
 /** The style a funded item bought the room, or null if it bought something else. */
@@ -94,7 +105,8 @@ export const ownedThemes = (decor: string[]): string[] => [
 ];
 
 export const roomState = async (db: Db): Promise<RoomView> => {
-  const doc = await roomCollection(db).findOne({ _id: "room" });
+  const today = petClock(env().PET_TIMEZONE, Date.now()).dayIndex;
+  const [doc, dayBallots] = await Promise.all([roomCollection(db).findOne({ _id: "room" }), ballotsAround(db, today)]);
   const decor = doc?.decor ?? [];
   const themes = ownedThemes(decor);
   const active = doc?.activeTheme ?? DEFAULT_THEME;
@@ -106,6 +118,7 @@ export const roomState = async (db: Db): Promise<RoomView> => {
     // render a palette nobody paid for.
     activeTheme: themes.includes(active) ? active : DEFAULT_THEME,
     themes,
+    ballots: dayBallots,
   };
 };
 

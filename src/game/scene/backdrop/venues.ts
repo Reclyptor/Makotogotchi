@@ -88,8 +88,9 @@ export const VENUES: Partial<Record<VenueId, VenueSpec>> = {
   forest: outdoor("forest", "the forest clearing", forestHorizonAt, composeForest),
 };
 
-/** The venues every room owns from the start (SPEC §22.8) — funded grand
- *  items join through roomState as their scenes land (§22.7 B7). */
-export const FREE_VENUES = ["garden", "meadow"] as const;
+/** The venues every room owns from the start (SPEC §22.8), re-exported from
+ *  the sim so the scenes and the server read one list — funded grand items
+ *  join through roomState as their scenes land (§22.7 B7, B8). */
+export { FREE_VENUES } from "@/sim/atmosphere";
 
 export const venueSpec = (id: string): VenueSpec => VENUES[id as VenueId] ?? HOME;

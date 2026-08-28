@@ -27,7 +27,7 @@ describe("deliverableTo", () => {
       { type: "funded", itemId: "window_seat", label: "Window Seat", contributors: [] },
       {
         type: "room",
-        room: { decor: [], activeCosmetic: null, cosmetics: [], activeTheme: "cozy", themes: ["cozy"] },
+        room: { decor: [], activeCosmetic: null, cosmetics: [], activeTheme: "cozy", themes: ["cozy"], ballots: [] },
       },
     ];
     for (const message of room) {

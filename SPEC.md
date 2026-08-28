@@ -2166,54 +2166,59 @@ are testable claims, not taste:
 | **B5** | Themes | Theme registry, `cabin` and `seaside` as grand items, switching | two caretakers fund a theme, switch to it, and both rooms change |
 | **B6** | Venue framework | `venueAt` rotation, `Venue` abstraction, room refactored into the `home` venue, `garden` and `meadow` | `home` renders pixel-identical to before the refactor; every client draws the same venue on the same pet-day |
 | **B7** | Funded venues | `beach` and `forest` as grand items joining the rotation pool | funding a venue adds it to rotation for every client; an unfunded venue is never drawn |
-| **B8** | Four more places | `blossom`, `pond`, `shrine`, `mountain`; home's share to a third; the night spent at home | each new venue holds §22.6's promises at every hour, weather and season; Makoto is in the room every night whatever the day's venue was |
-| **B9** | The ballot | `venueBallots`, the weighted pick, `POST /api/shop/vote`, the funded row becoming a ballot (§22.9) | two caretakers back different places and both browsers show the same odds and the same venue at the day turn; a vote never moves today's scene; the cap holds under concurrent votes without overcharging |
+| **B8** | Four more places | `blossom`, `pond`, `shrine`, `mountain`; the night spent at home | each new venue holds §22.6's promises at every hour, weather and season; Makoto is in the room every night whatever the day's venue was |
+| **B9** | The ballot | `venueBallots`, home-unless-voted, the weighted race, `POST /api/shop/vote`, the funded row becoming a ballot (§22.9) | an unvoted room never leaves home; two caretakers back different places and both browsers show the same odds and the same venue at the day turn; a vote never moves today's scene; the cap holds under concurrent votes without overcharging |
 
 ### 22.8 Day-Trip Venues
 
 The same room every day, however alive, eventually reads as wallpaper. So
-Makoto goes places: each pet-day, a seeded draw decides where the day is
-spent — at home in the room, or out at a **venue**, a full outdoor scene
-drawn under the same sky. The rotation obeys both of §22's governing
-constraints: it is **shared** (one draw per pet-day, from data every client
-holds) and it is **presentation** (no `PetState`, no event log — a venue
-changes what is behind the pet, never what the pet is).
+Makoto goes places: the room can plan a day out at a **venue**, a full
+outdoor scene drawn under the same sky. Where a day is spent obeys both of
+§22's governing constraints: it is **shared** (one draw per pet-day, from
+data every client holds) and it is **presentation** (no `PetState`, no event
+log — a venue changes what is behind the pet, never what the pet is).
+
+**Makoto stays home unless the room votes it somewhere else.** There is no
+home-or-away roll. An outing is not something that happens to a room; it is
+something a room decides, the day before, by spending coins on the ballot
+(§22.9). A day nobody backed is a day at home.
+
+This is the rule the rest of §22.8 hangs off, and it earns its place three
+ways. It makes every trip something a person chose and paid for, which is a
+better reason to keep playing than waiting on a dice roll. It removes the
+tuning problem entirely — under a random rotation each new venue makes every
+*other* venue rarer, so growing the catalog quietly makes the room worse at
+the thing it was grown for. And it gives home its meaning back: the default
+state of the world, carrying the community's funded themes and decor, rather
+than a percentage competing with the novelty.
 
 **The draw.** `venueAt(seed, dayIndex, ownedVenueIds, tickets)` in
-`src/sim/atmosphere.ts`, beside the weather forecast it mirrors: a
-`RNG_PURPOSE.venueOdds` draw decides home-or-away with `home` keeping
-about a third of all days, and an independent `RNG_PURPOSE.venuePick` draw
-picks among the owned away venues, weighted by the day's ballot (below) —
-one purpose per draw, the ambient convention. `dayIndex` is **`petClock`'s
-day index** (epoch days in the pet's zone — the same arithmetic the weather
-forecast already keys on), and the pool is the venue catalog **in
-declaration order, filtered to owned**, so the pick cannot depend on
+`src/sim/atmosphere.ts`, beside the weather forecast it mirrors. The runners
+are the venues that are **both owned and backed**; with none, the answer is
+`home`. Otherwise a single `RNG_PURPOSE.venuePick` draw walks the ticket
+table — the same weighted walk `weatherFor` takes. `dayIndex` is
+**`petClock`'s day index** (epoch days in the pet's zone — the same
+arithmetic the weather forecast already keys on), and the runners come from
+the venue catalog **in declaration order**, so the pick cannot depend on
 array-order accidents. Like the forecast, the day's venue is fixed the
 moment its `dayIndex` turns over — two caretakers a continent apart discuss
 the same meadow.
 
-The weighted pick is the same table walk `weatherFor` takes, and it
-**reduces exactly to the uniform pick when nobody has voted**: every venue
-in the pool holds one ticket, so the walk lands on `draw % pool.length`.
-An absent ballot is not a special case in the code; it is the general case
-arriving at the old answer.
+Filtering on the pool *as well as* the tickets is what stops a stale or
+hostile ballot from sending Makoto somewhere nobody paid to unlock.
 
-Home keeps the largest single share *on purpose*: the room carries the
-community's investment — funded themes, communal decor, grand items — and a
-rotation that hid that investment most days would quietly refund it. Away
-days are the novelty; home days are why the novelty doesn't cheapen the
-room. A third rather than a half because there are now eight places to go
-and only one of them is the room: at parity each venue would surface barely
-once a week, which is rare enough to feel like a glitch rather than a trip.
+**It is a race, not a tally.** The most-backed venue is the favourite, never
+the winner: one ticket on the meadow against thirty on the mountain still
+takes the meadow one day in thirty-one. Backing an underdog is a long shot
+rather than a wasted coin, and the room that pooled hard for tomorrow still
+gets a morning it did not expect.
 
 **The pool is state, and that is fine.** Which venues are owned is mutable
 server state, not a seeded fact — so determinism comes from the inputs, not
 the function alone. `roomState` already broadcasts to every client (theme
-switching depends on it); the venue pool rides the same object, so every
-viewer computes the same venue from the same `(seed, dayIndex, pool)`. When
-a funding completes mid-day the pool changes once, identically for everyone,
-and the day's draw may re-resolve — the beach can open *today*, which is a
-feature and the feed says so.
+switching depends on it); the venue pool and the day's ballot ride the same
+object, so every viewer computes the same venue from the same
+`(seed, dayIndex, pool, tickets)`.
 
 **The venues.**
 
@@ -2281,22 +2286,28 @@ This is the same move §21.8 already makes for wall styles ("a funded style
 keeps its row and trades its pool for a switcher"), taken one step further —
 a funded venue keeps its row and trades its pool for a ballot.
 
-**Tickets.** Every venue in the rotation pool starts each day holding one
-ticket. Ten coins buys one more, up to **thirty extra per venue per day**.
-The draw walks the ticket table, so a maxed venue takes a large share of
-away days and never all of them — the others always hold their ticket. It
-stays a chance you improve, not a day you buy.
+**Tickets.** Ten coins buys a venue one ticket for a given day, up to
+**thirty per venue per day**. A venue with no tickets is not in the race at
+all, which is what makes an unvoted day a day at home.
+
+One ticket is enough to win an uncontested day, and that is deliberate: ten
+coins is a single fulfilled want, so any room with one active caretaker goes
+wherever it likes whenever it likes. Unlocking a venue buys **eligibility**;
+the ballot buys the trip. The shop says so plainly rather than letting
+somebody discover it after paying 1400 for a mountain.
 
 The cap is an anti-whale device, and its height is the point. Too low a
 ceiling and two caretakers backing different places deadlock with no way to
 express who wants it more; at thirty the disagreement stays live and the
-room negotiates. Nobody is obliged to spend it: five tickets already tilts
-the day, and that is what most days will look like.
+room negotiates — ten coins against three hundred is one-in-four, not a coin
+flip. Nobody is obliged to spend it: a few tickets already tilts a day, and
+that is what most days will look like.
 
-**Free venues are votable too.** The pool is the ballot, not the catalog —
-`garden` and `meadow` can be backed like anywhere else. A ballot that only
-accepted funded venues would let the room outvote its two free places 31:1
-by places they are meant to compete with.
+**Free venues are votable too.** The ballot is open to everything in the
+rotation pool, so `garden` and `meadow` can be backed like anywhere else —
+they are the budget trip, not second-class. A ballot that only accepted
+funded venues would let the room outvote its two free places 30:0 with the
+very places they are meant to compete with.
 
 **Votes weight tomorrow.** A vote cast on pet-day D applies to **D+1**. The
 day's venue is fixed the moment its `dayIndex` turns over (§22.8) and
@@ -2304,6 +2315,12 @@ nothing may move it afterwards — a scene that cut away mid-afternoon because
 somebody paid would break the one promise the rotation makes. Tomorrow also
 means every caretaker's coins are still in play when the draw happens,
 rather than the last voter of the day winning by turning up last.
+
+**Show the odds, never the outcome.** Tomorrow's winner is computable the
+instant the last vote lands — it is a pure function of a seed, a day and a
+ballot everyone holds. Surfacing it would turn the race into a bidding war
+with perfect information, where the play is always to vote last. The row
+shows a venue's *share* of tomorrow and nothing more.
 
 **One row per day, and no rollover.** The `venueBallots` collection is keyed
 by the pet-day the tickets weight: a vote on day D writes the row for D+1,

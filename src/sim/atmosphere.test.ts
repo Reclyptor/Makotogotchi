@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  BALLOT_MAX_EXTRA_TICKETS,
   BLEND_STEPS,
   DAY_SEGMENTS,
+  rotationPool,
   seasonFor,
   skyMomentAt,
+  ticketsFor,
   venueAt,
   WEATHERS,
   weatherFor,
@@ -111,38 +114,122 @@ describe("seasons and weather", () => {
 describe("day-trip venues (SPEC §22.8)", () => {
   const OWNED = ["garden", "meadow"] as const;
 
-  it("draws the same venue for the same seed and day on every client", () => {
+  it("draws the same venue for the same seed, day and ballot on every client", () => {
     for (let day = 0; day < 500; day++) {
-      expect(venueAt(0xc0ffee, day, OWNED)).toBe(venueAt(0xc0ffee, day, OWNED));
+      expect(venueAt(0xc0ffee, day, OWNED, { meadow: 3 })).toBe(venueAt(0xc0ffee, day, OWNED, { meadow: 3 }));
     }
   });
 
-  it("stays home with nothing funded, and roughly half the time otherwise", () => {
-    let home = 0;
+  it("stays home every single day until somebody votes", () => {
+    // The whole rule, and the one that replaced the home-or-away roll: an
+    // outing is not something that happens to a room (SPEC §22.9).
     for (let day = 0; day < 2000; day++) {
       expect(venueAt(7, day, [])).toBe("home");
-      if (venueAt(7, day, OWNED) === "home") home++;
+      expect(venueAt(7, day, OWNED)).toBe("home");
+      expect(venueAt(7, day, OWNED, {})).toBe("home");
+      expect(venueAt(7, day, OWNED, { garden: 0 })).toBe("home");
     }
-    expect(home).toBeGreaterThan(2000 * 0.44);
-    expect(home).toBeLessThan(2000 * 0.56);
+  });
+
+  it("goes out every day once a venue is backed, and to the one that was backed", () => {
+    for (let day = 0; day < 500; day++) {
+      expect(venueAt(7, day, OWNED, { meadow: 1 })).toBe("meadow");
+    }
   });
 
   it("only ever picks owned venues, whatever order the pool arrives in", () => {
+    const ballot = { garden: 4, meadow: 4 };
     for (let day = 0; day < 500; day++) {
-      const venue = venueAt(21, day, OWNED);
-      expect(["home", ...OWNED]).toContain(venue);
-      expect(venueAt(21, day, ["meadow", "garden"])).toBe(venue);
-      expect(venueAt(21, day, ["garden", "meadow", "not-a-venue"])).toBe(venue);
+      const venue = venueAt(21, day, OWNED, ballot);
+      expect([...OWNED]).toContain(venue);
+      expect(venueAt(21, day, ["meadow", "garden"], ballot)).toBe(venue);
+      expect(venueAt(21, day, ["garden", "meadow", "not-a-venue"], ballot)).toBe(venue);
     }
   });
 
-  it("a funded venue joins the rotation without disturbing home days", () => {
+  it("will not send Makoto somewhere the room never unlocked", () => {
+    // A ballot naming an unfunded venue is ignored rather than obeyed — the
+    // pool is checked as well as the tickets.
     for (let day = 0; day < 500; day++) {
-      const before = venueAt(99, day, OWNED);
-      const after = venueAt(99, day, [...OWNED, "beach"]);
-      // The home-or-away draw is independent of the pool, so a mid-day
-      // funding can move WHICH venue but never home-vs-away (SPEC §22.8).
-      expect(before === "home").toBe(after === "home");
+      expect(venueAt(99, day, OWNED, { mountain: 30 })).toBe("home");
+      expect(venueAt(99, day, OWNED, { mountain: 30, meadow: 2 })).toBe("meadow");
     }
+  });
+});
+
+describe("the venue ballot (SPEC §22.9)", () => {
+  const OWNED = ["garden", "meadow", "beach"] as const;
+
+  it("is a race, not a tally — the favourite wins most days, never all", () => {
+    let underdog = 0;
+    for (let day = 0; day < 2000; day++) {
+      const venue = venueAt(9, day, OWNED, { meadow: BALLOT_MAX_EXTRA_TICKETS, garden: 1 });
+      expect(["meadow", "garden"]).toContain(venue);
+      if (venue === "garden") underdog++;
+    }
+    // One ticket against thirty: a long shot, but never a wasted coin.
+    expect(underdog).toBeGreaterThan(0);
+    expect(underdog / 2000).toBeLessThan(0.1);
+  });
+
+  it("splits evenly when two venues are backed equally", () => {
+    let garden = 0;
+    for (let day = 0; day < 2000; day++) {
+      if (venueAt(5, day, OWNED, { garden: 10, meadow: 10 }) === "garden") garden++;
+    }
+    expect(garden).toBeGreaterThan(2000 * 0.44);
+    expect(garden).toBeLessThan(2000 * 0.56);
+  });
+
+  it("caps a venue so coins alone cannot buy a certain day", () => {
+    let outvoted = 0;
+    for (let day = 0; day < 2000; day++) {
+      // However much is thrown at the meadow, it is clamped to the ceiling,
+      // so a single ticket on the garden keeps its ~1-in-31 chance.
+      if (venueAt(13, day, OWNED, { meadow: 10_000, garden: 1 }) === "garden") outvoted++;
+    }
+    expect(outvoted).toBeGreaterThan(0);
+  });
+
+  it("clamps every shape the wire can carry, so two viewers cannot disagree", () => {
+    for (let day = 0; day < 200; day++) {
+      const capped = venueAt(11, day, OWNED, { meadow: BALLOT_MAX_EXTRA_TICKETS, garden: 1 });
+      expect(venueAt(11, day, OWNED, { meadow: 9999, garden: 1 })).toBe(capped);
+      // Anything that is not a positive count is no vote at all, so the day
+      // stays at home rather than becoming an outing nobody paid for.
+      expect(venueAt(11, day, OWNED, { garden: -5 })).toBe("home");
+      expect(venueAt(11, day, OWNED, { garden: Number.NaN })).toBe("home");
+      expect(venueAt(11, day, OWNED, { garden: Number.POSITIVE_INFINITY })).toBe("home");
+      expect(venueAt(11, day, OWNED, { garden: 0.9 })).toBe("home");
+      expect(venueAt(11, day, OWNED, { "not-a-venue": 30 })).toBe("home");
+      expect(venueAt(11, day, OWNED, { garden: 2.7 })).toBe(venueAt(11, day, OWNED, { garden: 2 }));
+    }
+  });
+
+  it("picks a day's tickets by matching the day, not by position", () => {
+    const ballots = [
+      { forDay: 20_000, tickets: { garden: 4 } },
+      { forDay: 20_001, tickets: { meadow: 7 } },
+    ];
+    expect(ticketsFor(ballots, 20_001)).toEqual({ meadow: 7 });
+    // A day nobody voted on is an empty ballot, not the nearest one.
+    expect(ticketsFor(ballots, 20_002)).toEqual({});
+    expect(ticketsFor([], 20_000)).toEqual({});
+  });
+});
+
+describe("the rotation pool", () => {
+  it("is the free venues plus whatever the room funded, in catalog order", () => {
+    expect(rotationPool([])).toEqual(["garden", "meadow"]);
+    expect(rotationPool(["mountain", "beach"])).toEqual(["garden", "meadow", "beach", "mountain"]);
+  });
+
+  it("ignores decor that is not a venue, and never lists home", () => {
+    expect(rotationPool(["plant", "kotatsu", "theme_cabin", "home"])).toEqual(["garden", "meadow"]);
+  });
+
+  it("cannot be made to list a venue twice", () => {
+    const pool = rotationPool(["garden", "garden", "pond", "pond"]);
+    expect(pool).toEqual(["garden", "meadow", "pond"]);
   });
 });

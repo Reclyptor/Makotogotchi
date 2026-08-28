@@ -13,7 +13,7 @@ import { AnimationMachine } from "../anim/machine";
 import { BASE_CLIPS, BUTTERFLY_CLIP, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP, type OneShotName } from "../anim/clips";
 import { SPRITE_FRAMES } from "../atlas.generated";
 import { Backdrop, keyOf, ROOM_HEIGHT, ROOM_WIDTH, RUG, venueSpec, WINDOW, type BackdropKey, type Condition } from "./backdrop";
-import { celestialAt, seasonFor, skyMomentAt, venueAt, weatherFor, type Celestial } from "@/sim/atmosphere";
+import { celestialAt, seasonFor, skyMomentAt, weatherFor, type Celestial } from "@/sim/atmosphere";
 import type { DerivedState } from "@/sim/derive";
 import type { AmbientEvent } from "@/sim/ambient";
 import type { SpectacleMood } from "@/sim/secret";
@@ -33,8 +33,12 @@ export type AtmosphereInput = {
   dayIndex: number;
   seed: number;
   themeId: string | null;
-  /** Venues in the rotation pool — free ones plus funded ones (SPEC §22.8). */
-  ownedVenues: readonly string[];
+  /**
+   * Where the day is being spent (SPEC §22.8), already drawn. The room does
+   * not take the draw itself: the caption needs the same answer, and one
+   * caller resolving it once is what stops the two disagreeing.
+   */
+  venueId: string;
 };
 
 const ALERT_CONDITION: Record<DerivedState["alert"], Condition> = {
@@ -225,7 +229,7 @@ export class Room {
     this.seed = input.seed;
     this.celestial = celestialAt(input.hour, input.minute);
     this.backdropKey = {
-      venueId: venueAt(input.seed, input.dayIndex, input.ownedVenues),
+      venueId: input.venueId,
       themeId: input.themeId ?? "cozy",
       segment: moment.segment,
       next: moment.next,
