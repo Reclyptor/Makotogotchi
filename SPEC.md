@@ -733,14 +733,34 @@ nothing for the cost of a custom server.
 
 | Event | Payload | When |
 | --- | --- | --- |
-| `hello` | `{ caretakerId, nickname, serverNowMs, tickSeconds, genesisEpochMs, phaseSchedule, presence }` | On connect. Lets the client align its clock and project locally (§4.5), and hands it the presence count its own connect produced (§7.4). |
+| `hello` | `{ caretakerId, nickname, serverNowMs, tickSeconds, genesisEpochMs, phaseSchedule, presence, purse }` | On connect. Lets the client align its clock and project locally (§4.5), and hands it the presence count its own connect produced (§7.4) and its own opening balance (§13.1). |
 | `snapshot` | Full `PetState` + generation metadata + `phaseSchedule` refresh | On connect, and every 30s as reconciliation. |
 | `care` | `{ action, caretaker, applied, needsAfter, tick }` | Every care action, by anyone. Drives the attributed toast. |
 | `milestone` | `{ kind, detail }` — `HATCHED` (detail carries the voted name), `EVOLVED`, `BECAME_SICK`, `RECOVERED`, `CRITICAL`, `SLEPT`, `WOKE`, `DIED` | System events. |
 | `minigame` | `{ phase: start\|score\|finish, caretakerName, score?, applied? }` | The live Dust Dash spectacle (SPEC §13.3). |
 | `presence` | `{ count, caretakers[] }` | Throttled to at most once per 2s, leading **and** trailing (§7.4). |
 | `react` | `{ emoji, caretaker }` | Emoji reactions. |
+| `purse` | `{ caretakerId, coins, inventory }` | Whenever a caretaker's coins or pack change, from any cause. **Delivered only to that caretaker** — see below. |
 | `:ping` | comment frame | Every 15s. Keeps intermediaries from reaping an idle stream. |
+
+**`purse` is the one message that is not for the room.** Everything else on
+this channel is public by nature — the pet, the room, who acted, who is
+watching — and the hub is built to match: one Redis subscription per process,
+fanned out to every local client (§7.1). A balance is per caretaker, so rather
+than give each caretaker a channel of their own — which would cost one
+subscription per connected caretaker, the exact thing the hub exists to avoid
+— the purse rides the shared channel and `/api/stream` drops the ones that are
+not its own connection's before they reach the wire. The predicate is pure and
+lives beside the message types (`deliverableTo` in `engine/messages.ts`) so the
+boundary can be tested without a socket. Anything added later that is
+per-caretaker obeys the same rule.
+
+The purse is published by the **mutation**, never by its callers. Coins and
+pack contents are written in exactly five places — `recordContribution`,
+`creditCoins`, `spendCoins`, `consumeItem`, `refundItem` — and each publishes
+the resulting purse itself. Publishing from the nine or so call sites instead
+would mean a balance that quietly stopped being live wherever one was missed,
+and a stale balance looks exactly like a working one.
 
 ### 7.3 Cloudflare Considerations
 
@@ -1047,7 +1067,7 @@ conveys is also present as semantic HTML (§11.3).
 
 ```
 ┌───────────────────────────────────────────────┐
-│  Makoto · 4d 6h · JUVENILE      👥 7 watching │
+│  Makoto · 4d 6h · JUVENILE  🪙 330  👥 7 watch│
 ├───────────────────────────────────────────────┤
 │                                               │
 │              [ the room, canvas ]             │
@@ -1076,6 +1096,11 @@ conveys is also present as semantic HTML (§11.3).
   `validate.ts` is the one place that decides it, and `canPerform()` gates on
   the same value, so the bar reaches empty on exactly the tick the button
   starts accepting clicks.
+- The top bar carries a live 🪙 balance beside the watching count (§13.1), so
+  what caring earns you is visible while you are earning it rather than only
+  once you open the shop. It updates from the stream, never from a poll, and
+  it is labelled as a balance — a bare number read out on its own says
+  nothing.
 - Meters animate continuously via client-side projection, not in server-push
   jumps.
 - The action feed is both a visual toast in the canvas and an entry in an
@@ -1156,6 +1181,19 @@ actual need rather than at button-mashing.
 Bonuses: daily streak, being present at a hatch or an evolution, and being a
 top-3 caretaker at a generation's end.
 
+Coins are **per caretaker**, not communal — the balance lives on the caretaker
+document and is spent through a filter that *is* the affordability check. What
+is communal is what the coins buy (§13.2): toys for the generation, cosmetics
+and decor for the room. A private wallet, a public purchase.
+
+The balance is **live**. It moves the moment anything moves it — a care
+action, a minigame payout, a quest, a purchase, a chip-in, a refund — and it
+moves wherever the caretaker is looking, because it rides the stream as the
+`purse` message (§7.2) rather than being fetched. The pack travels with it, so
+what you own is as current as what you can spend. Both are shown in the game's
+top bar as well as in the shop, since a number nobody can see is not worth
+keeping live.
+
 ### 13.2 Shop
 
 | Category | Items |
@@ -1198,7 +1236,11 @@ centred card from `sm:` up.
   empty state, so tab positions never move under the thumb.
 - **The balance never scrolls away.** It lives in the sticky header beside the
   title; the result notice lives in a sticky `aria-live` footer. Both are
-  visible from any row.
+  visible from any row. Balance and pack come from the stream's `purse`
+  (§7.2), not from the shop's own fetch — the shop holds no copy of anything
+  the stream already knows, which is why the number moves while you care for
+  Makoto with the shop open. What it does still fetch is the catalog and the
+  co-op pools, which have no live channel.
 - **One row anatomy** for every item in every tab: icon · name over a muted
   detail line · a fixed-width action slot. This is what keeps prices, badges
   and buttons aligned down the whole list.
