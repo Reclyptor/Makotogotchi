@@ -11,7 +11,7 @@ import { projectImmortal } from "@/sim/testkit";
 import type { RoomView } from "@/server/shop";
 
 const CATALOG = {
-  food: { pepper_treat: { kind: "food", label: "Pepper Treat", price: 60, scalePercent: 120, joyBonus: 15_000 } },
+  food: { onigiri: { kind: "food", label: "Onigiri", price: 60, scalePercent: 120, joyBonus: 15_000 } },
   medicine: { super_medicine: { kind: "medicine", label: "Super Medicine", price: 250, bypassCooldowns: true } },
   toys: { teeter: { kind: "toy", label: "Teeter Toy", price: 400, playBonusPercent: 15 } },
   cosmetics: { bow: { kind: "cosmetic", price: 300, label: "Ribbon Bow" } },
@@ -86,8 +86,8 @@ describe("shop tabs", () => {
   it("locks pack food while Makoto sleeps, in words rather than an enum", () => {
     const asleep = projectImmortal(awake, 5500, ctx); // past SLEEP_HOUR on day 0
     expect(asleep.asleep).toBe(true);
-    const tabs = shopTabs(model({ inventory: { pepper_treat: 2 } }), gate(asleep));
-    expect(rowNamed(tab(tabs, "pack"), "Pepper Treat").action).toMatchObject({
+    const tabs = shopTabs(model({ inventory: { onigiri: 2 } }), gate(asleep));
+    expect(rowNamed(tab(tabs, "pack"), "Onigiri").action).toMatchObject({
       kind: "use",
       care: "FEED",
       availability: { ok: false, note: "Makoto is asleep" },
@@ -132,7 +132,7 @@ describe("shop tabs", () => {
 
   it("opens on the pack only when there is something in it", () => {
     expect(initialTab(shopTabs(model(), gate()))).toBe("food");
-    expect(initialTab(shopTabs(model({ inventory: { pepper_treat: 1 } }), gate()))).toBe("pack");
+    expect(initialTab(shopTabs(model({ inventory: { onigiri: 1 } }), gate()))).toBe("pack");
   });
 });
 

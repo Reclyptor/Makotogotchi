@@ -98,7 +98,7 @@ export type ShopTab = {
  * Those need eyes on the rendered tab.
  */
 const ITEM_ICONS: Record<string, string> = {
-  pepper_treat: "🌶️",
+  onigiri: "🍙",
   fish_feast: "🍣",
   super_medicine: "💊",
   teeter: "🛝",

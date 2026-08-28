@@ -29,8 +29,10 @@ export type ToyItem = {
   playBonusPercent: number;
 };
 
+// Peppers are people here — Dr Pepper runs the surgery, and other things
+// besides — so they are not on this list and should not end up on it.
 export const FOOD_ITEMS = {
-  pepper_treat: { kind: "food", label: "Pepper Treat", price: 60, scalePercent: 120, joyBonus: 15_000 },
+  onigiri: { kind: "food", label: "Onigiri", price: 60, scalePercent: 120, joyBonus: 15_000 },
   fish_feast: { kind: "food", label: "Fish Feast", price: 150, scalePercent: 145, joyBonus: 35_000 },
 } as const satisfies Record<string, FoodItem>;
 

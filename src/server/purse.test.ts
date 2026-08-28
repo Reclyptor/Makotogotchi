@@ -78,25 +78,25 @@ describe("every writer announces the purse it just changed", () => {
   it("spending, and the pack the spend filled", async () => {
     const database = await db();
     await creditCoins(database, "ct-spend", 1000);
-    const result = await purchase(database, "ct-spend", "pepper_treat", { installedToys: [] });
+    const result = await purchase(database, "ct-spend", "onigiri", { installedToys: [] });
     expect(result.ok).toBe(true);
     // 1000 − 60 for the treat, and the treat itself now in the pack.
     expect(await purseFor("ct-spend", (purse) => purse.coins === 940)).toMatchObject({
       coins: 940,
-      inventory: { pepper_treat: 1 },
+      inventory: { onigiri: 1 },
     });
   });
 
   it("using an item out of the pack, and handing it back when the sim refuses", async () => {
     const database = await db();
     await creditCoins(database, "ct-use", 1000);
-    await purchase(database, "ct-use", "pepper_treat", { installedToys: [] });
+    await purchase(database, "ct-use", "onigiri", { installedToys: [] });
 
-    expect(await consumeItem(database, "ct-use", "pepper_treat")).toBe(true);
-    await purseFor("ct-use", (purse) => purse.inventory.pepper_treat === 0);
+    expect(await consumeItem(database, "ct-use", "onigiri")).toBe(true);
+    await purseFor("ct-use", (purse) => purse.inventory.onigiri === 0);
 
-    await refundItem(database, "ct-use", "pepper_treat");
-    await purseFor("ct-use", (purse) => purse.inventory.pepper_treat === 1);
+    await refundItem(database, "ct-use", "onigiri");
+    await purseFor("ct-use", (purse) => purse.inventory.onigiri === 1);
   });
 
   it("says nothing when a spend was refused — nothing moved", async () => {

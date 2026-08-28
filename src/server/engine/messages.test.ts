@@ -10,7 +10,7 @@ const purse = (caretakerId: string): EngineMessage => ({
   type: "purse",
   caretakerId,
   coins: 420,
-  inventory: { pepper_treat: 2 },
+  inventory: { onigiri: 2 },
 });
 
 describe("deliverableTo", () => {

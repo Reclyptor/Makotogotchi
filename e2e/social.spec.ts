@@ -76,7 +76,7 @@ test.describe("social and economy", () => {
     // because the purse arrived on A's stream (SPEC §7.2). A purchase rather
     // than a care action because it costs an exact amount and waits on no
     // cooldown the other specs share.
-    const bought = await pageA.request.post("/api/shop", { data: { buy: "pepper_treat" } });
+    const bought = await pageA.request.post("/api/shop", { data: { buy: "onigiri" } });
     expect(bought.ok()).toBe(true);
     await expect(chipA).toHaveText(/440/, { timeout: 15_000 });
 

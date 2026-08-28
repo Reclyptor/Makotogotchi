@@ -1204,7 +1204,7 @@ keeping live.
 
 | Category | Items |
 | --- | --- |
-| Food | Better food restores more hunger and adds a small joy bonus. Consumed on use. |
+| Food | Better food restores more hunger and adds a small joy bonus. Consumed on use. Peppers are characters in this world, not ingredients, so they never appear here — the Pepper Treat was legacy and is now Onigiri. |
 | Medicine | Cures `SICK` instantly with no cooldown. Consumed. |
 | Toys | Raise the `PLAY` base magnitude. Permanent for the generation. |
 | Cosmetics | Hats and accessories for the pet. Permanent, cross-generation. |
@@ -1275,7 +1275,7 @@ time, world-wide, by design.
 | Game | Play | Beats |
 | --- | --- | --- |
 | Dust Dash | 20s runner: hop the dust bunnies | one point per cleared bunny; collision ends the run |
-| Snack Catch | 25s: steer under falling food, dodge junk | +1 per snack, −3 for junk |
+| Snack Catch | 25s: steer under falling meals, dodge the one thing that is not one | +1 per snack, −3 for the sock |
 | Bubble Bath Pop | 25s: pop the bath bubbles before they escape | +1 per pop |
 | Simon Squeaks | memory: repeat Makoto's pose sequence on four pads | +1 per completed round; a miss ends the run |
 | Wheel Sprint | 30s rhythm: tap as the spark crosses the wheel's top | +1 per on-beat hit |
