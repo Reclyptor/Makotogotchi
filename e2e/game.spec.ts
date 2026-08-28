@@ -30,7 +30,13 @@ test.describe("the shared pet", () => {
     await expect(pageB.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
 
     // B pets; A sees the attributed feed entry appear without reloading.
-    await pageB.getByRole("button", { name: /^Pet$/ }).click();
+    // The pet is shared and PET carries a global cooldown, so the titles spec
+    // running beside this one can have it mid-cooldown when we arrive — wait
+    // for the tile to free up rather than matching only its idle name, which
+    // is what made this test fail whenever the two files overlapped.
+    const pet = pageB.getByRole("button", { name: /^Pet/ });
+    await expect(pet).not.toHaveAttribute("aria-disabled", "true", { timeout: 60_000 });
+    await pet.click();
     await expect(pageA.getByText(/Friend \w{4} petted Makoto/)).toBeVisible({ timeout: 10_000 });
     await expect(pageB.getByText(/You petted Makoto/)).toBeVisible({ timeout: 10_000 });
 
