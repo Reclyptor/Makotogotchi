@@ -1735,7 +1735,9 @@ progress bar (`pooled/price`) and two press buttons, +10 and +50. When the
 pool needs less than a button offers, the pair collapses to a single **Finish
 it** that posts `amount: "all"`, so the last stretch is one tap and no
 overshoot. A funded row shows what it became. Contributions are
-non-refundable; each group of co-op rows says so in one quiet line.
+non-refundable; the tab holding them says so once, in one quiet line under
+the rows — once per group would be the third copy of a sentence nobody needs
+told three times.
 
 Filing them this way is deliberate. A "Together" section groups items by
 their *payment model*, which is the one thing a player does not shop by — it

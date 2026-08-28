@@ -552,7 +552,17 @@ export default function GameView() {
         )}
       </div>
 
-      {shopOpen && <ShopPanel onClose={() => setShopOpen(false)} />}
+      {shopOpen && ui && !isEgg && !isDead && ctx && caretakerId && stream.room && (
+        <ShopPanel
+          state={ui.state}
+          ctx={ctx}
+          caretakerId={caretakerId}
+          petName={petName}
+          room={stream.room}
+          onFunded={onFunded}
+          onClose={() => setShopOpen(false)}
+        />
+      )}
       {playing && <MinigameShell gameId={playing} onClose={() => setPlaying(null)} onReact={onReact} />}
 
       <FeedLog entries={feed} />
