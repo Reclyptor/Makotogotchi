@@ -76,6 +76,29 @@ export const drawFrameFlipped = (
   ctx.restore();
 };
 
+/**
+ * Blit a frame centred on a point, scaled so its longer side fits `box` and
+ * its proportions survive — how loose objects fly.
+ *
+ * The squarer sprites (bubbles, the wheel) can be blitted into a square
+ * safely, but the meal frames run from 82×38 to 55×66, and forcing those into
+ * one they do not have turns a fish into an unrecognisable smear at 20px.
+ */
+export const drawFrameFitted = (
+  ctx: CanvasRenderingContext2D,
+  sheet: HTMLImageElement,
+  name: FrameName,
+  centerX: number,
+  centerY: number,
+  box: number,
+): void => {
+  const frame = SPRITE_FRAMES[name];
+  const scale = box / Math.max(frame.w, frame.h);
+  const width = frame.w * scale;
+  const height = frame.h * scale;
+  drawFrame(ctx, sheet, name, centerX - width / 2, centerY - height / 2, width, height);
+};
+
 /** Blit a frame scaled to a height, bottom-center anchored — how pets stand. */
 export const drawFrameAnchored = (
   ctx: CanvasRenderingContext2D,

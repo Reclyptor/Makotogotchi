@@ -1,12 +1,17 @@
 "use client";
 
 // Snack Catch: 25 seconds of falling food. Steer Makoto with the pointer or
-// arrow keys; every caught snack is a point, caught junk costs three. The
-// food art comes straight from the atlas's meal frames.
+// arrow keys; every caught snack is a point, the one thing that is not food
+// costs three.
+//
+// Everything here serves one question the player has to answer in about a
+// second: is that edible? So the falling art keeps its proportions (a fish
+// squashed into a square is a smear), only actual meals fall, and there is
+// exactly one hazard to learn rather than a category to judge.
 
 import { useEffect, useRef } from "react";
 import type { FrameName } from "@/game/atlas.generated";
-import { drawFrame, drawFrameAnchored, GAME_H, GAME_W, startGameLoop } from "./engine";
+import { drawFrameAnchored, drawFrameFitted, GAME_H, GAME_W, startGameLoop } from "./engine";
 import type { GameProps } from "./types";
 
 const RUN_MS = 25_000;
@@ -15,9 +20,16 @@ const PET_SPEED = 150; // px/s toward the pointer or held arrow
 const CATCH_RANGE_X = 18;
 const CATCH_Y = 92;
 const JUNK_PENALTY = 3;
+const ITEM_BOX = 22;
 
-const FOODS: readonly FrameName[] = ["fish", "pepper1", "sausage", "pizza", "burger", "onigiri", "bowl", "plate"];
-const JUNK: readonly FrameName[] = ["sock1", "rock1"];
+// Things Makoto can actually eat. The empty `bowl` and `plate` used to fall
+// here too, which asked the player to catch crockery; `pepper1` is a person.
+const FOODS: readonly FrameName[] = ["fish", "sausage", "pizza", "burger", "onigiri"];
+
+// One hazard, not a category. The sock over the rock because a small dark
+// rounded blob is exactly what most of the food looks like at this size,
+// while a sock is a silhouette nothing else shares.
+const JUNK: FrameName = "sock1";
 
 type Falling = { frame: FrameName; junk: boolean; x: number; y: number; vy: number };
 
@@ -84,9 +96,8 @@ export default function SnackCatch({ sheet, reportScore, finish }: GameProps) {
       nextSpawn -= dtMs;
       if (nextSpawn <= 0) {
         const junk = Math.random() < 0.22;
-        const pool = junk ? JUNK : FOODS;
         items.push({
-          frame: pool[Math.floor(Math.random() * pool.length)]!,
+          frame: junk ? JUNK : FOODS[Math.floor(Math.random() * FOODS.length)]!,
           junk,
           x: 20 + Math.random() * (GAME_W - 40),
           y: -10,
@@ -129,9 +140,10 @@ export default function SnackCatch({ sheet, reportScore, finish }: GameProps) {
               : "jog2"
             : "idleFront1";
       drawFrameAnchored(ctx, sheet, pose, petX, GROUND_Y + 4, 44);
+      // One size for everything: the hazard used to be drawn smaller than the
+      // food, so the thing to dodge was the hardest thing to see.
       for (const item of items) {
-        const size = item.junk ? 16 : 20;
-        drawFrame(ctx, sheet, item.frame, item.x - size / 2, item.y - size / 2, size, size);
+        drawFrameFitted(ctx, sheet, item.frame, item.x, item.y, ITEM_BOX);
       }
       ctx.fillStyle = "#f5f0dc";
       ctx.font = "10px monospace";
