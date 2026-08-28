@@ -190,7 +190,7 @@ anyone a weapon.
 | `PLAY` | Joy | 60s | 3 min | Awake, energy > 10% |
 | `CLEAN` | Hygiene | 90s | 5 min | Awake |
 | `MEDICATE` | Clears `SICK`, small health | 5 min | 10 min | `SICK` present |
-| `LULLABY` | Energy; induces sleep | 2 min | 5 min | Night, or energy < 25% |
+| `LULLABY` | Energy; induces sleep | 2 min | 5 min | Awake, energy < 25% |
 | `PET` | Small Joy | 10s | 30s | Always (even asleep) |
 
 (Cooldowns are whole ticks — 10-second quanta — which is why `FEED` is 50s
@@ -274,10 +274,16 @@ The pet keeps a home timezone (`America/Chicago`). Between `SLEEP_HOUR` and
 
 - Energy recovers; hunger and joy decay at a reduced rate; hygiene is
   unchanged.
-- `FEED`, `PLAY`, `CLEAN` are unavailable — the pet is asleep. `PET` and
-  `MEDICATE` still work.
+- `FEED`, `PLAY`, `CLEAN`, `LULLABY` are unavailable — the pet is asleep.
+  `PET` and `MEDICATE` still work.
 - A pet with critically low energy during the day will also nap, and
   `LULLABY` will put it down early.
+
+`LULLABY` is unavailable while the pet sleeps for the same reason as the rest:
+you cannot put down a pet that is already down. It is worth stating because
+its gate reads as an energy threshold, and a sleeping pet's energy is
+*climbing* — a nap crosses the daytime gate on its way to `NAP_WAKE_THRESHOLD`.
+Gating on energy alone told a caretaker their napping pet was wide awake.
 
 This gives the game a daily rhythm and — importantly — means the overnight
 window is the *least* dangerous time, not the most. Nobody is punished for

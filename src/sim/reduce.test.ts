@@ -12,6 +12,7 @@ import {
   ACTION_MAGNITUDE,
   COOLDOWNS,
   HEALTH_MAX,
+  LULLABY_ENERGY_GATE,
   MEDICATE_HEALTH_RESTORE,
   NEED_MAX,
   PLAY_ENERGY_COST,
@@ -200,13 +201,29 @@ describe("canPerform", () => {
     expect(canPerform({ ...state, sick: true }, "MEDICATE", "a", ctx)).toMatchObject({ ok: true });
   });
 
-  it("gates LULLABY on night or low energy", () => {
+  it("gates LULLABY on low energy in an awake pet", () => {
     const day = bornState();
     expect(canPerform(day, "LULLABY", "a", ctx)).toMatchObject({ ok: false, reason: "NOT_SLEEPY" });
     const drowsy = { ...day, needs: { ...day.needs, energy: 200_000 } };
     expect(canPerform(drowsy, "LULLABY", "a", ctx)).toMatchObject({ ok: true });
+  });
+
+  it("blocks LULLABY on a pet that is already asleep, at night or mid-nap", () => {
     const night = project(hatchedState(ctx), 16 * TICKS_PER_HOUR, ctx).state;
-    expect(canPerform(night, "LULLABY", "a", ctx)).toMatchObject({ ok: true });
+    expect(night.asleep).toBe(true);
+    expect(canPerform(night, "LULLABY", "a", ctx)).toMatchObject({ ok: false, reason: "ASLEEP" });
+
+    // A nap recovers energy past the daytime gate on its way to
+    // NAP_WAKE_THRESHOLD. Answering from energy alone reported NOT_SLEEPY
+    // here — "wide awake" printed over a sleeping pet.
+    const napping = { ...bornState(), asleep: true, sleepReason: "NAP" as const };
+    const rousing = { ...napping, needs: { ...napping.needs, energy: 300_000 } };
+    expect(rousing.needs.energy).toBeGreaterThan(LULLABY_ENERGY_GATE);
+    expect(canPerform(rousing, "LULLABY", "a", ctx)).toMatchObject({ ok: false, reason: "ASLEEP" });
+    // ...and below the gate it said yes, then spent the cooldown adding energy
+    // to a pet it could not put down.
+    const deep = { ...napping, needs: { ...napping.needs, energy: 100_000 } };
+    expect(canPerform(deep, "LULLABY", "a", ctx)).toMatchObject({ ok: false, reason: "ASLEEP" });
   });
 });
 

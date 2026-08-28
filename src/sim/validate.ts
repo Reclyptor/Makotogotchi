@@ -5,7 +5,7 @@
 // An exhausted caretaker budget is deliberately NOT a rejection: the action
 // validates and applies zero (SPEC §2.5) — the UI explains separately.
 
-import { isAlive, phaseAt, type PetState, type ProjectionContext } from "./model";
+import { isAlive, type PetState, type ProjectionContext } from "./model";
 import { medicineItem } from "./economy";
 import { COOLDOWNS, LULLABY_ENERGY_GATE, PLAY_ENERGY_GATE, type CareAction } from "./tuning";
 
@@ -17,7 +17,7 @@ export type RejectionReason =
   | "ASLEEP"
   | "TOO_TIRED" // PLAY needs energy
   | "NOT_SICK" // MEDICATE without illness
-  | "NOT_SLEEPY"; // LULLABY needs night or low energy
+  | "NOT_SLEEPY"; // LULLABY needs an awake pet that is running low on energy
 
 export type ValidationResult =
   | { ok: true }
@@ -88,10 +88,17 @@ export const canPerform = (
       return state.needs.energy > PLAY_ENERGY_GATE ? { ok: true } : reject("TOO_TIRED");
     case "MEDICATE":
       return state.sick ? { ok: true } : reject("NOT_SICK");
-    case "LULLABY": {
-      const night = phaseAt(ctx.schedule, state.tick) === "SLEEP";
-      return night || state.needs.energy < LULLABY_ENERGY_GATE ? { ok: true } : reject("NOT_SLEEPY");
-    }
+    case "LULLABY":
+      // A pet that is already asleep cannot be put to sleep. Reading the gate
+      // off energy alone got this backwards both ways: a napping pet recovers
+      // past LULLABY_ENERGY_GATE on its way to NAP_WAKE_THRESHOLD, so the tile
+      // said "wide awake" over a visibly sleeping pet — and below the gate it
+      // said yes, where reduce() skips the sleep transition but still applies
+      // the energy, spending a cooldown to hurry the nap toward waking.
+      if (state.asleep) return reject("ASLEEP");
+      // Night wants no clause of its own: projection puts the pet down at the
+      // SLEEP boundary, so a state at night is an asleep state, caught above.
+      return state.needs.energy < LULLABY_ENERGY_GATE ? { ok: true } : reject("NOT_SLEEPY");
     case "PET":
       return { ok: true };
   }
