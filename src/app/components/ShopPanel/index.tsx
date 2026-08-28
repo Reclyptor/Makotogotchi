@@ -13,6 +13,7 @@ import { initialTab, shopTabs, type ShopTab, type TabId } from "./tabs";
 import { useShop } from "./useShop";
 import type { PetState, ProjectionContext } from "@/sim/model";
 import type { RoomView } from "@/server/shop";
+import type { Purse } from "@/server/purse";
 
 export type ShopPanelProps = {
   state: PetState;
@@ -21,6 +22,8 @@ export type ShopPanelProps = {
   petName: string;
   /** The room as the canvas has it — the shop never fetches its own copy. */
   room: RoomView;
+  /** Balance and pack, live off the stream (SPEC §13.1) — likewise not fetched. */
+  purse: Purse;
   /** A pool completing elsewhere is the one shop change the stream reports. */
   onFunded: (listener: () => void) => () => void;
   onClose: () => void;
@@ -28,7 +31,7 @@ export type ShopPanelProps = {
 
 const TAB_ORDER: TabId[] = ["pack", "food", "toys", "style", "room"];
 
-export default function ShopPanel({ state, ctx, caretakerId, petName, room, onFunded, onClose }: ShopPanelProps) {
+export default function ShopPanel({ state, ctx, caretakerId, petName, room, purse, onFunded, onClose }: ShopPanelProps) {
   const shop = useShop(petName, onFunded);
   const [active, setActive] = useState<TabId | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -39,15 +42,15 @@ export default function ShopPanel({ state, ctx, caretakerId, petName, room, onFu
     return shopTabs(
       {
         catalog: shop.data.catalog,
-        coins: shop.data.coins,
-        inventory: shop.data.inventory,
+        coins: purse.coins,
+        inventory: purse.inventory,
         room,
         toys: state.toys,
         funding: shop.data.funding,
       },
       { state, ctx, caretakerId, petName },
     );
-  }, [shop.data, room, state, ctx, caretakerId, petName]);
+  }, [shop.data, purse, room, state, ctx, caretakerId, petName]);
 
   // Escape closes, and focus goes back where it came from. Both are the
   // dialog's job, not the opener's — nothing else on the page can know that
@@ -118,8 +121,12 @@ export default function ShopPanel({ state, ctx, caretakerId, petName, room, onFu
         <header className="flex items-center justify-between gap-2 px-4 pb-2 pt-4">
           <h2 className="text-sm font-bold">🛒 Shop</h2>
           <div className="flex items-center gap-2">
-            <span className="rounded-full bg-gold/15 px-3 py-1 text-sm font-bold tabular-nums text-gold">
-              🪙 {shop.data?.coins ?? 0}
+            <span
+              aria-label={`${purse.coins} coins`}
+              className="rounded-full bg-gold/15 px-3 py-1 text-sm font-bold tabular-nums text-gold"
+            >
+              <span aria-hidden="true">🪙 </span>
+              {purse.coins}
             </span>
             <button
               type="button"

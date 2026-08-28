@@ -51,6 +51,42 @@ const playUntilAccepted = async (request: APIRequestContext): Promise<void> => {
 };
 
 test.describe("social and economy", () => {
+  test("a balance moves live for its owner and for nobody else", async ({ browser }) => {
+    const contextA = await browser.newContext();
+    const contextB = await browser.newContext();
+    const pageA = await contextA.newPage();
+    const pageB = await contextB.newPage();
+    await pageA.goto("/");
+    await pageB.goto("/");
+    await expect(pageA.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
+    await expect(pageB.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
+
+    const idA = ((await (await pageA.request.get("/api/state")).json()) as { caretakerId: string }).caretakerId;
+    seedCoins(idA, 500);
+    // Reload only A, so its chip opens from `hello` at the seeded value; B's
+    // chip is whatever B has, and must not move for the rest of the test.
+    await pageA.reload();
+    const chipA = pageA.getByLabel(/\d+ coins/);
+    const chipB = pageB.getByLabel(/\d+ coins/);
+    await expect(chipA).toHaveText(/500/, { timeout: 15_000 });
+    const before = await chipB.textContent();
+
+    // Spend, from the same caretaker but outside the page: nothing this
+    // browser did can update the chip locally, so if it moves it moved
+    // because the purse arrived on A's stream (SPEC §7.2). A purchase rather
+    // than a care action because it costs an exact amount and waits on no
+    // cooldown the other specs share.
+    const bought = await pageA.request.post("/api/shop", { data: { buy: "pepper_treat" } });
+    expect(bought.ok()).toBe(true);
+    await expect(chipA).toHaveText(/440/, { timeout: 15_000 });
+
+    // …and A's earnings are A's business: B never sees the message at all.
+    await expect(chipB).toHaveText(before ?? "", { timeout: 5_000 });
+
+    await contextA.close();
+    await contextB.close();
+  });
+
   test("a reaction from one visitor appears in another's feed", async ({ browser }) => {
     const contextA = await browser.newContext();
     const contextB = await browser.newContext();
@@ -90,8 +126,12 @@ test.describe("social and economy", () => {
 
     // Funded: the potted plant becomes communal decor.
     const state = (await (await page.request.get("/api/state")).json()) as { caretakerId: string };
+    // seedCoins writes straight to Mongo, behind the five helpers that
+    // announce a purse (SPEC §7.2), so this client only learns the new
+    // balance from a fresh `hello`. Nothing in the app writes coins that way.
     seedCoins(state.caretakerId, 5000);
-    await shop.getByRole("button", { name: "Close shop" }).click();
+    await page.reload();
+    await expect(page.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
     await page.getByRole("button", { name: "Shop", exact: true }).click();
     await shop.getByRole("tab", { name: "Room" }).click();
     await expect(plant).toHaveAttribute("aria-disabled", "false");
@@ -126,6 +166,12 @@ test.describe("social and economy", () => {
     const idB = ((await (await pageB.request.get("/api/state")).json()) as { caretakerId: string }).caretakerId;
     seedCoins(idA, 260);
     seedCoins(idB, 260);
+    // Seeded behind the announce (see above), so both clients need a fresh
+    // hello before their shops know what they can afford.
+    for (const page of [pageA, pageB]) {
+      await page.reload();
+      await expect(page.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
+    }
 
     // Each caretaker chips in through the shop, then empties their purse
     // into the pool — the Window Seat costs 500 and neither can afford it.

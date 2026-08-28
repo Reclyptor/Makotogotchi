@@ -4,22 +4,27 @@
 // so the panel is only layout, and so the one place that talks to the shop
 // routes is the one place that knows what their errors mean.
 //
-// What it fetches is deliberately narrow: the room and the installed toys are
-// already live on the stream (SPEC §7.4) and arrive as props, so the shop
-// cannot show a room the canvas disagrees with. Coins, the pack, and the
-// funding pools have no live channel — no SSE message carries a balance — so
-// they are read here and re-read after anything that could move them.
+// What it fetches is deliberately narrow, and now as narrow as it goes: the
+// room, the installed toys, the balance and the pack are all live on the
+// stream (SPEC §7.2) and arrive as props, so the shop holds no copy of
+// anything the stream already knows and cannot disagree with the game screen
+// behind it. What is left has no live channel — the catalog, which is static
+// per deploy, and the co-op pools, whose intermediate totals are only
+// announced when one completes — so those are read here and re-read after
+// anything that could move them.
 
 import { useCallback, useEffect, useState } from "react";
 import { isLockReason, rejectionText } from "../ActionBar/copy";
 import type { ShopCatalog } from "./tabs";
 import type { FundingView } from "@/server/shop";
 
-/** The parts of GET /api/shop that no stream message carries. */
+/**
+ * The parts of GET /api/shop the shop still reads. The response also carries
+ * coins, inventory and the room — it is a general endpoint and other callers
+ * want them — but the panel takes those from the stream instead.
+ */
 export type ShopData = {
   catalog: ShopCatalog;
-  coins: number;
-  inventory: Partial<Record<string, number>>;
   funding: FundingView[];
 };
 

@@ -398,6 +398,19 @@ export default function GameView() {
           MAKOTOGOTCHI
         </span>
         <div className="flex items-center gap-2">
+          {/* What caring has earned you, live (SPEC §13.1). It is the same
+              number the shop's header shows, from the same place, so opening
+              the shop can never disagree with the bar above it. Labelled, not
+              bare: "🪙 330" read aloud is just "330". */}
+          {stream.purse && (
+            <span
+              aria-label={`${stream.purse.coins} coins`}
+              className="panel !rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums text-gold"
+            >
+              <span aria-hidden="true">🪙 </span>
+              {stream.purse.coins}
+            </span>
+          )}
           {/* "👥 7 watching", as §11.2 draws it — now expandable into the
               presence list §2.11 promised: names, title chips, and the
               leader's crown (SPEC §24.4). A bare count read out as "busts in
@@ -553,13 +566,14 @@ export default function GameView() {
         )}
       </div>
 
-      {shopOpen && ui && !isEgg && !isDead && ctx && caretakerId && stream.room && (
+      {shopOpen && ui && !isEgg && !isDead && ctx && caretakerId && stream.room && stream.purse && (
         <ShopPanel
           state={ui.state}
           ctx={ctx}
           caretakerId={caretakerId}
           petName={petName}
           room={stream.room}
+          purse={stream.purse}
           onFunded={onFunded}
           onClose={() => setShopOpen(false)}
         />
