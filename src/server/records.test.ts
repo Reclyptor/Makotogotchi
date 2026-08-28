@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, db } from "./db/client";
 import { closeRedis } from "./redis/client";
 import { gameRecords, records, submitScore } from "./records";
+import { MINIGAME_IDS } from "@/sim/minigames";
 import { setNickname } from "./social";
 import { startTestInfra, type TestInfra } from "./testsetup";
 
@@ -73,7 +74,8 @@ describe("record boards", () => {
     const database = await db();
     await setNickname(database, "ct-b", "Ana");
     const boards = await gameRecords(database, WEEK);
-    expect(boards).toHaveLength(5);
+    // Against the roster itself, so adding a game never leaves a board unbuilt.
+    expect(boards.map((board) => board.game)).toEqual([...MINIGAME_IDS]);
     expect(boards.find((board) => board.game === "dustdash")?.alltime?.name).toBe("Ana");
     expect(boards.find((board) => board.game === "bubblepop")?.alltime).toBeNull();
   });

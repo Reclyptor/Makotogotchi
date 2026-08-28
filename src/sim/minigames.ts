@@ -4,7 +4,18 @@
 // a legitimate client can produce, and the curves translate score into the
 // PLAY performance multiplier and the coin payout.
 
-export const MINIGAME_IDS = ["dustdash", "snackcatch", "bubblepop", "simon", "wheelsprint"] as const;
+export const MINIGAME_IDS = [
+  "dustdash",
+  "snackcatch",
+  "bubblepop",
+  "simon",
+  "wheelsprint",
+  "shuffle",
+  "natsumi",
+  "coffeerun",
+  "sausageparty",
+  "sausaged",
+] as const;
 export type MinigameId = (typeof MINIGAME_IDS)[number];
 
 /** Every run opens with a countdown before the game's clock starts (SPEC
@@ -93,6 +104,78 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
     inputsPerPoint: 1,
     performance: (score) => clampPerformance(50 + score * 4),
     coins: (score) => Math.round(score * 0.6),
+  },
+  shuffle: {
+    id: "shuffle",
+    title: "Makoto Shuffle",
+    emoji: "🥣",
+    // A round is a peek, a run of swaps, and a pick, and the swaps multiply as
+    // the rounds climb — so the duration cap is generous and the rate cap is
+    // what bounds farming, exactly as in Simon.
+    maxDurationMs: 90_000,
+    maxScorePerSecond: 0.4,
+    maxScore: 12,
+    inputsPerPoint: 1,
+    performance: (score) => clampPerformance(50 + score * 9),
+    coins: (score) => score * 2,
+  },
+  natsumi: {
+    id: "natsumi",
+    title: "Natsumi's Watch",
+    emoji: "👀",
+    // Crossing the desk takes two seconds of clear running, and being caught
+    // costs every inch of it, so points come slowly by design.
+    maxDurationMs: 50_000,
+    maxScorePerSecond: 0.5,
+    maxScore: 10,
+    inputsPerPoint: 1,
+    performance: (score) => clampPerformance(50 + score * 10),
+    coins: (score) => score * 3,
+  },
+  coffeerun: {
+    id: "coffeerun",
+    title: "Coffee Run",
+    emoji: "☕",
+    maxDurationMs: 45_000,
+    // Her shortest round trip is 5.5s and the pot caps at five cups, so a
+    // flawless thirty seconds is about 27 — the envelope has to sit above
+    // what perfect play produces, not at it.
+    maxScorePerSecond: 1.2,
+    maxScore: 32,
+    // A single hold can bank five cups at once, so the input floor is well
+    // under one per point — as with Snack Catch, it is anti-idle, not anti-fun.
+    inputsPerPoint: 0.25,
+    performance: (score) => clampPerformance(50 + score * 5),
+    coins: (score) => score,
+  },
+  sausageparty: {
+    id: "sausageparty",
+    title: "Sausage Party",
+    emoji: "🥳",
+    maxDurationMs: 50_000,
+    // The tray reloads between dishes, which is what paces the game: about
+    // one serve a second flat out, over a 35s run.
+    maxScorePerSecond: 1.4,
+    maxScore: 42,
+    inputsPerPoint: 1,
+    performance: (score) => clampPerformance(50 + score * 4),
+    coins: (score) => Math.round(score * 0.6),
+  },
+  sausaged: {
+    id: "sausaged",
+    title: "Don't Get Sausaged",
+    emoji: "🌭",
+    // One miss ends it, so a long run is a good run: the duration cap is
+    // generous and the rate cap is what bounds farming.
+    maxDurationMs: 60_000,
+    // Twenty-five rounds is the run's own ceiling, so the payout is bounded
+    // by maxScore no matter how fast it is played — which lets the rate cap
+    // sit well above a hot streak instead of rejecting one.
+    maxScorePerSecond: 2,
+    maxScore: 25,
+    inputsPerPoint: 1,
+    performance: (score) => clampPerformance(50 + score * 4),
+    coins: (score) => Math.round(score * 1.5),
   },
 };
 

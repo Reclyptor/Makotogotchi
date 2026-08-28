@@ -58,6 +58,24 @@ export const drawFrame = (
   ctx.drawImage(sheet, frame.x, frame.y, frame.w, frame.h, Math.round(x), Math.round(y), w, h);
 };
 
+/** Blit a frame upside down: an overturned bowl is the same sprite, flipped. */
+export const drawFrameFlipped = (
+  ctx: CanvasRenderingContext2D,
+  sheet: HTMLImageElement,
+  name: FrameName,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): void => {
+  const frame = SPRITE_FRAMES[name];
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y) + h);
+  ctx.scale(1, -1);
+  ctx.drawImage(sheet, frame.x, frame.y, frame.w, frame.h, 0, 0, w, h);
+  ctx.restore();
+};
+
 /** Blit a frame scaled to a height, bottom-center anchored — how pets stand. */
 export const drawFrameAnchored = (
   ctx: CanvasRenderingContext2D,

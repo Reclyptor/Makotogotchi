@@ -10,6 +10,11 @@ import SnackCatch from "./SnackCatch";
 import BubblePop from "./BubblePop";
 import SimonSqueaks from "./SimonSqueaks";
 import WheelSprint from "./WheelSprint";
+import MakotoShuffle from "./MakotoShuffle";
+import NatsumisWatch from "./NatsumisWatch";
+import CoffeeRun from "./CoffeeRun";
+import SausageParty from "./SausageParty";
+import DontGetSausaged from "./DontGetSausaged";
 
 export type GameEntry = {
   Component: ComponentType<GameProps>;
@@ -22,4 +27,9 @@ export const GAMES: Record<MinigameId, GameEntry> = {
   bubblepop: { Component: BubblePop, hint: "Tap or click the bubbles before they float away!" },
   simon: { Component: SimonSqueaks, hint: "Watch Makoto's moves, then repeat them on the pads!" },
   wheelsprint: { Component: WheelSprint, hint: "Tap, click, or press space when the spark crosses the top!" },
+  shuffle: { Component: MakotoShuffle, hint: "Watch which bowl Makoto hides under, then tap it — or press 1, 2, 3!" },
+  natsumi: { Component: NatsumisWatch, hint: "Hold to scurry for the treat — let go before Natsumi turns around!" },
+  coffeerun: { Component: CoffeeRun, hint: "Hold to brew, let go to pour — don't be brewing when Natsumi walks in!" },
+  sausageparty: { Component: SausageParty, hint: "Tap the guest who is holding up the dish you're serving!" },
+  sausaged: { Component: DontGetSausaged, hint: "Do what Natsumi says, fast — hesitate and you're a sausage!" },
 };
