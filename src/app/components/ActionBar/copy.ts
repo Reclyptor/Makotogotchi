@@ -31,12 +31,19 @@ export const rejectionText = (petName: string): Record<LockReason, string> => ({
  * The same reason with the pet's name taken out, for controls too narrow to
  * hold a sentence.
  *
- * A care tile is a sixth of a phone's width. "Makoto is asleep" does not fit
- * in one, and truncating it produced "Makoto is asl…" — every tile opening
- * with the same three words and cutting off before the one word that differs,
- * which is worse than useless. The name is redundant there anyway: it is the
- * page's heading, six inches up. The full sentence still goes in the
- * accessible name (SPEC §11.3), so nothing is lost to a screen reader.
+ * A care tile is a sixth of a phone's width — an 85px box for this line, once
+ * the grid and the padding have taken their share. "Makoto is asleep" wants
+ * 82px of it, so it truncated to "Makoto is asl…" on anything narrower than a
+ * 320px screen: every tile opening with the same three words and cutting off
+ * before the one word that differed. Worse, the pet is community-named, so
+ * that width was partly up to the players — "Bartholomew is asleep" wants
+ * 107px and clips on any phone.
+ *
+ * Taking the name out is what fixes it rather than shortening the phrasing:
+ * the label then has a fixed upper bound (see copy.test.ts) instead of a
+ * user-controlled one. The name is redundant here anyway — it is the page's
+ * heading, an inch up — and the full sentence still goes in the accessible
+ * name (SPEC §11.3), so nothing is lost to a screen reader.
  */
 export const REASON_SHORT: Record<LockReason, string> = {
   NOT_BORN: "Not hatched",
