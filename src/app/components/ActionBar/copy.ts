@@ -66,13 +66,19 @@ export const isLockReason = (value: unknown): value is LockReason =>
  * and not only in the small print. Deliberately absent for the two cooldowns:
  * those already draw a drain bar and count seconds down, and a third signal
  * on the same tile is noise.
+ *
+ * Each one borrows a symbol the game already uses for that idea rather than
+ * inventing a private vocabulary: ❤️ is the Health meter's, 🪫 answers the
+ * Energy meter's ⚡, ☀️ is daylight against 💤's night. A green heart was the
+ * mistake worth recording — in a game about a pet that gets sick, green reads
+ * as poison, which is the opposite of "isn't sick".
  */
 export const REASON_GLYPH: Partial<Record<LockReason, string>> = {
   NOT_BORN: "🥚",
   DEAD: "🪦",
   ASLEEP: "💤",
   TOO_TIRED: "🪫",
-  NOT_SICK: "💚",
+  NOT_SICK: "❤️",
   NOT_SLEEPY: "☀️",
   NO_ITEM: "📭",
 };
