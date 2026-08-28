@@ -2155,6 +2155,40 @@ are testable claims, not taste:
 - Reduced motion freezes clouds, weather, twinkle, and transitions,
   holding the room at its current segment.
 
+**The drawing vocabulary.** Outdoor scenes compose from primitives in
+`src/game/scene/backdrop/paint.ts` rather than each one deciding these
+again: `ramp` (hue-shifted three-value form ramp), `solid` (a shaded box
+lit from one direction), `castShadow` and `shadowStrip`, `bands` (flat
+regions with dithered seams), `tuft`, `pebble`, `roots` and `scatter`.
+
+The primitives exist because the first two passes at these scenes broke the
+same rules eight different ways, and a rule that lives in a comment is a
+rule that gets broken. Each one is the fix for a specific failure:
+
+- **Shade by form, never by distance from the outline.** Objects were
+  drawn as a fill with a one-pixel highlight along the top edge whatever
+  their shape — pillow shading, the cardinal sin. `solid` gives a lit
+  face, a body and a shadow face from one light direction.
+- **Ground is flat regions with dithered seams, not one stippled
+  gradient.** A surface dithered edge to edge is a field of noise with
+  nothing for the eye to rest on, and detail drawn over it cannot read.
+- **Texture is clusters, never single pixels.** A lone scattered pixel
+  reads as a rendering fault. `tuft` carries four silhouettes on purpose:
+  one shape repeated across a field reads as tiling, and the eye finds the
+  repeat immediately.
+- **Every object throws a shadow.** Without one it is pasted onto the
+  ground rather than standing on it. `castShadow` is for compact objects;
+  `shadowStrip` is for wide flat ones, because an ellipse scaled to
+  something as wide as a garden bed becomes sixty rows tall.
+- **Light arrives from the sky, not from a spotlight.** It lands hardest
+  near the horizon and falls away toward the viewer. Two soft cones at
+  fixed positions on every venue read as torch beams on carpet, and at any
+  real strength they wash every ground to the same pale film.
+- **Palette entries are declared and integral.** Ramps live in the venue's
+  own palette rather than being derived mid-render, and their channels are
+  rounded — a palette entry carrying 236.4 never byte-matches the 236 that
+  lands in the buffer, which is what the readability check compares.
+
 ### 22.7 Delivery Phases
 
 | # | Phase | Deliverable | Done when |
@@ -2222,17 +2256,26 @@ object, so every viewer computes the same venue from the same
 
 **The venues.**
 
+Each venue sets **its own horizon**, and that is what makes it a place
+rather than a tint. A shared eye line with a shared recipe — sky, a thin
+silhouette strip, one flat plane of ground — produces scenes that differ
+only in colour, and at this resolution colour is not a location. So the
+forest is roofed and hemmed in at 66, the meadow is almost all sky at 126,
+the pond is almost all water at 62. What separates them is composition:
+where the eye line sits, what breaks it, and how much of the frame each
+element is allowed to take.
+
 | Venue | Availability | Scene |
 | --- | --- | --- |
 | `home` | always | the room of §22.3, themes and decor unchanged |
-| `garden` | free | fenced backyard: flowerbeds, a vegetable patch, blossom and harvest states riding the season |
-| `meadow` | free | open wildflower meadow under the full sky, grasses swaying on wall-clock wind |
-| `blossom` | grand item, 700 | cherry avenue with a bench and a lantern; the season does the work — bare, pink, green, red-gold — and petals drift in spring |
-| `beach` | grand item, 800 | sand, animated surf, a water horizon |
-| `pond` | grand item, 850 | still water under far reeds, lily pads, koi drifting below the surface |
-| `forest` | grand item, 950 | pine clearing, dappled light, a stump to perch on; snowed-in come winter |
-| `shrine` | grand item, 1100 | a torii over worn stone steps, paired lanterns, cedars behind; the sun sets *through* the gate |
-| `mountain` | grand item, 1400 | the snow-capped cone far above the horizon, layered ridges, a lake holding its reflection |
+| `garden` | free | enclosed backyard: a board fence and a shed fill the upper third so there is barely any sky, with boarded raised beds, a watering can and a robin on the rail |
+| `meadow` | free | horizon down at the pet's feet under an enormous sky; hazed ridges, a worn track, stems rising off the bottom edge, birds |
+| `blossom` | grand item, 700 | a cherry avenue of nine trees, a bough thrown across the top of the frame, a cast-iron lamp post, two benches and planted beds; the season does the work — bare, pink, green, red-gold — and petals drift in spring |
+| `beach` | grand item, 800 | a rocky cove: a sea stack with a black pine leaning off it, a wet rock shelf of tide pools, weed and barnacles, a boat hauled up out of the water |
+| `pond` | grand item, 850 | water owning the frame, stepping stones crossing it, lily pads, reeds at the near edge, koi drifting below the surface |
+| `forest` | grand item, 950 | roofed clearing: canopy hanging from the top edge, two trunks running the full height with the pet walking *behind* them, dappled light, a fallen log, mushrooms |
+| `shrine` | grand item, 1100 | a torii big enough to stand under, a shimenawa with paper streamers, paving courses, stone lanterns and a water basin |
+| `mountain` | grand item, 1400 | the snow-capped cone far above the horizon, layered ridges, a lake holding its reflection with a boat on it, a shingle shore |
 
 **Architecture.** A `Venue` supplies its named ramps and its back-to-front
 draw layers; the current room becomes the `home` venue rather than a special
