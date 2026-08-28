@@ -30,6 +30,8 @@ import { isTitleId, TITLES } from "@/sim/titles";
 import { isVenueId, venueAt } from "@/sim/atmosphere";
 import { FREE_VENUES, petClock, venueSpec } from "@/game/scene/backdrop";
 import { usePetStream } from "@/app/hooks/usePetStream";
+import { useKonami } from "@/app/hooks/useKonami";
+import type { SpectacleMood } from "@/sim/secret";
 import type { FeedEntryPayload } from "@/app/api/feed/route";
 
 const STAGE_LABELS: Record<string, string> = {
@@ -83,6 +85,18 @@ const ambientFeedText = (petName: string): Record<AmbientEvent, string> => ({
   "coin-dig": `${petName} dug up something shiny!`,
   "mystery-noise": "…did you hear that?",
 });
+
+/**
+ * What the feed says when someone opens the sky (SPEC §26.4). The mood tells
+ * confetti from meteors; only the local state can tell a sleeping pet from a
+ * dead one, and the difference is the whole tone of the line.
+ */
+const secretFeedText = (mood: SpectacleMood, petName: string, dead: boolean): string => {
+  if (mood === "party") return "Someone remembered the ancient code.";
+  return dead
+    ? "Someone remembered the ancient code. The sky remembered too."
+    : `Someone tried the ancient code. ${petName} slept right through it.`;
+};
 
 const GRAND_LABELS: Record<string, string> = {
   window_seat: "Window Seat",
@@ -142,6 +156,7 @@ export default function GameView() {
     onRecord,
     onFunded,
     onReact,
+    onSecret,
     caretakerId,
     profile,
   } = stream;
@@ -343,6 +358,11 @@ export default function GameView() {
       const who = notice.caretakerId === caretakerRef.current ? "You" : notice.caretakerName;
       pushFeed(notice.emoji, `${who} reacted ${notice.emoji}`);
     });
+    // The ancient code (SPEC §26). Unattributed on purpose — nobody is told
+    // who did it, which is what sends everyone else hunting for it.
+    const offSecret = onSecret((notice) => {
+      pushFeed("🎮", secretFeedText(notice.mood, petNameRef.current, projectNow()?.diedAtTick != null));
+    });
     return () => {
       offCare();
       offMilestone();
@@ -352,9 +372,32 @@ export default function GameView() {
       offRecord();
       offFunded();
       offReact();
+      offSecret();
       if (spectateTimeout) clearTimeout(spectateTimeout);
     };
-  }, [onCare, onMilestone, onWant, onTitle, onMinigame, onRecord, onFunded, onReact]);
+  }, [onCare, onMilestone, onWant, onTitle, onMinigame, onRecord, onFunded, onReact, onSecret, projectNow]);
+
+  // The ancient code (SPEC §26). Inert while a dialog owns the keyboard:
+  // four of the five minigames bind arrow keys, and GameView is the only
+  // place that knows both dialogs' open state.
+  const onKonami = useCallback(() => {
+    void (async () => {
+      const response = await fetch("/api/konami", { method: "POST" }).catch(() => null);
+      if (!response?.ok) return;
+      const body = (await response.json().catch(() => null)) as { broadcast: boolean; mood: SpectacleMood } | null;
+      if (!body) return;
+      // A won broadcast comes back to this screen over its own stream, so the
+      // feed line is pushed once, there. Losing the guard means no message is
+      // coming — and the finder is never told they were second, so the line is
+      // written locally instead. The canvas is aria-hidden, which makes the
+      // feed the only carrier this reaches (SPEC §11.3); skipping it would
+      // leave a throttled screen-reader user with nothing at all.
+      if (!body.broadcast) {
+        pushFeed("🎮", secretFeedText(body.mood, petNameRef.current, projectNow()?.diedAtTick != null));
+      }
+    })();
+  }, [projectNow]);
+  useKonami(onKonami, !playing && !shopOpen);
 
   const toggleAudio = (): void => {
     const audio = audioRef.current;

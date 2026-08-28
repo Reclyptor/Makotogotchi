@@ -27,6 +27,7 @@ import type {
   RoomMessage,
   FundedMessage,
   RecordMessage,
+  SecretMessage,
   SnapshotMessage,
   TitleMessage,
   WantMessage,
@@ -66,6 +67,7 @@ export type PresenceCaretaker = { id: string; name: string; titles: string[] };
 export type RecordNotice = Omit<RecordMessage, "type">;
 export type FundedNotice = Omit<FundedMessage, "type">;
 export type ReactNotice = Omit<ReactMessage, "type">;
+export type SecretNotice = Omit<SecretMessage, "type">;
 export type CaretakerProfile = { nickname: string | null; streakDays: number; generationsSurvived: number };
 
 /**
@@ -112,6 +114,8 @@ export type PetStream = {
   onRecord: (listener: (notice: RecordNotice) => void) => () => void;
   onFunded: (listener: (notice: FundedNotice) => void) => () => void;
   onReact: (listener: (notice: ReactNotice) => void) => () => void;
+  /** Someone entered the ancient code (SPEC §26.2). */
+  onSecret: (listener: (notice: SecretNotice) => void) => () => void;
 };
 
 export const usePetStream = (): PetStream => {
@@ -124,6 +128,7 @@ export const usePetStream = (): PetStream => {
   const recordListeners = useRef(new Set<(notice: RecordNotice) => void>());
   const fundedListeners = useRef(new Set<(notice: FundedNotice) => void>());
   const reactListeners = useRef(new Set<(notice: ReactNotice) => void>());
+  const secretListeners = useRef(new Set<(notice: SecretNotice) => void>());
   const [room, setRoom] = useState<RoomView | null>(null);
   const [purse, setPurse] = useState<Purse | null>(null);
   const [timeZone, setTimeZone] = useState<string | null>(null);
@@ -283,6 +288,11 @@ export const usePetStream = (): PetStream => {
       const { type: _type, ...notice } = message;
       for (const listener of reactListeners.current) listener(notice);
     });
+    source.addEventListener("secret", (event) => {
+      const message = JSON.parse((event as MessageEvent<string>).data) as SecretMessage;
+      const { type: _type, ...notice } = message;
+      for (const listener of secretListeners.current) listener(notice);
+    });
     source.addEventListener("presence", (event) => {
       acceptPresence(JSON.parse((event as MessageEvent<string>).data) as PresenceMessage);
     });
@@ -346,6 +356,11 @@ export const usePetStream = (): PetStream => {
     return () => reactListeners.current.delete(listener);
   }, []);
 
+  const onSecret = useCallback((listener: (notice: SecretNotice) => void) => {
+    secretListeners.current.add(listener);
+    return () => secretListeners.current.delete(listener);
+  }, []);
+
   return {
     connected,
     caretakerId,
@@ -367,5 +382,6 @@ export const usePetStream = (): PetStream => {
     onRecord,
     onFunded,
     onReact,
+    onSecret,
   };
 };
