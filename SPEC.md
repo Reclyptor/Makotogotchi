@@ -35,7 +35,8 @@
 23. [Dynamic Difficulty](#23-dynamic-difficulty)
 24. [Caretaker Titles](#24-caretaker-titles)
 25. [Pet Wants](#25-pet-wants)
-26. [Appendix: What the Original Got Wrong](#26-appendix-what-the-original-got-wrong)
+26. [The Ancient Code](#26-the-ancient-code)
+27. [Appendix: What the Original Got Wrong](#27-appendix-what-the-original-got-wrong)
 
 ---
 
@@ -741,6 +742,7 @@ nothing for the cost of a custom server.
 | `presence` | `{ count, caretakers[] }` | Throttled to at most once per 2s, leading **and** trailing (§7.4). |
 | `react` | `{ emoji, caretaker }` | Emoji reactions. |
 | `purse` | `{ caretakerId, coins, inventory }` | Whenever a caretaker's coins or pack change, from any cause. **Delivered only to that caretaker** — see below. |
+| `secret` | `{ mood: party \| stars }` | Someone entered the ancient code (§26). Unattributed by construction, and never logged. |
 | `:ping` | comment frame | Every 15s. Keeps intermediaries from reaping an idle stream. |
 
 **`purse` is the one message that is not for the room.** Everything else on
@@ -884,6 +886,7 @@ All request bodies are zod-validated. All responses are typed.
 | `GET` | `/api/state` | One-shot current state. For first paint and for clients without `EventSource`. |
 | `POST` | `/api/care` | `{ action }` → performs a care action. `200` / `409` (illegal or cooling down) / `429` (rate limited). |
 | `POST` | `/api/react` | `{ emoji }` → broadcasts a reaction. |
+| `POST` | `/api/konami` | Empty body → broadcasts the §26 spectacle. `200 { broadcast, mood }` either way; `broadcast: false` means the 5-minute global guard was already held. |
 | `GET` | `/api/leaderboard` | `?window=today|week|all|generation` |
 | `GET` | `/api/memorial` | Paginated past generations. |
 | `POST` | `/api/nickname` | `{ nickname }` → sets or changes it. |
@@ -1432,6 +1435,7 @@ Makotogotchi/
 │   └── sw.js                   # push service worker
 └── src/
     ├── sim/                    # PURE simulation core (SPEC §4) + economy.ts
+    │                           # secret.ts — spectacle mood (SPEC §26.3)
     ├── server/
     │   ├── db/                 # mongo client, collections, repository
     │   ├── redis/              # client, write lock, leader lease
@@ -1439,16 +1443,18 @@ Makotogotchi/
     │   ├── push/               # subscriptions store, dispatcher, sender
     │   ├── stream/             # SSE fanout hub (one Redis sub per pod)
     │   ├── env.ts identity.ts ratelimit.ts presence.ts http.ts
-    │   ├── social.ts votes.ts shop.ts snapshot.ts schedule.ts
+    │   ├── social.ts votes.ts shop.ts snapshot.ts schedule.ts secret.ts
     │   └── runtime.ts testsetup.ts
     ├── game/                   # canvas engine, anim machine, room scene, audio
+    │                           # scene/party + scene/retro (SPEC §26.4, §26.5)
     └── app/                    # Next.js App Router
         ├── layout.tsx page.tsx globals.css
         ├── memorial/ leaderboard/ about/
         ├── health/ ready/
         ├── api/                # care state stream react nickname leaderboard
-        │                       # memorial name-vote push shop play
+        │                       # memorial name-vote push shop play konami
         ├── hooks/              # usePetStream (client reconciliation, SPEC §7.4)
+        │                       # konami (pure matcher) + useKonami (SPEC §26.1)
         └── components/         # GameView PetCanvas Meters FeedLog VotePanel
                                 # NicknameEditor PushToggle QuestBanner
                                 # WantBanner (+copy) minigames/ (Shell +
@@ -2703,12 +2709,355 @@ independent of it except Wish Granter (lands in T2, after A3–A4).
 
 ---
 
-## 26. Appendix: What the Original Got Wrong
+## 26. The Ancient Code
+
+An easter egg, and the only feature in this document that exists purely
+because it is delightful. Typing
+
+```
+↑ ↑ ↓ ↓ ← → ← → B A ⏎
+```
+
+opens the sky. It is specified in full anyway — the spec is the contract,
+not the marketing, and an undocumented secret is just an unexplained
+2,000-line diff to whoever reads this next.
+
+Two things happen at once, and they are deliberately different in kind:
+
+| Half | Reach | Lifetime |
+| --- | --- | --- |
+| **The spectacle** | every connected client, simultaneously | ~8 seconds, then gone without a trace |
+| **Retro mode** | only the caretaker who typed it | permanent, on this browser |
+
+The pairing is the design. The spectacle alone leaves the finder with
+nothing to keep; retro mode alone is a secret nobody can witness, in an app
+whose entire thesis is that we are all watching the same animal. Together,
+finding it is a communal event *and* a personal souvenir.
+
+### 26.1 The Sequence and the Listener
+
+`src/app/hooks/konami.ts` holds the sequence and a pure matcher; the DOM
+lives in `src/app/hooks/useKonami.ts`. Splitting them is what lets the
+matcher be unit-tested without a browser, and the matcher is where all the
+subtlety is.
+
+```
+KONAMI = [ArrowUp, ArrowUp, ArrowDown, ArrowDown,
+          ArrowLeft, ArrowRight, ArrowLeft, ArrowRight, b, a, Enter]
+```
+
+Matched against a **rolling buffer of the last 11 keys**, not an
+advance-or-reset index. An index that resets to zero on mismatch gets
+overlapping prefixes wrong — the classic failure is `↑↑↑↓↓…`, where the
+third `↑` should leave the matcher one key in rather than back at the
+start. A rolling buffer has no such case to get wrong, and comparing eleven
+values on keydown is free.
+
+`b` and `a` compare case-insensitively (`event.key.toLowerCase()`), so caps
+lock does not eat the secret.
+
+The listener is inert unless every one of these holds:
+
+- **No dialog owns the keyboard.** Four of the five minigames bind arrow
+  keys (`DustDash`, `SnackCatch`, `WheelSprint`, `BubblePop`), and the shop
+  is a modal. A live game must never half-arm the buffer, so the hook takes
+  an `enabled` flag and `GameView` passes `!playing && !shopOpen`.
+- **The event is not typing.** Keydowns whose `target` is an `input`,
+  `textarea`, or `contenteditable` are ignored — the nickname editor is a
+  text field and `a`/`b` are letters.
+- **The event is not an auto-repeat.** `event.repeat` is skipped; holding a
+  key down is not eleven presses.
+
+Nothing is ever `preventDefault`ed **except the completing `Enter`**.
+Swallowing arrow keys speculatively would break page scrolling for every
+visitor in order to catch a secret almost none of them are typing, which is
+a bad trade. The final `Enter` is different: at that instant the sequence is
+known to be the code, so consuming it is justified and it stops the press
+from also activating whichever action button happened to hold focus.
+
+### 26.2 The Broadcast
+
+A new engine message, alongside `react` in `src/server/engine/messages.ts`:
+
+```ts
+/** The ancient code (SPEC §26) — pure broadcast, no state, no attribution. */
+export type SecretMessage = { type: "secret"; mood: SpectacleMood };
+```
+
+**There is no `caretakerId` in the payload, by construction.** Nothing to
+attribute means nothing to farm, nothing to harass with, and nothing for
+`deliverableTo` to gate — it stays a room message and that function is
+untouched. It follows `react/route.ts`'s "zero moderation surface by
+construction" exactly: the only field that reaches other clients is a
+two-value enum.
+
+`POST /api/konami` takes an empty body and, in order:
+
+1. resolves the caretaker cookie (`resolveCaretaker`),
+2. takes a per-IP token (`LIMITS.perIp`) — 60/min, as every route does,
+3. takes a per-caretaker token (`LIMITS.perCaretaker`) — this is an action,
+4. reads the authoritative state and derives the mood,
+5. claims the global guard via `shouldBroadcastSpectacle`
+   (`src/server/secret.ts` — `SET mgc:konami:guard 1 NX EX 300`),
+6. publishes to `key("events")` if it won.
+
+The mood is derived **before** the guard is claimed, not after. The losing
+path returns it too — that is what lets a throttled client draw the right
+spectacle locally — so deriving it only on the winning branch would leave
+everyone who lost the window guessing at which one to play.
+
+The guard is a named predicate in its own module rather than a `SET` inline
+in the route, following `shouldBroadcastPresence`: a claim about concurrency
+deserves a test that races real callers at it (`secret.test.ts`, real Redis
+per §16.4) instead of an assertion in a comment. Those tests also pin the two
+things a hand-rolled guard tends to get wrong — that the TTL is set by the
+claim, and that a *losing* call does not refresh it, since a steady trickle
+of attempts refreshing the window would hold the room silent indefinitely.
+
+The guard is **global, not per-caretaker**. Per-caretaker throttling still
+lets ten people chain ten spectacles back to back, which is the actual
+failure mode worth preventing — the feed is the app's shared memory (§2.11)
+and the client holds only the last 120 lines, so a chain of these evicts
+genuine care history.
+
+Losing the guard is **not an error**. The response is `200 { broadcast:
+false, mood }` and the client quietly runs the spectacle locally instead.
+A `429` here would punish someone for the crime of finding an easter egg
+slightly after someone else did, and the finder — who has no way to know
+the room already partied — would read it as broken.
+
+| Response | Meaning | Client does |
+| --- | --- | --- |
+| `200 { broadcast: true, mood }` | published to everyone | nothing; the SSE `secret` message drives it, including on this screen |
+| `200 { broadcast: false, mood }` | guard held by someone else | runs the spectacle locally only |
+| `429` | rate limited (flood) | nothing visible beyond the retro unlock |
+
+Both success paths end at the same `room.spectacle(mood, nowMs)` call.
+There is one code path that draws this thing, and the broadcast decides only
+who reaches it.
+
+The stream route needs **no change**: it already forwards any message as
+`send(message.type, message)`. `usePetStream` gains a `secret` listener and
+an `onSecret` subscription beside `onReact`.
+
+### 26.3 Which Mood, When
+
+The mood is derived **server-side** from the authoritative state, never sent
+by the client — §8.4 holds here like everywhere else. Deriving it once and
+putting it in the message is also what guarantees every screen shows the
+*same* spectacle: two clients evaluating "is it asleep" independently could
+straddle the wake tick and disagree, and half the room seeing confetti while
+the other half sees stars would quietly undo the entire point.
+
+| Pet state | Mood | Why |
+| --- | --- | --- |
+| Awake and alive | `party` | the ordinary case |
+| Asleep | `stars` | the room is already dim and quiet; confetti would be a smash cut |
+| Egg (incubating) | `party` | incubation is hopeful, and the naming vote is already a celebration of what is coming |
+| Dead | `stars`, whatever the hour | the memorial is not a place for confetti |
+
+Death gets the star shower rather than an exception carved out for it.
+Giving the one tonally risky state the version of the effect that actually
+suits it is better than suppressing the feature there: an elegy instead of
+a party, and the best-looking thing the death screen ever does.
+
+### 26.4 The Spectacle
+
+`src/game/scene/party.ts` — a `Spectacle` class owning both moods. It does
+not live in `room.ts`: that file is already 549 lines, and two overlay
+renderers plus a starfield would push it past the point where it is
+comfortable to reason about (§9 housekeeping).
+
+```ts
+export type SpectacleMood = "party" | "stars";
+
+export class Spectacle {
+  start(mood: SpectacleMood, nowMs: number): void;
+  /** Sky: behind the pet, after the decor. */
+  renderBehind(ctx: SceneContext, nowMs: number): void;
+  /** Confetti: in front of everything. */
+  renderFront(ctx: SceneContext, nowMs: number): void;
+  get active(): boolean;
+  /** True while a `stars` run owns the dimming — see below. */
+  get supersedesNightDim(): boolean;
+}
+```
+
+Two passes rather than one, because the layering carries the meaning. The
+sky goes **behind** the pet so meteors pass at depth and Makoto reads as a
+silhouette against it; confetti goes **in front** so it falls past the
+camera. One combined pass would put confetti behind the pet or meteors in
+front of it, and both look wrong.
+
+`DURATION_MS = 8000` for both moods.
+
+**`party` — 8 seconds, awake**
+
+- A full-canvas colour wash at α ≈ 0.10, its hue stepping through six stops
+  on a slow beat. Low alpha on purpose: the room stays readable, and the
+  meters beside it stay the thing you can check at a glance.
+- Confetti from an **own fixed-size array of 64**, not the shared
+  `Particles` pool. The pool holds 128 and recycles the oldest on overflow;
+  eight seconds of continuous confetti would evict the crumbs and hearts
+  that are the room's feedback for actual care. Confetti falls under
+  gravity with a horizontal sway and a per-piece colour.
+- The pet loops `celebrating`, re-triggered each time the clip runs out.
+- Toast over the pet: `↑↑↓↓←→←→BA`.
+
+**`stars` — 8 seconds, asleep or dead**
+
+| t | What |
+| --- | --- |
+| 0.0s | room as normal |
+| 0.3s | indigo wash ramps to α ≈ 0.75 across the whole canvas — walls, floor and decor all sink beneath it |
+| 0.8s | starfield fades in: ~40 fixed 1px points, three brightnesses, twinkling on their own phases |
+| 1.0s | meteors begin — corner to corner, staggered, varied length and speed, a 3px head with a five-dot fading tail |
+| 6.5s | the shower thins |
+| 7.2s | wash ramps back down |
+| 8.0s | the room again; Makoto never woke |
+
+Everything here is drawn in `renderBehind`, so the wash never touches the
+pet — it sinks the *room* and leaves the animal lit against it, which is
+the whole image.
+
+The starfield and the meteor schedule come from the same
+deterministic-enough LCG `Particles` uses, seeded per run: the frame digest
+(§10.1) replays `paint` to decide whether to draw, so a spectacle that
+generated fresh randomness on each replay would hash differently every frame
+and defeat the skip.
+
+While a `stars` run is active the room's existing sleeping dim is
+**skipped** — the indigo wash supersedes it. Both would double-dim, and the
+scene would come back to normal in two visible steps instead of one.
+
+The existing `shooting-star` ambient (§21.5) is the same phenomenon at
+ordinary volume: three small streaks confined above the wainscot so they
+read as sky through the window. This is that turned all the way up, which
+is why it is worth them sharing a visual vocabulary rather than being two
+unrelated effects.
+
+**Audio** — `GameAudio.playSecret(mood)`. `play()` currently hardcodes
+`osc.type = "square"`; it gains an `OscillatorType` parameter defaulting to
+`"square"` so nothing else changes.
+
+| Mood | Sound |
+| --- | --- |
+| `party` | a rising square-wave fanfare, volume 0.10 |
+| `stars` | a slow triangle-wave arpeggio, volume 0.05 — the same timbre as the ambient pad, so it reads as the room breathing rather than an alert |
+
+Muted by default like all audio, and `play()`'s existing mute check is the
+only gate needed.
+
+**Feed lines** — the canvas is `aria-hidden`, so the feed is what actually
+carries this to a screen reader, as with every other scene event (§11.3).
+
+| Mood | Line |
+| --- | --- |
+| `party` | 🎮 Someone remembered the ancient code. |
+| `stars`, asleep | 🎮 Someone tried the ancient code. Makoto slept right through it. |
+| `stars`, dead | 🎮 Someone remembered the ancient code. The sky remembered too. |
+
+### 26.5 Retro Mode
+
+The keepsake. `localStorage["mgc:retro"]` is absent until the code is found
+and holds `"on"` / `"off"` thereafter — one key carrying both *unlocked* and
+*enabled*, because "found it but switched it off" and "never found it" need
+to be told apart and nothing else does.
+
+Finding the code writes `"on"` and toasts `📺 RETRO MODE UNLOCKED`. A 📺
+button then joins the header cluster beside the 🔇 mute toggle, on this and
+every future visit, with `aria-pressed` and an `aria-label` of
+`Retro display` — same shape as the mute button it sits next to. Caretakers
+who have not found the code have no such button, and a 📺 in someone else's
+screenshot is the only clue this feature exists anywhere in the product.
+
+Rendering is a post-pass at the end of `Room.paint`, in
+`src/game/scene/retro.ts`, over the canvas only — the canvas is the screen;
+the surrounding UI is not inside the television.
+
+- 1px scanlines on every other row, ~8% black.
+- A warm phosphor bloom: one low-alpha full-canvas rect.
+- A vignette built from a handful of nested translucent rects.
+
+**The vignette must not use a `CanvasGradient`.** `DigestContext` stringifies
+any non-string `fillStyle` to the literal `"object-fill"` (`digest.ts`), so
+two different gradients hash identically — a gradient that changed
+appearance would never trigger a repaint and would freeze on screen. Static
+rects have no such trap. This is a real constraint of the render engine, not
+a style preference.
+
+Roughly a hundred `fillRect`s per painted frame at `ROOM_HEIGHT/2` scanlines
+is acceptable: the loop runs at 15fps and the digest skips most frames
+outright, and the calls are identical every frame so they contribute a
+constant to the hash and cause no *extra* repaints. If profiling ever
+disagrees, the overlay becomes one cached offscreen blit — but not before,
+and `putImageData` is not the way to do it, since it replaces pixels rather
+than compositing.
+
+### 26.6 Reduced Motion
+
+`prefers-reduced-motion` suppresses the wash, the confetti, the starfield,
+the meteors and the cheer loop. The toast and the feed line carry it alone —
+the same rule §21.5 already applies to rare events, and the room's
+`reducedMotion` setter is already the single place that decides it.
+
+Retro mode is **not** suppressed. Scanlines, bloom and vignette are entirely
+static; there is no motion in them to reduce, and taking someone's unlocked
+keepsake away for a preference about animation would be a misreading of what
+the preference asks for.
+
+### 26.7 What It Deliberately Does Not Do
+
+The code is going to leak — that is what easter eggs do — so it is built so
+that leaking costs nothing:
+
+- **No sim effect.** No meter moves, no coin is minted, no item is granted,
+  no title changes hands. §21.5 settled this principle for rare events:
+  material-free, the moment is the reward. A secret that paid out would be
+  a faucet gated behind a string that everyone knows by the second week.
+- **Nothing is written to Mongo.** No collection, no migration, no index.
+- **Nothing is appended to the event log.** It does not replay, it leaves no
+  memorial trace, and it never appears in `/api/feed` history. Someone who
+  loads the page a minute later sees no evidence it happened, which is
+  precisely what makes having witnessed it worth something.
+- **No attribution.** See §26.2.
+
+### 26.8 Testing
+
+| Level | Covers |
+| --- | --- |
+| Unit — `konami.test.ts` | the full sequence; a wrong key mid-way; the overlapping-prefix case (`↑↑↑↓↓…`); `B`/`b` case-insensitivity; repeats and typing-target events ignored |
+| Unit — mood derivation | dead → `stars`; egg → `party`; asleep → `stars`; awake → `party` |
+| Unit — `Spectacle` | inert before `start` and after expiry; identical draw calls for identical `nowMs` across two runs (the digest depends on it); `supersedesNightDim` only while a `stars` run is live |
+| Unit — retro pass | contributes nothing to the frame when disabled |
+| E2E — `e2e/konami.spec.ts` | type the sequence on `/`; the 📺 toggle appears and survives a reload; the feed line lands; **a second browser context sees the same feed line** — the communal half is the part worth an e2e |
+
+The e2e must clear `mgc:konami:guard` in `global-setup.ts`; a 5-minute guard
+outlives a test run and would fail the second spec to touch it.
+
+### 26.9 Delivery Phases
+
+Same rules as §20 and §21.10: each phase ends green on typecheck, lint and
+tests, one commit per seam, nothing broken ever committed. No phase touches
+more than five files.
+
+| # | Phase | Files | Done when |
+| --- | --- | --- | --- |
+| **K1** | Protocol + route | `sim/secret.ts`, `server/secret.ts`, `messages.ts`, `api/konami/route.ts` | the route publishes a `secret` message; mood derivation unit-tested; the guard proven against real Redis — one winner from a race, TTL set on the claim, not refreshed by losers |
+| **K2** | Detection + feed | `hooks/konami.ts`, `hooks/useKonami.ts`, `usePetStream.ts`, `GameView` | the sequence posts, the feed line lands on every open tab, matcher unit-tested; inert during a minigame |
+| **K3** | The spectacle | `scene/party.ts`, `room.ts`, `PetCanvas`, `audio.ts` | both moods draw; reduced motion falls back to the feed line; the digest still skips idle frames |
+| **K4** | Retro mode | `scene/retro.ts`, `room.ts`, `PetCanvas`, `GameView` | 📺 appears only once found, persists across reload, toggles the pass |
+| **K5** | E2E | `e2e/konami.spec.ts`, `global-setup.ts` | two contexts witness one spectacle; guard flushed between runs |
+
+
+---
+
+## 27. Appendix: What the Original Got Wrong
 
 Recorded so the rebuild is measured against real defects rather than vague
 dissatisfaction. Source: `~/Projects/makotogotchi_old` at `master`.
 
-### 26.1 Architectural
+### 27.1 Architectural
 
 1. **No server.** State lived in `localStorage`. Every visitor had a private
    pet. The premise of a shared global pet was unimplementable on that
@@ -2722,7 +3071,7 @@ dissatisfaction. Source: `~/Projects/makotogotchi_old` at `master`.
    the simulation unreproducible. There were no tests, and none could have
    been written without heavy mocking.
 
-### 26.2 Simulation Bugs
+### 27.2 Simulation Bugs
 
 4. **`status()` read pre-tick state**, so every derived status lagged one tick
    behind the values it was derived from.
@@ -2740,7 +3089,7 @@ dissatisfaction. Source: `~/Projects/makotogotchi_old` at `master`.
     and the reconstruction silently dropped `ANGRY` from the array — so any
     angry state that had been set would vanish on the next tick.
 
-### 26.3 Structural
+### 27.3 Structural
 
 11. **Presentation stored as game state.** `Status.CLONE1..4` were animation
     frames living in the state enum.
