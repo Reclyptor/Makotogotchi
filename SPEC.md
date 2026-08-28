@@ -2019,6 +2019,33 @@ Drawn back to front, all in the theme's palette (§22.5):
    **upgrades** the room's window with a cushioned bench and a wider
    frame.
 
+**The `picture` decor is the one piece that is a picture.** Every other item
+is a handful of rectangles in the theme's palette, which is all a plant or a
+lamp needs to read; a portrait, whose whole point is that there is something
+on the wall worth looking at, needs more than that. It is a real drawing —
+Natsumi and her mouse, `scripts/art/portrait-source.png` — put through a
+pixel filter down to 48×48 at 20 colours. It keeps the drawing's own palette
+rather than the room's: a painting does not repaint when the walls do (§22.5).
+Only its frame is furniture, and only the frame is drawn as rects. It hangs
+level with the window, which is the only other thing on that wall.
+
+The filter is a script, `npm run art:portrait`, not a one-off: it crops to the
+drawing's own bounds, area-averages each cell **weighted toward ink**, and
+median-cuts the result to a palette, writing `portrait.generated.ts` and a
+contact print to look at. The weighting is the whole trick — the strokes are
+one to three pixels wide on a 449×420 sheet surrounded by white paper, so a
+plain mean at 48 across dissolves the drawing into off-white. Keeping the
+filter in a script rather than its output in a hand-edited file is what makes
+the result reviewable: nobody can tell by eye whether 48 rows of palette
+letters are right, but they can tell whether the filter is.
+
+The room paints twice a frame (§10.1) — once into the digest, and again onto
+the canvas only if that hash moved — so the picture is cached on an offscreen
+canvas and blitted, the way the architecture is (§22.2). Drawing it as the
+several hundred rectangles it decomposes into would fold those rectangles
+into the digest on every frame forever, which is the wrong price for art that
+never changes.
+
 ### 22.4 Weather and Season
 
 Weather renders inside the window and, sparingly, in the room:
