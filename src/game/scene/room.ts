@@ -9,6 +9,7 @@ import { DigestContext, type SceneContext } from "../engine/digest";
 import { Toasts } from "./toasts";
 import { Portrait, PORTRAIT_HEIGHT, PORTRAIT_WIDTH } from "./portrait";
 import { Spectacle } from "./party";
+import { renderRetro } from "./retro";
 import { AnimationMachine } from "../anim/machine";
 import { BASE_CLIPS, BUTTERFLY_CLIP, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP, type OneShotName } from "../anim/clips";
 import { SPRITE_FRAMES } from "../atlas.generated";
@@ -193,6 +194,9 @@ export class Room {
   private lastWanderMs: number | null = null;
   private moment: { event: AmbientEvent; startedMs: number } | null = null;
   decor: RoomDecor = { decor: [], activeCosmetic: null };
+  /** Retro display, the ancient code's keepsake (SPEC §26.5). Static, so
+   *  reduced motion leaves it alone — there is no motion in it to reduce. */
+  retro = false;
 
   /** The frame the canvas is currently showing, and the recorder that decides
    *  whether the next one would differ from it (engine/digest.ts). */
@@ -444,6 +448,10 @@ export class Room {
     }
 
     this.toasts.render(ctx, nowMs, PET_X, PET_Y - 110);
+
+    // Last of all: the television is in front of everything in the room,
+    // including its toasts.
+    if (this.retro) renderRetro(ctx);
   }
 
   /**

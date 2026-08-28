@@ -78,9 +78,11 @@ export type PetCanvasProps = {
    * throttled entry of the same mood a second spectacle rather than a no-op.
    */
   localSecret?: { mood: SpectacleMood; nonce: number } | null;
+  /** Retro display, the ancient code's keepsake (SPEC §26.5). */
+  retro?: boolean;
 };
 
-export default function PetCanvas({ stream, localSecret = null }: PetCanvasProps) {
+export default function PetCanvas({ stream, localSecret = null, retro = false }: PetCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const { projectNow, onCare, onMilestone, onWant, onMinigame, onReact, onSecret, caretakerId, room: roomView, timeZone, presenceCount } =
     stream;
@@ -89,6 +91,14 @@ export default function PetCanvas({ stream, localSecret = null }: PetCanvasProps
   useEffect(() => {
     roomViewRef.current = roomView;
   }, [roomView]);
+  const retroRef = useRef(retro);
+  useEffect(() => {
+    retroRef.current = retro;
+    // The pass is part of the frame, so flipping it has to invalidate the one
+    // already on the canvas — otherwise the room believes it has painted this
+    // exact scene and skips, and the television never switches on.
+    roomRef.current?.invalidate();
+  }, [retro]);
   const timeZoneRef = useRef(timeZone);
   useEffect(() => {
     timeZoneRef.current = timeZone;
@@ -247,6 +257,7 @@ export default function PetCanvas({ stream, localSecret = null }: PetCanvasProps
         }
         const view = roomViewRef.current;
         if (view) room.decor = { decor: view.decor, activeCosmetic: view.activeCosmetic };
+        room.retro = retroRef.current;
         room.render(ctx, now);
       },
     });

@@ -529,6 +529,40 @@ describe("the ancient code in the room (SPEC §26)", () => {
     expect(paintedCalls(quietRec, () => quiet.room.render(quietRec.ctx, 6000))).toBe(0);
   });
 
+  it("switches the television on without touching anything else", () => {
+    const plain = contentedRoom();
+    const crt = contentedRoom();
+    crt.room.retro = true;
+    const plainRec = recordingContext();
+    const crtRec = recordingContext();
+    plain.room.syncDerived(plain.derived, true, 0);
+    crt.room.syncDerived(crt.derived, true, 0);
+    // Same instant, same asleep room: the only difference is the post-pass.
+    expect(paintedCalls(plainRec, () => plain.room.render(plainRec.ctx, 1000))).toBeGreaterThan(0);
+    expect(paintedCalls(crtRec, () => crt.room.render(crtRec.ctx, 1000))).toBeGreaterThan(
+      plainRec.calls(),
+    );
+  });
+
+  it("keeps the television under reduced motion — there is no motion in it", () => {
+    // SPEC §26.6: scanlines, bloom and vignette are static, and taking an
+    // unlocked keepsake away over an animation preference misreads it.
+    const quiet = contentedRoom();
+    quiet.room.reducedMotion = true;
+    quiet.room.retro = true;
+    const recorder = recordingContext();
+    quiet.room.syncDerived(quiet.derived, true, 0);
+    quiet.room.render(recorder.ctx, 1000);
+
+    const bare = contentedRoom();
+    bare.room.reducedMotion = true;
+    const bareRec = recordingContext();
+    bare.room.syncDerived(bare.derived, true, 0);
+    bare.room.render(bareRec.ctx, 1000);
+
+    expect(recorder.calls()).toBeGreaterThan(bareRec.calls());
+  });
+
   it("does not double-dim a sleeping room", () => {
     // The indigo wash stands in for the night dim (SPEC §26.4); both at once
     // would darken twice and lift in two visible stages.

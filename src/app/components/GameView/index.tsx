@@ -31,6 +31,7 @@ import { isVenueId, venueAt } from "@/sim/atmosphere";
 import { FREE_VENUES, petClock, venueSpec } from "@/game/scene/backdrop";
 import { usePetStream } from "@/app/hooks/usePetStream";
 import { useKonami } from "@/app/hooks/useKonami";
+import { useRetro } from "@/app/hooks/useRetro";
 import type { SpectacleMood } from "@/sim/secret";
 import type { FeedEntryPayload } from "@/app/api/feed/route";
 
@@ -187,6 +188,7 @@ export default function GameView() {
   const [playing, setPlaying] = useState<MinigameId | null>(null);
   const [spectating, setSpectating] = useState<{ name: string; game: string; score: number } | null>(null);
   const [localSecret, setLocalSecret] = useState<{ mood: SpectacleMood; nonce: number } | null>(null);
+  const retro = useRetro();
   const secretNonce = useRef(0);
   const audioRef = useRef<GameAudio | null>(null);
   const localId = useRef(0);
@@ -384,6 +386,9 @@ export default function GameView() {
   // four of the five minigames bind arrow keys, and GameView is the only
   // place that knows both dialogs' open state.
   const onKonami = useCallback(() => {
+    // The keepsake first, and unconditionally: it is this caretaker's alone,
+    // so it must not depend on the network, the guard, or anyone watching.
+    if (retro.unlock()) pushFeed("📺", "RETRO MODE UNLOCKED");
     void (async () => {
       const response = await fetch("/api/konami", { method: "POST" }).catch(() => null);
       if (!response?.ok) return;
@@ -402,7 +407,7 @@ export default function GameView() {
         setLocalSecret({ mood: body.mood, nonce: secretNonce.current });
       }
     })();
-  }, [projectNow]);
+  }, [projectNow, retro]);
   useKonami(onKonami, !playing && !shopOpen);
 
   const toggleAudio = (): void => {
@@ -502,6 +507,17 @@ export default function GameView() {
               {stream.presenceCaretakers.length === 0 && <li className="text-muted">nobody yet — stay a while</li>}
             </ul>
           </details>
+          {retro.found && (
+            <button
+              type="button"
+              onClick={retro.toggle}
+              aria-pressed={retro.on}
+              aria-label="Retro display"
+              className="press panel !rounded-full px-2.5 py-1 text-xs"
+            >
+              📺
+            </button>
+          )}
           <button
             type="button"
             onClick={toggleAudio}
@@ -543,7 +559,7 @@ export default function GameView() {
       {/* The habitat */}
       <div className="panel w-full overflow-hidden !rounded-3xl p-1.5">
         <div className="overflow-hidden rounded-[1.15rem] bg-[#2a2333]">
-          <PetCanvas stream={stream} localSecret={localSecret} />
+          <PetCanvas stream={stream} localSecret={localSecret} retro={retro.on} />
         </div>
         <p aria-live="polite" className="px-3 py-2 text-center text-sm text-muted">
           {statusText}
