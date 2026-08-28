@@ -40,6 +40,7 @@ export default function WheelSprint({ sheet, reportScore, finish }: GameProps) {
     let elapsed = 0;
 
     const tap = (): void => {
+      if (!armed()) return;
       // Every gesture counts as an input, scoring or not, so the server-side
       // inputs >= score invariant holds by construction.
       inputs += 1;
@@ -63,7 +64,7 @@ export default function WheelSprint({ sheet, reportScore, finish }: GameProps) {
     canvas.addEventListener("pointerdown", tap);
     window.addEventListener("keydown", onKey);
 
-    const stop = startGameLoop((dtMs) => {
+    const { stop, armed } = startGameLoop((dtMs) => {
       const dt = dtMs / 1000;
       elapsed += dtMs;
       flashMs = Math.max(0, flashMs - dtMs);

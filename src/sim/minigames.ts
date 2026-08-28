@@ -7,6 +7,13 @@
 export const MINIGAME_IDS = ["dustdash", "snackcatch", "bubblepop", "simon", "wheelsprint"] as const;
 export type MinigameId = (typeof MINIGAME_IDS)[number];
 
+/** Every run opens with a countdown before the game's clock starts (SPEC
+ *  §13.3.1) — long enough to read a board you were handed at random. It lives
+ *  here because both ends need the same number: the client paints it, and the
+ *  server deducts it from the elapsed wall time so the pre-roll can never be
+ *  spent as play time. */
+export const MINIGAME_COUNTDOWN_MS = 3_000;
+
 export type MinigameDef = {
   id: MinigameId;
   title: string;
@@ -92,10 +99,17 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
 export const isMinigameId = (value: unknown): value is MinigameId =>
   typeof value === "string" && (MINIGAME_IDS as readonly string[]).includes(value);
 
-/** The envelope check the server applies at finish (SPEC §13.3). */
-export const plausibleRun = (game: MinigameDef, elapsedMs: number, score: number, inputs: number): boolean =>
-  elapsedMs >= 1_000 &&
-  elapsedMs <= game.maxDurationMs &&
-  score <= game.maxScore &&
-  score <= Math.ceil((elapsedMs / 1000) * game.maxScorePerSecond) &&
-  inputs >= Math.ceil(score * game.inputsPerPoint);
+/** The envelope check the server applies at finish (SPEC §13.3). `elapsedMs`
+ *  is wall time since `start`, which opens with the pre-roll nobody can play
+ *  through — the count comes off first, so every ceiling below still bounds
+ *  play time and only play time. */
+export const plausibleRun = (game: MinigameDef, elapsedMs: number, score: number, inputs: number): boolean => {
+  const playMs = elapsedMs - MINIGAME_COUNTDOWN_MS;
+  return (
+    playMs >= 1_000 &&
+    playMs <= game.maxDurationMs &&
+    score <= game.maxScore &&
+    score <= Math.ceil((playMs / 1000) * game.maxScorePerSecond) &&
+    inputs >= Math.ceil(score * game.inputsPerPoint)
+  );
+};

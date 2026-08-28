@@ -66,6 +66,7 @@ export default function BubblePop({ sheet, reportScore, finish }: GameProps) {
     // Every pointerdown counts as an input even on a miss, which keeps the
     // recorded inputs ≥ score for the server's plausibility check.
     const onPointerDown = (event: PointerEvent): void => {
+      if (!armed()) return;
       inputs += 1;
       const rect = canvas.getBoundingClientRect();
       const tapX = ((event.clientX - rect.left) / rect.width) * GAME_W;
@@ -83,6 +84,7 @@ export default function BubblePop({ sheet, reportScore, finish }: GameProps) {
     const onKey = (event: KeyboardEvent): void => {
       if (event.code !== "Space") return;
       event.preventDefault();
+      if (!armed()) return;
       inputs += 1;
       let best = -1;
       for (let i = 0; i < bubbles.length; i += 1) {
@@ -93,7 +95,7 @@ export default function BubblePop({ sheet, reportScore, finish }: GameProps) {
     canvas.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("keydown", onKey);
 
-    const stop = startGameLoop((dtMs) => {
+    const { stop, armed } = startGameLoop((dtMs) => {
       elapsed += dtMs;
 
       // The bath keeps foaming as long as there is room on screen.

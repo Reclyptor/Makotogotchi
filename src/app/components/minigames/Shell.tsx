@@ -9,9 +9,13 @@
 // It also owns the crowd noise (SPEC §21.6): while a run is live, every
 // reaction the room sends floats up over the canvas. The overlay is plain
 // DOM sitting above the game — no game component ever learns it exists.
+//
+// The pre-roll numerals (SPEC §13.3.1) work the same way: the game mounts and
+// paints its opening board immediately, the Shell counts down over the top of
+// it, and the shared game loop is what actually holds the board still.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MINIGAMES, type MinigameId } from "@/sim/minigames";
+import { MINIGAMES, MINIGAME_COUNTDOWN_MS, type MinigameId } from "@/sim/minigames";
 import { loadSpriteSheet } from "@/game/engine/atlas";
 import { SPRITE_SHEET_URL } from "@/game/atlas.generated";
 import type { ReactNotice } from "@/app/hooks/usePetStream";
@@ -42,6 +46,7 @@ export default function Shell({ gameId, onClose, onReact }: ShellProps) {
   const [result, setResult] = useState<Result | null>(null);
   const [sheet, setSheet] = useState<HTMLImageElement | null>(null);
   const [cheers, setCheers] = useState<Cheer[]>([]);
+  const [countdown, setCountdown] = useState(Math.ceil(MINIGAME_COUNTDOWN_MS / 1000));
   const scoreRef = useRef(0);
   const cheerIdRef = useRef(0);
   const finishedRef = useRef(false);
@@ -81,6 +86,23 @@ export default function Shell({ gameId, onClose, onReact }: ShellProps) {
         body: JSON.stringify({ phase: "score", score: scoreRef.current }),
       }).catch(() => null);
     }, SCORE_BROADCAST_MS);
+    return () => clearInterval(interval);
+  }, [phase]);
+
+  // The pre-roll numerals. The deadline is fixed the moment play begins and
+  // every tick reads the clock, so a throttled tab resumes on the right number
+  // instead of finishing its count three seconds late; the interval stops
+  // itself at zero rather than idling for the rest of the run.
+  useEffect(() => {
+    if (phase !== "playing") return;
+    const endsAtMs = performance.now() + MINIGAME_COUNTDOWN_MS;
+    let interval = 0;
+    const tick = (): void => {
+      const remaining = Math.max(0, Math.ceil((endsAtMs - performance.now()) / 1000));
+      setCountdown(remaining);
+      if (remaining === 0) clearInterval(interval);
+    };
+    interval = window.setInterval(tick, 100);
     return () => clearInterval(interval);
   }, [phase]);
 
@@ -172,6 +194,16 @@ export default function Shell({ gameId, onClose, onReact }: ShellProps) {
               ) : (
                 <p className="text-sm text-muted">{phase === "reporting" ? "Recording the result…" : "Warming up…"}</p>
               )}
+              {phase === "playing" && countdown > 0 && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <span
+                    key={countdown}
+                    className="animate-pop font-pixel text-4xl text-white/80 drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)] tabular-nums"
+                  >
+                    {countdown}
+                  </span>
+                </div>
+              )}
               {cheers.map((cheer) => (
                 <span
                   key={cheer.id}
@@ -183,6 +215,13 @@ export default function Shell({ gameId, onClose, onReact }: ShellProps) {
               ))}
             </div>
             <p className="text-xs text-muted">{game.hint}</p>
+            {phase === "playing" && (
+              // The count is the start signal, so it has to reach someone who
+              // cannot see the numerals.
+              <p className="sr-only" aria-live="polite">
+                {countdown > 0 ? `${def.title} starts in ${countdown}` : `${def.title} — go!`}
+              </p>
+            )}
           </>
         )}
         {phase === "done" && result && (

@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FrameName } from "@/game/atlas.generated";
+import { MINIGAME_COUNTDOWN_MS } from "@/sim/minigames";
 import { drawFrameAnchored, GAME_W } from "./engine";
 import type { GameProps } from "./types";
 
@@ -121,13 +122,18 @@ export default function SimonSqueaks({ sheet, reportScore, finish }: GameProps) 
   // Start the run on mount. Resetting the refs first makes a strict-mode
   // remount restart cleanly instead of doubling the sequence. The time limit
   // is a scheduled cutoff, so even an abandoned run ends inside the envelope.
+  //
+  // This game drives itself on timers rather than the shared loop, so it opens
+  // the pre-roll (SPEC §13.3.1) itself: the first sequence waits out the count
+  // with Makoto idling and the pads already dark, and the cutoff waits with it
+  // so the count never eats into the player's hundred seconds.
   useEffect(() => {
     sequenceRef.current = [];
     progressRef.current = 0;
     scoreRef.current = 0;
     inputsRef.current = 0;
-    startRound();
-    schedule(endRun, TIME_LIMIT_MS);
+    schedule(startRound, MINIGAME_COUNTDOWN_MS);
+    schedule(endRun, MINIGAME_COUNTDOWN_MS + TIME_LIMIT_MS);
     const timeouts = timeoutsRef.current;
     return () => {
       for (const id of timeouts) clearTimeout(id);

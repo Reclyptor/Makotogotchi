@@ -33,6 +33,7 @@ export default function DustDash({ sheet, reportScore, finish }: GameProps) {
     let alive = true;
 
     const jump = (): void => {
+      if (!armed()) return;
       inputs += 1;
       if (petY >= GROUND_Y) petVy = JUMP_VELOCITY;
     };
@@ -45,7 +46,7 @@ export default function DustDash({ sheet, reportScore, finish }: GameProps) {
     canvas.addEventListener("pointerdown", jump);
     window.addEventListener("keydown", onKey);
 
-    const stop = startGameLoop((dtMs) => {
+    const { stop, armed } = startGameLoop((dtMs) => {
       const dt = dtMs / 1000;
       elapsed += dtMs;
 

@@ -12,7 +12,7 @@ import { db } from "@/server/db/client";
 import { key, redis } from "@/server/redis/client";
 import { runtime } from "@/server/runtime";
 import { canPerform } from "@/sim/validate";
-import { MINIGAME_IDS, MINIGAMES, plausibleRun, type MinigameId } from "@/sim/minigames";
+import { MINIGAME_COUNTDOWN_MS, MINIGAME_IDS, MINIGAMES, plausibleRun, type MinigameId } from "@/sim/minigames";
 import { quirks } from "@/sim/quirks";
 import { QUIRK_FAVORITE_GAME_COIN_PERCENT } from "@/sim/economy";
 import { anonymousName, creditCoins, nicknameMap, recordContribution } from "@/server/social";
@@ -68,7 +68,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
     const game = MINIGAMES[parsed.data.game];
     const session: Session = { caretakerId: identity.caretakerId, startedAtMs: Date.now(), game: game.id };
-    const claimed = await redis().set(sessionKey, JSON.stringify(session), "PX", game.maxDurationMs + SESSION_SLACK_MS, "NX");
+    // The session has to outlive the pre-roll as well as the run itself
+    // (SPEC §13.3.1), or a slow game would expire before its own result.
+    const sessionTtlMs = MINIGAME_COUNTDOWN_MS + game.maxDurationMs + SESSION_SLACK_MS;
+    const claimed = await redis().set(sessionKey, JSON.stringify(session), "PX", sessionTtlMs, "NX");
     if (claimed !== "OK") {
       // A duplicate start from the same caretaker for the same game (a
       // remount, a retried request) rejoins its own fresh session instead

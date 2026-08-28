@@ -42,6 +42,7 @@ export default function SnackCatch({ sheet, reportScore, finish }: GameProps) {
     let lastMoveInput = 0;
 
     const pointerTarget = (event: PointerEvent): void => {
+      if (!armed()) return;
       const rect = canvas.getBoundingClientRect();
       targetX = ((event.clientX - rect.left) / rect.width) * GAME_W;
       // A held drag is one gesture; count it as an input at most 10×/s.
@@ -53,6 +54,7 @@ export default function SnackCatch({ sheet, reportScore, finish }: GameProps) {
     const onKey = (event: KeyboardEvent): void => {
       if (event.code === "ArrowLeft" || event.code === "ArrowRight") {
         event.preventDefault();
+        if (!armed()) return;
         heldDirection = event.code === "ArrowLeft" ? -1 : 1;
         targetX = null;
         inputs += 1;
@@ -66,7 +68,7 @@ export default function SnackCatch({ sheet, reportScore, finish }: GameProps) {
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKeyUp);
 
-    const stop = startGameLoop((dtMs) => {
+    const { stop, armed } = startGameLoop((dtMs) => {
       const dt = dtMs / 1000;
       elapsed += dtMs;
 
