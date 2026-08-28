@@ -38,6 +38,7 @@ const model = (overrides: Partial<ShopModel> = {}): ShopModel => ({
   inventory: {},
   room: ROOM,
   toys: [],
+  petDay: 20_000,
   funding: [
     { itemId: "window_seat", label: "Window Seat", price: 500, pooled: 0, funded: false },
     { itemId: "theme_cabin", label: "Log Cabin Walls", price: 900, pooled: 0, funded: false },
@@ -128,6 +129,65 @@ describe("shop tabs", () => {
     expect(action).toMatchObject({
       kind: "fund",
       offers: [{ amount: 10, availability: { ok: true } }, { amount: 50, availability: { ok: false } }],
+    });
+  });
+
+  it("gives every venue in the rotation a ballot, free ones included", () => {
+    // The free two have no shop row of their own, so a ballot built from the
+    // catalog would leave the only places that cost nothing unbackable.
+    const rows = rowsOf(tab(shopTabs(model(), gate()), "room"));
+    expect(rows.find((row) => row.id === "garden")?.action).toMatchObject({ kind: "vote", venueId: "garden" });
+    expect(rows.find((row) => row.id === "meadow")?.action).toMatchObject({ kind: "vote", venueId: "meadow" });
+    // The beach is not funded here, so it is still a pool rather than a ballot.
+    expect(rows.find((row) => row.id === "beach")?.action).toMatchObject({ kind: "fund" });
+  });
+
+  it("turns a venue's row into its ballot once the room unlocks it", () => {
+    const funding = model().funding.map((pool) => (pool.itemId === "beach" ? { ...pool, pooled: 800, funded: true } : pool));
+    const unlocked: RoomView = { ...ROOM, decor: ["beach"] };
+    const rows = rowsOf(tab(shopTabs(model({ funding, room: unlocked }), gate()), "room"));
+    // One row for its whole life, the way a funded wall style has one.
+    expect(rows.filter((row) => row.id === "beach")).toHaveLength(1);
+    expect(rows.find((row) => row.id === "beach")?.action).toMatchObject({ kind: "vote", venueId: "beach" });
+  });
+
+  it("shows a venue's share of tomorrow, and never tomorrow's winner", () => {
+    const voted: RoomView = { ...ROOM, ballots: [{ forDay: 20_001, tickets: { garden: 3, meadow: 1 } }] };
+    const rows = rowsOf(tab(shopTabs(model({ room: voted }), gate()), "room"));
+    const garden = rows.find((row) => row.id === "garden");
+    expect(garden?.odds).toEqual({ tickets: 3, total: 4 });
+    expect(garden?.detail).toBe("3 tickets — 75% of tomorrow");
+    expect(rows.find((row) => row.id === "meadow")?.detail).toBe("1 ticket — 25% of tomorrow");
+  });
+
+  it("reads tomorrow's ballot, not today's already-drawn one", () => {
+    const stale: RoomView = { ...ROOM, ballots: [{ forDay: 20_000, tickets: { garden: 9 } }] };
+    const rows = rowsOf(tab(shopTabs(model({ room: stale }), gate()), "room"));
+    expect(rows.find((row) => row.id === "garden")?.detail).toBe("Nobody has voted for tomorrow yet");
+    expect(rows.find((row) => row.id === "garden")?.odds).toBeUndefined();
+  });
+
+  it("collapses the last few tickets into one button, and locks a full venue", () => {
+    const nearlyFull: RoomView = { ...ROOM, ballots: [{ forDay: 20_001, tickets: { garden: 27 } }] };
+    const rows = rowsOf(tab(shopTabs(model({ room: nearlyFull }), gate()), "room"));
+    expect(rows.find((row) => row.id === "garden")?.action).toMatchObject({
+      kind: "vote",
+      offers: [{ tickets: 3, label: "Fill it", coins: 30 }],
+    });
+
+    const full: RoomView = { ...ROOM, ballots: [{ forDay: 20_001, tickets: { garden: 30 } }] };
+    const backed = rowsOf(tab(shopTabs(model({ room: full }), gate()), "room"));
+    expect(backed.find((row) => row.id === "garden")?.action).toMatchObject({ kind: "badge", label: "Backed" });
+  });
+
+  it("locks the ticket you cannot afford without locking the one you can", () => {
+    const action = rowsOf(tab(shopTabs(model({ coins: 10 }), gate()), "room")).find((row) => row.id === "garden")?.action;
+    expect(action).toMatchObject({
+      kind: "vote",
+      offers: [
+        { tickets: 1, coins: 10, availability: { ok: true } },
+        { tickets: 5, coins: 50, availability: { ok: false } },
+      ],
     });
   });
 

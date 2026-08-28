@@ -99,10 +99,38 @@ const secretFeedText = (mood: SpectacleMood, petName: string, dead: boolean): st
     : `Someone tried the ancient code. ${petName} slept right through it.`;
 };
 
-const GRAND_LABELS: Record<string, string> = {
-  window_seat: "Window Seat",
-  aquarium: "Aquarium",
-  kotatsu: "Kotatsu",
+/**
+ * What each grand item is called, and what funding it actually did.
+ *
+ * A copy of the server catalog rather than an import of it: `@/server/shop`
+ * reaches mongodb and ioredis, and a value import here would drag both into
+ * the browser bundle. `grandCopy.test.ts` fails the build if the two drift,
+ * which is what this table lacked before — it held the three decor items
+ * alone, so funding a wall style or a venue printed a raw id.
+ */
+export const GRAND_COPY: Record<string, { label: string; group: "decor" | "theme" | "venue" }> = {
+  window_seat: { label: "Window Seat", group: "decor" },
+  aquarium: { label: "Aquarium", group: "decor" },
+  kotatsu: { label: "Kotatsu", group: "decor" },
+  theme_cabin: { label: "Log Cabin Walls", group: "theme" },
+  theme_seaside: { label: "Seaside Walls", group: "theme" },
+  blossom: { label: "Blossom Park", group: "venue" },
+  beach: { label: "Beach Day", group: "venue" },
+  pond: { label: "Koi Pond", group: "venue" },
+  forest: { label: "Forest Clearing", group: "venue" },
+  shrine: { label: "Shrine Path", group: "venue" },
+  mountain: { label: "Mount Fuji", group: "venue" },
+};
+
+/** What a funded item became. A venue is not furniture, and telling the room
+ *  it is "in the room for good" is both wrong and the opposite of the point:
+ *  unlocking a place is permission to vote for it (SPEC §22.9). */
+export const fundedLine = (itemId: string): string => {
+  const item = GRAND_COPY[itemId];
+  if (!item) return `${itemId} is funded!`;
+  if (item.group === "venue") return `${item.label} is open — the room can vote to go there!`;
+  if (item.group === "theme") return `${item.label} is funded — the room can wear it now!`;
+  return `The ${item.label} is funded — it's in the room for good!`;
 };
 
 const milestoneFeedText = (petName: string): Record<string, string> => ({
@@ -122,9 +150,7 @@ const milestoneLine = (kind: string, detail: string | undefined, petName: string
   if (kind === "AMBIENT") {
     return isAmbientEvent(detail) ? { icon: AMBIENT_ICONS[detail], text: ambientFeedText(petName)[detail] } : null;
   }
-  if (kind === "FUNDED" && detail !== undefined) {
-    return { icon: "🏠", text: `The ${GRAND_LABELS[detail] ?? detail} is funded — it's in the room for good!` };
-  }
+  if (kind === "FUNDED" && detail !== undefined) return { icon: "🏠", text: fundedLine(detail) };
   if (kind === "WANT_FULFILLED") {
     return { icon: "⭐", text: wantGranted(petName, detail) };
   }
@@ -672,6 +698,7 @@ export default function GameView() {
           room={stream.room}
           purse={stream.purse}
           onFunded={onFunded}
+          petDay={ui.petDay}
           onClose={() => setShopOpen(false)}
         />
       )}

@@ -16,6 +16,7 @@ export type RowHandlers = {
   buy: (itemId: string, label: string) => void;
   use: (itemId: string, care: "FEED" | "MEDICATE") => void;
   chipIn: (itemId: string, amount: 10 | 50 | "all") => void;
+  vote: (venueId: string, tickets: number) => void;
   wear: (itemId: string | null) => void;
   switchTheme: (themeId: string) => void;
 };
@@ -78,6 +79,25 @@ const PoolTrack = ({ pooled, price }: { pooled: number; price: number }) => (
 );
 
 /**
+ * A venue's share of tomorrow. Deliberately the accent rather than the gold a
+ * pool uses: gold is coins owed toward a price, and this is not a debt being
+ * paid down — it is how likely tomorrow is to go this way.
+ */
+const OddsTrack = ({ tickets, total }: { tickets: number; total: number }) => (
+  <span className="mt-1 flex items-center gap-2">
+    <span aria-hidden="true" className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-white/10">
+      <span
+        className="block h-full rounded-full bg-accent transition-[width] duration-500 ease-out"
+        style={{ width: `${Math.min(100, (tickets / Math.max(1, total)) * 100)}%` }}
+      />
+    </span>
+    <span className="shrink-0 text-[11px] font-semibold tabular-nums text-accent">
+      {tickets}/{total} 🎟️
+    </span>
+  </span>
+);
+
+/**
  * The reason a row's action cannot be taken — null while any part of it still
  * can, so a pool you can put 10 into does not announce that you cannot put in
  * 50.
@@ -86,7 +106,7 @@ const lockNote = (action: ShopRowAction): string | null => {
   const offered: Availability[] =
     action.kind === "buy" || action.kind === "use"
       ? [action.availability]
-      : action.kind === "fund"
+      : action.kind === "fund" || action.kind === "vote"
         ? action.offers.map((offer) => offer.availability)
         : [];
   const blocked = offered.every((availability) => !availability.ok) ? offered[0] : undefined;
@@ -158,6 +178,22 @@ const Action = ({ row, on }: { row: ShopRow; on: RowHandlers }) => {
           ))}
         </span>
       );
+    case "vote":
+      return (
+        <span className="flex w-full gap-1">
+          {action.offers.map((offer) => (
+            <ActionButton
+              key={offer.label}
+              availability={offer.availability}
+              name={`Back ${row.name} for tomorrow with ${offer.coins} coins`}
+              tone="price"
+              onClick={() => on.vote(action.venueId, offer.tickets)}
+            >
+              {offer.label}
+            </ActionButton>
+          ))}
+        </span>
+      );
   }
 };
 
@@ -176,6 +212,7 @@ export const Row = ({ row, on }: { row: ShopRow; on: RowHandlers }) => {
           {note ?? row.detail}
         </p>
         {row.pool && <PoolTrack pooled={row.pool.pooled} price={row.pool.price} />}
+        {row.odds && <OddsTrack tickets={row.odds.tickets} total={row.odds.total} />}
       </div>
       <div className="flex justify-end">
         <Action row={row} on={on} />

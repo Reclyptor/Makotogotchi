@@ -26,12 +26,16 @@ export type ShopPanelProps = {
   purse: Purse;
   /** A pool completing elsewhere is the one shop change the stream reports. */
   onFunded: (listener: () => void) => () => void;
+  /** Today on the pet's calendar — the ballot the room can still move is
+   *  tomorrow's (SPEC §22.9). Passed in rather than read here, because
+   *  reading a clock during render is impure. */
+  petDay: number | null;
   onClose: () => void;
 };
 
 const TAB_ORDER: TabId[] = ["pack", "food", "toys", "style", "room"];
 
-export default function ShopPanel({ state, ctx, caretakerId, petName, room, purse, onFunded, onClose }: ShopPanelProps) {
+export default function ShopPanel({ state, ctx, caretakerId, petName, room, purse, onFunded, petDay, onClose }: ShopPanelProps) {
   const shop = useShop(petName, onFunded);
   const [active, setActive] = useState<TabId | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -47,10 +51,11 @@ export default function ShopPanel({ state, ctx, caretakerId, petName, room, purs
         room,
         toys: state.toys,
         funding: shop.data.funding,
+        petDay,
       },
       { state, ctx, caretakerId, petName },
     );
-  }, [shop.data, purse, room, state, ctx, caretakerId, petName]);
+  }, [shop.data, purse, room, state, ctx, caretakerId, petName, petDay]);
 
   // Escape closes, and focus goes back where it came from. Both are the
   // dialog's job, not the opener's — nothing else on the page can know that
@@ -81,6 +86,7 @@ export default function ShopPanel({ state, ctx, caretakerId, petName, room, purs
       buy: (itemId, label) => void shop.buy(itemId, label),
       use: (itemId, care) => void shop.use(itemId, care),
       chipIn: (itemId, amount) => void shop.chipIn(itemId, amount),
+      vote: (venueId, tickets) => void shop.vote(venueId, tickets),
       wear: (itemId) => void shop.wear(itemId),
       switchTheme: (themeId) => void shop.switchTheme(themeId),
     }),

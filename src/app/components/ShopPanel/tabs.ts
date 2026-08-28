@@ -11,7 +11,8 @@
 // wall style and switching to it are the same row at two moments of its life
 // rather than two rows in two sections.
 
-import { THEMES } from "@/game/scene/backdrop";
+import { THEMES, venueSpec } from "@/game/scene/backdrop";
+import { BALLOT_MAX_EXTRA_TICKETS, rotationPool, ticketsFor, VENUE_TICKET_COINS, type VenueId } from "@/sim/atmosphere";
 import { canPerform } from "@/sim/validate";
 import type { PetState, ProjectionContext } from "@/sim/model";
 import type { catalog, FundingView, RoomView } from "@/server/shop";
@@ -27,6 +28,8 @@ export type ShopModel = {
   room: RoomView;
   toys: readonly string[];
   funding: readonly FundingView[];
+  /** Today on the pet's calendar — the open ballot is tomorrow's (§22.9). */
+  petDay: number | null;
 };
 
 /** What the pet's own rules say about acting on it right now. */
@@ -48,12 +51,21 @@ export type FundOffer = {
   availability: Availability;
 };
 
+/** One offer on an open ballot: tickets bought, and what they cost. */
+export type VoteOffer = {
+  tickets: number;
+  label: string;
+  coins: number;
+  availability: Availability;
+};
+
 export type ShopRowAction =
   | { kind: "buy"; itemId: string; price: number; availability: Availability }
   | { kind: "use"; itemId: string; care: "FEED" | "MEDICATE"; availability: Availability }
   | { kind: "wear"; itemId: string | null; label: string }
   | { kind: "theme"; themeId: string }
   | { kind: "fund"; itemId: string; offers: FundOffer[] }
+  | { kind: "vote"; venueId: string; offers: VoteOffer[] }
   | { kind: "badge"; label: string };
 
 export type ShopRow = {
@@ -64,6 +76,8 @@ export type ShopRow = {
   action: ShopRowAction;
   /** An open pool, drawn as a progress track beneath the name. */
   pool?: { pooled: number; price: number };
+  /** A venue's standing in tomorrow's ballot, drawn as a share track. */
+  odds?: { tickets: number; total: number };
 };
 
 export type ShopGroup = { id: string; heading?: string; rows: ShopRow[] };
@@ -202,6 +216,26 @@ const fundOffers = (remaining: number, coins: number): FundOffer[] => {
     availability: affordable(coins, amount),
   }));
 };
+
+/**
+ * The offers on an open ballot. The last stretch collapses to one button for
+ * the same reason a nearly-full pool does: a +50 that can only seat two more
+ * tickets is a button that does not say what it does.
+ */
+const voteOffers = (room: number, coins: number): VoteOffer[] => {
+  const offer = (tickets: number, label: string): VoteOffer => {
+    const cost = tickets * VENUE_TICKET_COINS;
+    return { tickets, label, coins: cost, availability: affordable(coins, cost) };
+  };
+  if (room < 5) return [offer(room, "Fill it")];
+  return [offer(1, `+${VENUE_TICKET_COINS}`), offer(5, `+${5 * VENUE_TICKET_COINS}`)];
+};
+
+/** What a venue is called in the shop: the catalog's name for the ones that
+ *  were sold, and the scene's own for the two that were always free. */
+const venueLabel = (shopCatalog: ShopCatalog, venueId: string): string =>
+  (shopCatalog.grand as Record<string, { label: string } | undefined>)[venueId]?.label ??
+  venueSpec(venueId).label.replace(/^the /, "").replace(/^\w/, (first) => first.toUpperCase());
 
 /** A grand item's row, in whichever of its two lives it is currently in. */
 const grandRow = (
@@ -364,15 +398,54 @@ const roomTab = (shop: ShopModel): ShopTab => {
     ...sold.map((style) => styleRow(style.themeId, style.itemId, style.label)),
   ];
 
-  const places: ShopRow[] = grand
-    .filter(([, item]) => item.group === "venue")
-    .map(([itemId, item]) =>
-      grandRow(itemId, item.label, shop, CATEGORY_ICONS.venue, {
-        open: "A place Makoto could spend the day",
-        funded: "Makoto spends some days here",
-        fundedBadge: "In Rotation",
-      }),
-    );
+  // A venue has three lives on one id (SPEC §21.8, §22.9): a pool while it is
+  // being funded, then a place in the rotation, then a place the room can
+  // back for tomorrow. Every venue in the pool gets a ballot row — the free
+  // ones included, or the two places nobody paid for would be the only two
+  // that can never be chosen.
+  const pool = rotationPool(shop.room.decor);
+  const tomorrow = shop.petDay === null ? {} : ticketsFor(shop.room.ballots, shop.petDay + 1);
+  const ticketsOn = (venueId: string): number =>
+    Math.min(BALLOT_MAX_EXTRA_TICKETS, Math.max(0, Math.floor(tomorrow[venueId] ?? 0)));
+  const backed = pool.reduce((sum, venueId) => sum + ticketsOn(venueId), 0);
+
+  const venueRow = (venueId: string, name: string): ShopRow => {
+    const held = ticketsOn(venueId);
+    const room = BALLOT_MAX_EXTRA_TICKETS - held;
+    const share = backed === 0 ? 0 : Math.round((held / backed) * 100);
+    return {
+      id: venueId,
+      icon: icon(venueId, CATEGORY_ICONS.venue),
+      name,
+      // The share of tomorrow, never tomorrow's winner: the outcome is
+      // computable from the ballot, and showing it would make voting last
+      // the only sensible move (SPEC §22.9).
+      detail:
+        backed === 0
+          ? "Nobody has voted for tomorrow yet"
+          : held === 0
+            ? "Not in tomorrow's running"
+            : `${held} ${held === 1 ? "ticket" : "tickets"} — ${share}% of tomorrow`,
+      action:
+        room > 0
+          ? { kind: "vote", venueId, offers: voteOffers(room, shop.coins) }
+          : { kind: "badge", label: "Backed" },
+      ...(held > 0 ? { odds: { tickets: held, total: backed } } : {}),
+    };
+  };
+
+  const places: ShopRow[] = [
+    ...pool.map((venueId) => venueRow(venueId, venueLabel(shop.catalog, venueId))),
+    ...grand
+      .filter(([itemId, item]) => item.group === "venue" && !pool.includes(itemId as VenueId))
+      .map(([itemId, item]) =>
+        grandRow(itemId, item.label, shop, CATEGORY_ICONS.venue, {
+          open: "Unlock it, then the room can vote to go",
+          funded: "Makoto can be voted here",
+          fundedBadge: "Unlocked",
+        }),
+      ),
+  ];
 
   const groups: ShopGroup[] = [
     { id: "decorations", heading: "Decorations", rows: decorations },

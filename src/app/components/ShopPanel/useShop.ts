@@ -51,6 +51,8 @@ const spendNotice = (error: string | undefined, fallback: string): string => {
   if (error === "INSUFFICIENT_COINS") return "Not enough coins — care for Makoto to earn more.";
   if (error === "ALREADY_OWNED") return "Already owned.";
   if (error === "ALREADY_FUNDED") return "Already funded.";
+  if (error === "BALLOT_FULL") return "Tomorrow's ballot is already full for that one.";
+  if (error === "NOT_IN_ROTATION") return "Makoto can't go there yet — unlock it first.";
   return fallback;
 };
 
@@ -60,6 +62,7 @@ export type Shop = {
   buy: (itemId: string, label: string) => Promise<void>;
   use: (itemId: string, care: "FEED" | "MEDICATE") => Promise<void>;
   chipIn: (itemId: string, amount: 10 | 50 | "all") => Promise<void>;
+  vote: (venueId: string, tickets: number) => Promise<void>;
   wear: (itemId: string | null) => Promise<void>;
   switchTheme: (themeId: string) => Promise<void>;
 };
@@ -133,6 +136,25 @@ export const useShop = (petName: string, onFunded: (listener: () => void) => () 
     [refresh],
   );
 
+  // Backing a venue for tomorrow (SPEC §22.9). The new ballot arrives on the
+  // room broadcast, so this refreshes only for the pools and the purse the
+  // same way chipping in does.
+  const vote = useCallback(
+    async (venueId: string, tickets: number): Promise<void> => {
+      setNotice(null);
+      const result = await post("/api/shop/vote", { venueId, tickets });
+      if (!result) return;
+      if (result.status === 200) {
+        const body = result.body as { spent: number };
+        setNotice(`Backed it for tomorrow — ${body.spent} 🪙.`);
+      } else {
+        setNotice(spendNotice(errorOf(result.body), "Couldn't vote."));
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
   const wear = useCallback(
     async (itemId: string | null): Promise<void> => {
       setNotice(null);
@@ -152,5 +174,5 @@ export const useShop = (petName: string, onFunded: (listener: () => void) => () 
     [refresh],
   );
 
-  return { data, notice, buy, use, chipIn, wear, switchTheme };
+  return { data, notice, buy, use, chipIn, vote, wear, switchTheme };
 };
