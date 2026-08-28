@@ -2976,7 +2976,15 @@ and holds `"on"` / `"off"` thereafter — one key carrying both *unlocked* and
 *enabled*, because "found it but switched it off" and "never found it" need
 to be told apart and nothing else does.
 
-Finding the code writes `"on"` and toasts `📺 RETRO MODE UNLOCKED`. A 📺
+Finding the code writes `"on"` and toasts `📺 RETRO MODE UNLOCKED`. The
+unlock fires **once and once only**: after that, whether the display is on is
+the caretaker's standing choice, and re-entering the code throws the
+spectacle without overruling it. The header toggle is the only thing that
+switches it back on.
+
+The key is per browser *origin*, port included, so two dev stacks on
+different ports keep entirely separate keepsakes — one can be on while the
+other is off, which looks like an inconsistency and is not one. A 📺
 button then joins the header cluster beside the 🔇 mute toggle, on this and
 every future visit, carrying `aria-pressed` and an `aria-label` that names
 the direction of the press (`Turn the retro display on` / `…off`) — the same

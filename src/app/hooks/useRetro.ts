@@ -59,7 +59,13 @@ export type Retro = {
   found: boolean;
   on: boolean;
   toggle: () => void;
-  /** Switches it on the first time and reports that; a no-op afterwards. */
+  /**
+   * Switches the display on the first time the code is ever entered here, and
+   * reports that. A no-op every time after, deliberately: once the keepsake is
+   * unlocked, whether it is switched on is the caretaker's standing choice,
+   * and re-entering the code must not override it. The header toggle is the
+   * only thing that turns it back on.
+   */
   unlock: () => boolean;
 };
 

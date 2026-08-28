@@ -94,6 +94,13 @@ test.describe("the ancient code", () => {
     await expect(retroToggle(pageA)).toBeVisible();
     await expect(retroToggle(pageA)).toHaveAttribute("aria-pressed", "false");
 
+    // Typing the code again does NOT switch it back on. The unlock fires once
+    // and once only; after that, whether the display is on is the caretaker's
+    // standing choice and the code does not get to overrule it.
+    await enterCode(pageA);
+    await expect(pageA.getByText(/the ancient code/).last()).toBeVisible({ timeout: 10_000 });
+    await expect(retroToggle(pageA)).toHaveAttribute("aria-pressed", "false");
+
     await contextA.close();
     await contextB.close();
   });
