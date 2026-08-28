@@ -36,10 +36,16 @@ type ActionButtonProps = {
 const ActionButton = ({ availability, name, tone, onClick, children }: ActionButtonProps) => {
   const locked = !availability.ok;
   const base = "w-full rounded-lg px-2 py-1.5 text-center text-xs font-bold tabular-nums";
-  const live = tone === "price" ? "press bg-accent-strong text-white" : "press bg-white/10 font-semibold hover:bg-accent/25";
+  // Filled versus hollow, not 10% white versus 6% white. Two greys a shade
+  // apart is what made "Use" look the same whether or not Makoto could take
+  // it — the difference has to survive a glance on a phone in daylight.
+  const live =
+    tone === "price" ? "press bg-accent-strong text-white" : "press bg-accent/25 font-semibold text-foreground hover:bg-accent/45";
   // A price you cannot meet is struck through; a verb you cannot perform is
   // not — "U̶s̶e̶" reads as a typo, where "🪙̶ ̶2̶5̶0̶" reads as out of reach.
-  const dead = `cursor-not-allowed bg-white/[0.06] text-muted${tone === "price" ? " line-through decoration-1" : ""}`;
+  const dead = `cursor-not-allowed bg-white/[0.03] text-muted/70 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.10)]${
+    tone === "price" ? " line-through decoration-1" : ""
+  }`;
   return (
     <button
       type="button"

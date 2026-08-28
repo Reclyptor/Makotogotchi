@@ -104,13 +104,16 @@ export default function ShopPanel({ state, ctx, caretakerId, petName, room, onFu
         if (event.target === event.currentTarget) onClose();
       }}
     >
+      {/* A sheet on a phone, a centred card from sm: up. As a sheet it ends at
+          the bottom of the screen, where the home indicator lives, so the last
+          row is held clear of it by the safe area. */}
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Shop"
         tabIndex={-1}
-        className="panel animate-rise flex max-h-[88dvh] w-full max-w-md flex-col overflow-hidden !rounded-b-none !rounded-t-3xl outline-none sm:max-h-[80dvh] sm:!rounded-3xl"
+        className="panel animate-rise flex max-h-[88dvh] w-full max-w-md flex-col overflow-hidden !rounded-b-none !rounded-t-3xl pb-[env(safe-area-inset-bottom)] outline-none sm:max-h-[80dvh] sm:!rounded-3xl sm:pb-0"
       >
         <header className="flex items-center justify-between gap-2 px-4 pb-2 pt-4">
           <h2 className="text-sm font-bold">🛒 Shop</h2>
@@ -194,10 +197,12 @@ export default function ShopPanel({ state, ctx, caretakerId, petName, room, onFu
           </>
         )}
 
-        {/* The result of the last thing you did, where you can still see it. */}
+        {/* The result of the last thing you did, where you can still see it.
+            Always mounted so the live region is there to announce into, but it
+            takes no room until it has something to say. */}
         <p
           aria-live="polite"
-          className="min-h-9 shrink-0 border-t border-white/10 px-4 py-2.5 text-xs text-muted"
+          className={`shrink-0 px-4 text-xs text-muted ${shop.notice ? "border-t border-white/10 py-2.5" : ""}`}
         >
           {shop.notice}
         </p>
