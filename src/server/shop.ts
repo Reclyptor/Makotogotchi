@@ -11,8 +11,8 @@
 import type { Collection, Db } from "mongodb";
 import { FOOD_ITEMS, MEDICINE_ITEMS, TOY_ITEMS } from "@/sim/economy";
 import { petClock } from "@/sim/clock";
-import type { DayBallot, VenueId } from "@/sim/atmosphere";
-import { ballotsAround } from "./ballot";
+import { isVenueId, rotationPool, type DayBallot, type VenueId } from "@/sim/atmosphere";
+import { ballotsAround, voteForVenue, type VoteResult } from "./ballot";
 import { env } from "./env";
 import { isDuplicateKeyError } from "./db/collections";
 import { caretakerProfile, caretakers, creditCoins } from "./social";
@@ -205,8 +205,10 @@ const priceOf = (itemId: string): { price: number; kind: ItemKind } | null => {
   return null;
 };
 
-/** Atomically spend coins; the filter is the balance check. */
-const spendCoins = async (db: Db, caretakerId: string, price: number, alsoInc: Record<string, number> = {}): Promise<boolean> => {
+/** Atomically spend coins; the filter is the balance check. Exported so the
+ *  ballot charges through exactly this path rather than a second one that
+ *  could drift from it (SPEC §22.9). */
+export const spendCoins = async (db: Db, caretakerId: string, price: number, alsoInc: Record<string, number> = {}): Promise<boolean> => {
   const updated = await caretakers(db).findOneAndUpdate(
     { _id: caretakerId, coins: { $gte: price } },
     { $inc: { coins: -price, ...alsoInc } },
@@ -405,6 +407,33 @@ export const contribute = async (
     .slice(0, 3);
 
   return { ok: true, itemId, label: item.label, spent: landed, pooled: total, price: item.price, funded: claimed !== null, top };
+};
+
+/**
+ * Back a venue for tomorrow (SPEC §22.9). The pool it must be in is the same
+ * one the scene walks, so a venue nobody unlocked cannot be voted for and a
+ * free one always can.
+ *
+ * Everything race-sensitive lives in `voteForVenue`; this is the seam that
+ * knows about rooms, prices and purses.
+ */
+export const voteForTomorrow = async (
+  db: Db,
+  caretakerId: string,
+  venueId: string,
+  tickets: number,
+): Promise<VoteResult> => {
+  if (!isVenueId(venueId) || venueId === "home") return { ok: false, reason: "UNKNOWN_VENUE" };
+  const room = await roomState(db);
+  if (!rotationPool(room.decor).includes(venueId)) return { ok: false, reason: "NOT_IN_ROTATION" };
+
+  const balance = (await caretakerProfile(db, caretakerId))?.coins ?? 0;
+  const today = petClock(env().PET_TIMEZONE, Date.now()).dayIndex;
+  const result = await voteForVenue(db, caretakerId, venueId, tickets, today + 1, balance, (coins) =>
+    spendCoins(db, caretakerId, coins),
+  );
+  if (result.ok) await announceRoom(db);
+  return result;
 };
 
 /** A funded grand item joins the room through the ordinary decor path. */
