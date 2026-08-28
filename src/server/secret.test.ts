@@ -12,7 +12,9 @@ let infra: TestInfra;
 const GUARD = () => key("konami:guard-test");
 
 beforeAll(async () => {
-  infra = startTestInfra();
+  // Redis only — the guard never touches Mongo, and every container this
+  // file does not start is one the parallel suites are not queueing behind.
+  infra = startTestInfra({ mongo: false });
   await redis().del(GUARD());
 }, 120_000);
 

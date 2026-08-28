@@ -40,16 +40,31 @@ const waitForMongo = (containerId: string): void => {
   }
 };
 
-export const startTestInfra = (): TestInfra => {
-  const mongo = startContainer("mongo:8", 27017);
+export type TestInfraOptions = {
+  /**
+   * Start Mongo alongside Redis. Default true, which is what almost every
+   * suite wants. A Redis-only suite passes false: the pair costs a container
+   * and a readiness poll per test *file*, and the files run in parallel, so
+   * booting a database nobody queries is load the docker daemon does not need
+   * — enough of it and a suite starts losing its `beforeAll` to the timeout.
+   * `MONGODB_URI` is still set, to an address nothing listens on, so `env()`
+   * validates and an accidental query fails loudly instead of silently
+   * reaching some other suite's database.
+   */
+  mongo?: boolean;
+};
+
+export const startTestInfra = ({ mongo: withMongo = true }: TestInfraOptions = {}): TestInfra => {
+  const mongo = withMongo ? startContainer("mongo:8", 27017) : null;
   const redis = startContainer("redis:8-alpine", 6379);
-  waitForMongo(mongo.id);
+  if (mongo) waitForMongo(mongo.id);
 
   const infra: TestInfra = {
-    mongoUri: `mongodb://127.0.0.1:${mongo.port}`,
+    mongoUri: mongo ? `mongodb://127.0.0.1:${mongo.port}` : "mongodb://127.0.0.1:1",
     redisUrl: `redis://127.0.0.1:${redis.port}`,
     stop: () => {
-      for (const id of [mongo.id, redis.id]) {
+      for (const id of [mongo?.id, redis.id]) {
+        if (!id) continue;
         try {
           execFileSync("docker", ["stop", id]);
         } catch {

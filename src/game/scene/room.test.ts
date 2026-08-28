@@ -453,7 +453,12 @@ describe("skipping frames that would paint the same pixels", () => {
   it("paints again while the sky is open, and settles once it closes", () => {
     const { room, derived } = contentedRoom();
     const recorder = recordingContext();
-    room.syncDerived(derived, false, 0);
+    // Asleep, which is when a star shower actually happens — and which also
+    // parks the stroll. The wander picks its destination from `Date.now()` in
+    // nine-second slots, so an awake pet can silently change facing between
+    // two renders of the *same* frame time and repaint for reasons that have
+    // nothing to do with the spectacle.
+    room.syncDerived(derived, true, 0);
     room.render(recorder.ctx, 1000);
     room.secret("stars", 1000);
     // Mid-run the shower is moving, so an instant that would otherwise have
