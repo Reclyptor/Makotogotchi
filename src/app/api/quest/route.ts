@@ -21,11 +21,17 @@ export async function GET(): Promise<NextResponse> {
   return NextResponse.json(
     {
       dayIndex: view.dayIndex,
-      quest: { id: view.quest.id, title: view.quest.title, description: view.quest.description, unit: view.quest.unit },
+      quest: {
+        id: view.quest.id,
+        title: view.quest.title,
+        description: view.quest.describe(view.target),
+        unit: view.quest.unit,
+      },
       current: view.current,
       target: view.target,
       settled,
-      helpers: view.contributors.length,
+      helpers: view.hands,
+      handsTarget: view.handsTarget,
     },
     { headers: { "Cache-Control": "no-store" } },
   );

@@ -41,6 +41,22 @@ export type QuestView = QuestStatus & {
 
 type DayWindow = { dayIndex: number; fromTick: number; toTick: number; eveningTick: number };
 
+/**
+ * The community size the day opened with (SPEC §21.7). Reading the live
+ * figure would let an afternoon newcomer raise a bar the room is already
+ * halfway up, so the target is frozen at pet-midnight. `PetState.population`
+ * is set by nothing but `POPULATION` events (§23.2), so the newest one before
+ * the day's first tick is exactly the number the day began with; a generation
+ * older than the first such event reads as the baseline everywhere else too.
+ */
+const dayOpeningPopulation = async (db: Db, generationId: string, fromTick: number): Promise<number | undefined> => {
+  const doc = await events(db).findOne(
+    { generationId, type: "POPULATION", tick: { $lt: fromTick } },
+    { sort: { tick: -1 } },
+  );
+  return doc?.type === "POPULATION" ? doc.count : undefined;
+};
+
 export const questDay = (generation: Generation, nowMs: number, timeZone: string): DayWindow => {
   const dayIndex = localDayIndex(generation.genesisEpochMs, nowMs, timeZone);
   return {
@@ -62,9 +78,12 @@ export const questView = async (
   const day = questDay(generation, nowMs, timeZone);
   const quest = questFor(generation.seed, day.dayIndex);
 
-  const docs = await events(db)
-    .find({ generationId: generation.id, type: "CARE", tick: { $gte: day.fromTick, $lt: day.toTick } })
-    .toArray();
+  const [docs, population] = await Promise.all([
+    events(db)
+      .find({ generationId: generation.id, type: "CARE", tick: { $gte: day.fromTick, $lt: day.toTick } })
+      .toArray(),
+    dayOpeningPopulation(db, generation.id, day.fromTick),
+  ]);
   const care = docs.flatMap((doc) => (doc.type === "CARE" ? [doc] : []));
 
   const contributors = [...new Set(care.map((doc) => doc.caretakerId))].sort();
@@ -75,6 +94,7 @@ export const questView = async (
     minigameScore: care.reduce((total, doc) => total + (doc.minigameScore ?? 0), 0),
     lowestMeterPercent: Math.min(...NEED_KEYS.map((need) => percentages[need])),
     eveningReached: state.tick >= day.eveningTick,
+    population,
   });
 
   return { ...status, dayIndex: day.dayIndex, quest, contributors };

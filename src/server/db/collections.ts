@@ -79,6 +79,11 @@ export const ensureIndexes = async (database: Db): Promise<void> => {
     events(database).createIndex({ at: -1 }),
     // The daily quest scans one pet-day of a generation's events (SPEC §21.7).
     events(database).createIndex({ generationId: 1, tick: 1 }),
+    // …and then asks for the last POPULATION event before that day began, to
+    // fix the day's bar (§21.7). Partial because those events are hourly at
+    // most: without the filter this indexes the whole log to find four docs,
+    // and without the index the leader walks the log backwards every tick.
+    events(database).createIndex({ generationId: 1, tick: -1 }, { partialFilterExpression: { type: "POPULATION" } }),
     events(database).createIndex({ caretakerId: 1, at: -1 }),
     snapshots(database).createIndex({ generationId: 1, tick: -1 }),
   ]);

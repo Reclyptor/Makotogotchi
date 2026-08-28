@@ -18,14 +18,16 @@ const TIME_ZONE = "America/Chicago";
 // 2026-01-05 07:00 America/Chicago — tick 0 lands on a Monday at wake time.
 const GENESIS_MS = Date.UTC(2026, 0, 5, 13);
 const NOON = 5 * TICKS_PER_HOUR;
+/** Wake time on the pet's second day — day 1, whose local midnight is positive. */
+const DAY_ONE_MS = GENESIS_MS + 24 * 3_600_000;
 
 let infra: TestInfra;
 let seq = 0;
 
-/** The first seed whose day-0 goal is the one this test wants to exercise. */
-const generationFor = (id: string, questId: QuestId): Generation => {
+/** The first seed whose goal on the given day is the one the test wants. */
+const generationFor = (id: string, questId: QuestId, dayIndex = 0): Generation => {
   let seed = 1;
-  while (questFor(seed, 0).id !== questId) seed += 1;
+  while (questFor(seed, dayIndex).id !== questId) seed += 1;
   return { id, ordinal: 1, seed, genesisEpochMs: GENESIS_MS, name: "Makoto" };
 };
 
@@ -45,6 +47,12 @@ const care = async (
     { type: "CARE", generationId: generation.id, seq, tick, action, caretakerId },
     { applied: 1000, ...(minigameScore !== undefined ? { minigameScore } : {}) },
   );
+};
+
+/** The leader's record of how big the caring community is (SPEC §23.2). */
+const population = async (generation: Generation, tick: number, count: number): Promise<void> => {
+  seq += 1;
+  await appendEvent(await db(), { type: "POPULATION", generationId: generation.id, seq, tick, count });
 };
 
 beforeAll(async () => {
@@ -84,6 +92,41 @@ describe("quest progress", () => {
     expect(view.quest.id).toBe("game-night");
     expect(view.current).toBe(42);
     expect(view.complete).toBe(true);
+  });
+});
+
+describe("the bar the room's size sets", () => {
+  it("fixes it at the population the day opened with", async () => {
+    const generation = generationFor("gen-opening", "feast-day", 1);
+    const day = questDay(generation, DAY_ONE_MS, TIME_ZONE);
+    await population(generation, day.fromTick - 1, 4); // what yesterday ended with
+    await population(generation, day.fromTick + 10, 9); // a crowd that turned up this morning
+
+    for (let index = 0; index < 17; index++) await care(generation, day.fromTick + 20 + index, `ct-${index % 2}`, "FEED");
+
+    const view = await questView(await db(), generation, stateAt(generation, day.fromTick + 100), TIME_ZONE, DAY_ONE_MS);
+    expect(view.target).toBe(17); // ten meals at the 1.68× four caretakers ask for…
+    expect(view.handsTarget).toBe(2); // …and not the five that nine would have wanted
+    expect(view.complete).toBe(true);
+  });
+
+  it("never lets one caretaker finish the room's goal alone", async () => {
+    const generation = generationFor("gen-solo", "feast-day", 1);
+    const day = questDay(generation, DAY_ONE_MS, TIME_ZONE);
+    await population(generation, day.fromTick - 1, 9);
+    for (let index = 0; index < 40; index++) await care(generation, day.fromTick + 20 + index, "ct-grinder", "FEED");
+
+    const database = await db();
+    const state = stateAt(generation, day.fromTick + 100);
+    expect(await questView(database, generation, state, TIME_ZONE, DAY_ONE_MS)).toMatchObject({
+      current: 40,
+      target: 30,
+      hands: 1,
+      handsTarget: 5,
+      complete: false,
+    });
+    expect(await settleQuest(database, generation, state, TIME_ZONE, DAY_ONE_MS)).toBeNull();
+    expect((await caretakerProfile(database, "ct-grinder"))?.coins ?? 0).toBe(0);
   });
 });
 

@@ -16,7 +16,9 @@ export type QuestPayload = {
   current: number;
   target: number;
   settled: boolean;
+  /** Distinct caretakers who have helped today, and how many the day wants. */
   helpers: number;
+  handsTarget: number;
 };
 
 export type QuestBannerProps = {
@@ -76,7 +78,19 @@ export default function QuestBanner({ subscribe }: QuestBannerProps) {
           {quest.settled ? (
             <span className="font-semibold text-gold">done! +15 🪙 to today&apos;s caretakers</span>
           ) : (
-            `${quest.current}/${quest.target}`
+            <>
+              {quest.current}/{quest.target}
+              {/* Many hands counts caretakers already — saying it twice would
+                  just be the same fraction beside itself. */}
+              {quest.quest.id !== "many-hands" && (
+                <>
+                  {" · "}
+                  {quest.helpers}/{quest.handsTarget}
+                  <span aria-hidden="true"> 🙋</span>
+                  <span className="sr-only"> caretakers</span>
+                </>
+              )}
+            </>
           )}
         </span>
       </p>
