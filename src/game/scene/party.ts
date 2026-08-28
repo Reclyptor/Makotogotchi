@@ -17,8 +17,10 @@ import type { SpectacleMood } from "@/sim/secret";
 export const SPECTACLE_MS = 8000;
 
 const CONFETTI_COUNT = 64;
-const STAR_COUNT = 40;
-const METEOR_COUNT = 14;
+const STAR_COUNT = 70;
+// Enough that six or so are in flight at any instant. Fourteen looked like
+// a quiet night rather than the shower this is supposed to be.
+const METEOR_COUNT = 30;
 
 const CONFETTI_COLORS = ["#e2536f", "#ffe9a3", "#8fd3f4", "#b48ee0", "#7ddf9a", "#ffa45c"];
 /** Six stops the party light cycles through, kept pale — see PARTY_ALPHA. */
@@ -31,7 +33,6 @@ const NIGHT_WASH = "10, 8, 40";
 const NIGHT_ALPHA = 0.75;
 const METEOR_HEAD = "#fff7d6";
 const METEOR_FLIGHT_MS = 1100;
-const METEOR_TAIL = 5;
 
 type Confetti = { x: number; fall: number; drift: number; rate: number; phase: number; delayMs: number; color: string };
 type Star = { x: number; y: number; color: string; phase: number };
@@ -115,7 +116,7 @@ export class Spectacle {
         vy: speed * slope * scale,
         // The shower starts a beat after the wash and thins before it lifts.
         delayMs: 1000 + random() * 5500,
-        length: 4 + random() * 5,
+        length: 10 + random() * 14,
       };
     });
   }
@@ -193,13 +194,15 @@ export class Spectacle {
       // The streak dims towards both ends of its flight so it enters and
       // leaves rather than snapping into existence.
       const fade = Math.min(1, ramp(flight, 0, 140) * (1 - ramp(flight, METEOR_FLIGHT_MS - 260, METEOR_FLIGHT_MS)));
-      const step = meteor.length / METEOR_TAIL;
       const unit = 1 / Math.hypot(meteor.vx, meteor.vy);
-      for (let index = METEOR_TAIL; index >= 0; index--) {
-        const back = index * step;
-        ctx.globalAlpha = fade * (1 - index / (METEOR_TAIL + 1));
+      // One dot per pixel of tail, so the streak is continuous rather than a
+      // dotted line — spacing the tail by length/N leaves visible gaps as soon
+      // as the streak is long enough to read as a streak.
+      const steps = Math.round(meteor.length);
+      for (let back = steps; back >= 0; back--) {
+        ctx.globalAlpha = fade * (1 - back / (steps + 1)) ** 1.5;
         ctx.fillStyle = METEOR_HEAD;
-        const size = index === 0 ? 2 : 1;
+        const size = back === 0 ? 2 : 1;
         ctx.fillRect(
           Math.round(headX - meteor.vx * unit * back),
           Math.round(headY - meteor.vy * unit * back),

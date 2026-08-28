@@ -24,13 +24,14 @@ import { ROOM_HEIGHT, ROOM_WIDTH } from "./backdrop";
 const SCANLINE_ALPHA = 0.08;
 const BLOOM_ALPHA = 0.045;
 const BLOOM_COLOR = "#ffd9a0";
-/** Vignette bands, outermost first: each ring darkens the one inside it. */
-const VIGNETTE_BANDS = [
-  { inset: 0, alpha: 0.16 },
-  { inset: 3, alpha: 0.1 },
-  { inset: 7, alpha: 0.06 },
-  { inset: 12, alpha: 0.035 },
-];
+/**
+ * The vignette, as contiguous 1px rings on a quadratic falloff — every inset
+ * from the edge inwards, not a handful of them. Rings at spaced insets leave
+ * unpainted gaps between, which draws four thin lines around the picture
+ * rather than darkening into the corners.
+ */
+const VIGNETTE_DEPTH = 14;
+const VIGNETTE_ALPHA = 0.14;
 
 export const renderRetro = (ctx: SceneContext): void => {
   // Scanlines: one dark row every other row, the whole width.
@@ -45,9 +46,9 @@ export const renderRetro = (ctx: SceneContext): void => {
 
   // Vignette, as nested frames rather than a radial gradient.
   ctx.fillStyle = "#000000";
-  for (const band of VIGNETTE_BANDS) {
-    ctx.globalAlpha = band.alpha;
-    const { inset } = band;
+  for (let inset = 0; inset < VIGNETTE_DEPTH; inset++) {
+    const falloff = 1 - inset / VIGNETTE_DEPTH;
+    ctx.globalAlpha = VIGNETTE_ALPHA * falloff * falloff;
     const width = ROOM_WIDTH - inset * 2;
     const height = ROOM_HEIGHT - inset * 2;
     ctx.fillRect(inset, inset, width, 1);
