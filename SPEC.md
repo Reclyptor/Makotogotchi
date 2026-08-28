@@ -2901,8 +2901,19 @@ front of it, and both look wrong.
   eight seconds of continuous confetti would evict the crumbs and hearts
   that are the room's feedback for actual care. Confetti falls under
   gravity with a horizontal sway and a per-piece colour.
-- The pet loops `celebrating`, re-triggered each time the clip runs out.
-- Toast over the pet: `↑↑↓↓←→←→BA`.
+- The pet loops `celebrating`, re-triggered each time the clip runs out. It
+  is a one-shot and the run outlasts it several times over, so it is re-armed
+  as it lapses rather than played once at the top.
+- Toast over the pet: `the ancient code`.
+
+**The toast names the code; it never spells it.** An earlier draft of this
+section had the canvas print `↑↑↓↓←→←→BA`, which is the one thing §26.7's
+discovery rule rules out — a toast is shown to every witness, so printing the
+sequence is the "feed spells the code out" option arrived at by accident. The
+toast says only what the feed line already says.
+
+The star mood's toast is `the sky opens`, for the same reason and in the same
+register.
 
 **`stars` — 8 seconds, asleep or dead**
 
@@ -3021,6 +3032,21 @@ that leaking costs nothing:
   loads the page a minute later sees no evidence it happened, which is
   precisely what makes having witnessed it worth something.
 - **No attribution.** See §26.2.
+- **No hint, anywhere.** Nothing in the UI, on `/about`, or in the README
+  says the code exists, and nothing that renders spells the sequence out —
+  not the feed line, not the canvas toast. The rule has teeth: it is what
+  decides the toast copy in §26.4, and the draft that printed `↑↑↓↓←→←→BA`
+  over the pet broke it without meaning to.
+
+  It spreads the way easter eggs are supposed to. Someone tries it on a whim,
+  everyone watching sees the sky open and asks what that was, and the hunt
+  starts in the feed. The standing tell is emergent rather than authored: a
+  caretaker who has found it carries a 📺 in their header that nobody else
+  has, so screenshots leak it sideways.
+
+  Reading it in the source is a fair prize — the code is MIT and this
+  document is in the repository. Documenting a secret and advertising it are
+  different acts.
 
 ### 26.8 Testing
 

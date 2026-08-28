@@ -5,6 +5,7 @@
 // never fight autoplay policies.
 
 import type { CareAction } from "@/sim/tuning";
+import type { SpectacleMood } from "@/sim/secret";
 
 const STORAGE_KEY = "mgc-audio";
 
@@ -41,6 +42,36 @@ const ACTION_TUNES: Record<CareAction, Note[]> = {
     { freq: 554, atMs: 90, durMs: 80 },
     { freq: 659, atMs: 180, durMs: 140 },
   ],
+};
+
+// The ancient code (SPEC §26.4). The party is a rising fanfare; the star
+// shower borrows the ambient pad's triangle wave and sits well under it, so
+// it reads as the room breathing rather than as an alert.
+const SECRET_TUNES: Record<SpectacleMood, { notes: Note[]; volume: number; wave: OscillatorType }> = {
+  party: {
+    notes: [
+      { freq: 523, atMs: 0, durMs: 70 },
+      { freq: 659, atMs: 70, durMs: 70 },
+      { freq: 784, atMs: 140, durMs: 70 },
+      { freq: 1046, atMs: 210, durMs: 90 },
+      { freq: 880, atMs: 320, durMs: 70 },
+      { freq: 1046, atMs: 400, durMs: 90 },
+      { freq: 1318, atMs: 500, durMs: 220 },
+    ],
+    volume: 0.1,
+    wave: "square",
+  },
+  stars: {
+    notes: [
+      { freq: 262, atMs: 0, durMs: 900 },
+      { freq: 392, atMs: 300, durMs: 900 },
+      { freq: 523, atMs: 700, durMs: 900 },
+      { freq: 659, atMs: 1200, durMs: 1100 },
+      { freq: 784, atMs: 1800, durMs: 1400 },
+    ],
+    volume: 0.05,
+    wave: "triangle",
+  },
 };
 
 const ALERT_TUNE: Note[] = [
@@ -84,14 +115,14 @@ export class GameAudio {
     return this.context;
   }
 
-  private play(notes: Note[], volume: number): void {
+  private play(notes: Note[], volume: number, wave: OscillatorType = "square"): void {
     if (this.mutedState) return;
     const ctx = this.ensureContext();
     const now = ctx.currentTime;
     for (const note of notes) {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.type = "square";
+      osc.type = wave;
       osc.frequency.value = note.freq;
       const start = now + note.atMs / 1000;
       const end = start + note.durMs / 1000;
@@ -110,6 +141,11 @@ export class GameAudio {
 
   playAlert(): void {
     this.play(ALERT_TUNE, 0.12);
+  }
+
+  playSecret(mood: SpectacleMood): void {
+    const tune = SECRET_TUNES[mood];
+    this.play(tune.notes, tune.volume, tune.wave);
   }
 
   private startAmbient(): void {

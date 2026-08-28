@@ -186,6 +186,8 @@ export default function GameView() {
   const [shopOpen, setShopOpen] = useState(false);
   const [playing, setPlaying] = useState<MinigameId | null>(null);
   const [spectating, setSpectating] = useState<{ name: string; game: string; score: number } | null>(null);
+  const [localSecret, setLocalSecret] = useState<{ mood: SpectacleMood; nonce: number } | null>(null);
+  const secretNonce = useRef(0);
   const audioRef = useRef<GameAudio | null>(null);
   const localId = useRef(0);
   const maxSeqRef = useRef(-1);
@@ -362,6 +364,7 @@ export default function GameView() {
     // who did it, which is what sends everyone else hunting for it.
     const offSecret = onSecret((notice) => {
       pushFeed("🎮", secretFeedText(notice.mood, petNameRef.current, projectNow()?.diedAtTick != null));
+      audioRef.current?.playSecret(notice.mood);
     });
     return () => {
       offCare();
@@ -394,6 +397,9 @@ export default function GameView() {
       // leave a throttled screen-reader user with nothing at all.
       if (!body.broadcast) {
         pushFeed("🎮", secretFeedText(body.mood, petNameRef.current, projectNow()?.diedAtTick != null));
+        audioRef.current?.playSecret(body.mood);
+        secretNonce.current += 1;
+        setLocalSecret({ mood: body.mood, nonce: secretNonce.current });
       }
     })();
   }, [projectNow]);
@@ -537,7 +543,7 @@ export default function GameView() {
       {/* The habitat */}
       <div className="panel w-full overflow-hidden !rounded-3xl p-1.5">
         <div className="overflow-hidden rounded-[1.15rem] bg-[#2a2333]">
-          <PetCanvas stream={stream} />
+          <PetCanvas stream={stream} localSecret={localSecret} />
         </div>
         <p aria-live="polite" className="px-3 py-2 text-center text-sm text-muted">
           {statusText}

@@ -8,6 +8,7 @@ import { Particles, type ParticleKind } from "../engine/particles";
 import { DigestContext, type SceneContext } from "../engine/digest";
 import { Toasts } from "./toasts";
 import { Portrait, PORTRAIT_HEIGHT, PORTRAIT_WIDTH } from "./portrait";
+import { Spectacle } from "./party";
 import { AnimationMachine } from "../anim/machine";
 import { BASE_CLIPS, BUTTERFLY_CLIP, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP, type OneShotName } from "../anim/clips";
 import { SPRITE_FRAMES } from "../atlas.generated";
@@ -15,6 +16,7 @@ import { Backdrop, keyOf, ROOM_HEIGHT, ROOM_WIDTH, RUG, venueSpec, WINDOW, type 
 import { celestialAt, seasonFor, skyMomentAt, venueAt, weatherFor, type Celestial } from "@/sim/atmosphere";
 import type { DerivedState } from "@/sim/derive";
 import type { AmbientEvent } from "@/sim/ambient";
+import type { SpectacleMood } from "@/sim/secret";
 import type { CareAction, LifeStage } from "@/sim/tuning";
 
 export { ROOM_WIDTH, ROOM_HEIGHT } from "./backdrop";
@@ -166,6 +168,7 @@ export class Room {
   private readonly toasts = new Toasts();
   private readonly backdrop = new Backdrop();
   private readonly portrait = new Portrait();
+  private readonly spectacle = new Spectacle();
   private condition: Condition = "well";
   private seed = 0;
   // Until the first sync lands, the room holds an ordinary clear midday.
@@ -259,6 +262,22 @@ export class Room {
   }
 
   /**
+   * Someone entered the ancient code (SPEC §26.4). The toast lands either
+   * way; under reduced motion it and the feed line are the whole event, as
+   * they are for every rare moment.
+   *
+   * The toast names the code but never spells it — a canvas that printed
+   * ↑↑↓↓←→←→BA would teach the sequence to every witness, which is the one
+   * discovery route §26 deliberately does not take.
+   */
+  secret(mood: SpectacleMood, nowMs: number): void {
+    this.toasts.push(mood === "party" ? "the ancient code" : "the sky opens", nowMs);
+    if (this.reducedMotion) return;
+    this.spectacle.start(mood, nowMs);
+    if (mood === "party") this.machine.trigger("celebrating", nowMs);
+  }
+
+  /**
    * A shared rare moment (SPEC §21.5). Under reduced motion the feed entry
    * carries it alone — nothing here runs.
    */
@@ -322,6 +341,12 @@ export class Room {
     this.updateWander(nowMs);
     const moment = this.moment;
     if (moment && (nowMs - moment.startedMs < 0 || nowMs - moment.startedMs > AMBIENT_MS)) this.moment = null;
+    this.spectacle.advance(nowMs);
+    // The cheer is a one-shot and the party outlasts it several times over,
+    // so it is re-armed as it lapses rather than played once at the top.
+    if (this.spectacle.active && this.spectacle.currentMood === "party" && this.machine.activeOneShot(nowMs) === null) {
+      this.machine.trigger("celebrating", nowMs);
+    }
   }
 
   /**
@@ -384,6 +409,9 @@ export class Room {
     );
 
     this.renderDecor(ctx, nowMs);
+    // Behind the pet on purpose (SPEC §26.4): the wash sinks the room without
+    // taking the animal with it, and a meteor passes at depth.
+    this.spectacle.renderBehind(ctx, nowMs);
 
     if (this.atlas.ready) {
       const frame = this.walking
@@ -406,9 +434,11 @@ export class Room {
 
     this.particles.render(ctx);
     this.renderAmbient(ctx, nowMs);
+    this.spectacle.renderFront(ctx, nowMs);
 
-    // Night dims the room without hiding it.
-    if (this.asleep) {
+    // Night dims the room without hiding it — unless the sky is already open,
+    // whose deeper wash stands in for it (SPEC §26.4).
+    if (this.asleep && !this.spectacle.supersedesNightDim) {
       ctx.fillStyle = "rgba(9, 8, 24, 0.22)";
       ctx.fillRect(0, 0, ROOM_WIDTH, ROOM_HEIGHT);
     }

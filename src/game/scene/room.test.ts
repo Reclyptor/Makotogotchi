@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { Room, ROOM_HEIGHT, ROOM_WIDTH, STAGE_SCALE, stageScale, wanderBand } from "./room";
 import { RUG } from "./backdrop";
+import { SPECTACLE_MS } from "./party";
 import { drawRect } from "../engine/atlas";
 import { BASE_CLIPS, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP } from "../anim/clips";
 import { SPRITE_FRAMES, type FrameName } from "../atlas.generated";
@@ -449,6 +450,22 @@ describe("skipping frames that would paint the same pixels", () => {
     expect(recorder.current().clip).toBeNull();
   });
 
+  it("paints again while the sky is open, and settles once it closes", () => {
+    const { room, derived } = contentedRoom();
+    const recorder = recordingContext();
+    room.syncDerived(derived, false, 0);
+    room.render(recorder.ctx, 1000);
+    room.secret("stars", 1000);
+    // Mid-run the shower is moving, so an instant that would otherwise have
+    // been skipped has to paint.
+    expect(paintedCalls(recorder, () => room.render(recorder.ctx, 4000))).toBeGreaterThan(0);
+    // Once it has elapsed the room goes back to skipping identical frames — a
+    // spectacle must not leave the loop repainting forever.
+    const after = 1000 + SPECTACLE_MS + 5000;
+    room.render(recorder.ctx, after);
+    expect(paintedCalls(recorder, () => room.render(recorder.ctx, after))).toBe(0);
+  });
+
   it("keeps the stroll on real time rather than on frames painted", () => {
     const { room, derived } = contentedRoom();
     const recorder = recordingContext();
@@ -466,6 +483,61 @@ describe("skipping frames that would paint the same pixels", () => {
   });
 });
 
+
+describe("the ancient code in the room (SPEC §26)", () => {
+  const paintedCalls = (recorder: ReturnType<typeof recordingContext>, render: () => void): number => {
+    const before = recorder.calls();
+    render();
+    return recorder.calls() - before;
+  };
+
+  it("opens the sky for a caretaker who wants motion", () => {
+    const { room, derived } = contentedRoom();
+    const recorder = recordingContext();
+    room.syncDerived(derived, false, 0);
+    room.render(recorder.ctx, 1000);
+    room.secret("stars", 1000);
+    expect(paintedCalls(recorder, () => room.render(recorder.ctx, 4000))).toBeGreaterThan(0);
+  });
+
+  it("under reduced motion the toast carries it alone", () => {
+    // SPEC §26.6: the same rule §21.5 already applies to rare events. The
+    // toast still lands — it is the in-canvas echo of the feed line — but
+    // nothing washes, falls, or streaks.
+    const plain = contentedRoom();
+    const quiet = contentedRoom();
+    quiet.room.reducedMotion = true;
+
+    const plainRec = recordingContext();
+    const quietRec = recordingContext();
+    plain.room.syncDerived(plain.derived, false, 0);
+    quiet.room.syncDerived(quiet.derived, false, 0);
+    plain.room.render(plainRec.ctx, 1000);
+    quiet.room.render(quietRec.ctx, 1000);
+
+    plain.room.secret("stars", 1000);
+    quiet.room.secret("stars", 1000);
+
+    // A frame late in the run: the moving room is still drawing the shower,
+    // the still one has nothing left to say once its toast has faded.
+    expect(paintedCalls(plainRec, () => plain.room.render(plainRec.ctx, 6000))).toBeGreaterThan(0);
+    expect(paintedCalls(quietRec, () => quiet.room.render(quietRec.ctx, 6000))).toBe(0);
+  });
+
+  it("does not double-dim a sleeping room", () => {
+    // The indigo wash stands in for the night dim (SPEC §26.4); both at once
+    // would darken twice and lift in two visible stages.
+    const { room, derived } = contentedRoom();
+    const recorder = recordingContext();
+    room.syncDerived(derived, true, 0);
+    room.render(recorder.ctx, 1000);
+    room.secret("stars", 1000);
+    room.render(recorder.ctx, 4000);
+    // Nothing to assert about pixels here beyond that it kept drawing; the
+    // handover itself is asserted on the Spectacle, which owns the flag.
+    expect(paintedCalls(recorder, () => room.render(recorder.ctx, 4500))).toBeGreaterThan(0);
+  });
+});
 
 describe("the skip never hides a frame that differs", () => {
   /**

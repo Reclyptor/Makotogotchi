@@ -16,6 +16,7 @@ import { isVenueId } from "@/sim/atmosphere";
 import { startLoop } from "@/game/engine/loop";
 import { wantToast } from "@/app/components/WantBanner/copy";
 import type { PetStream } from "@/app/hooks/usePetStream";
+import type { SpectacleMood } from "@/sim/secret";
 
 const ACTION_EMOJI: Record<CareAction, string> = {
   FEED: "🍖",
@@ -70,11 +71,18 @@ const writeStored = (storageKey: string, value: string): void => {
 
 export type PetCanvasProps = {
   stream: PetStream;
+  /**
+   * A spectacle to play on this screen alone (SPEC §26.2). Set when the
+   * caretaker entered the ancient code but lost the room-wide guard, so no
+   * broadcast is coming back to drive it. The nonce is what makes a second
+   * throttled entry of the same mood a second spectacle rather than a no-op.
+   */
+  localSecret?: { mood: SpectacleMood; nonce: number } | null;
 };
 
-export default function PetCanvas({ stream }: PetCanvasProps) {
+export default function PetCanvas({ stream, localSecret = null }: PetCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const { projectNow, onCare, onMilestone, onWant, onMinigame, onReact, caretakerId, room: roomView, timeZone, presenceCount } =
+  const { projectNow, onCare, onMilestone, onWant, onMinigame, onReact, onSecret, caretakerId, room: roomView, timeZone, presenceCount } =
     stream;
   const roomRef = useRef<Room | null>(null);
   const roomViewRef = useRef(roomView);
@@ -168,6 +176,11 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
       room.machine.trigger("sulking", performance.now());
       room.onMilestone("😔", performance.now());
     });
+    // The ancient code (SPEC §26.4). The mood is decided server-side and
+    // carried in the message, so every room opens the same sky at once.
+    const offSecret = onSecret((notice) => {
+      room.secret(notice.mood, performance.now());
+    });
     const offReact = onReact((notice) => {
       const who = notice.caretakerId === caretakerRef.current ? "you" : notice.caretakerName;
       room.onMilestone(`${notice.emoji} ${who}`, performance.now());
@@ -246,10 +259,16 @@ export default function PetCanvas({ stream }: PetCanvasProps) {
       offWant();
       offMinigame();
       offReact();
+      offSecret();
       media.removeEventListener("change", onMotionChange);
       canvas.removeEventListener("contextrestored", onContextRestored);
     };
-  }, [onCare, onMilestone, onWant, onMinigame, onReact, projectNow]);
+  }, [onCare, onMilestone, onWant, onMinigame, onReact, onSecret, projectNow]);
+
+  useEffect(() => {
+    if (!localSecret) return;
+    roomRef.current?.secret(localSecret.mood, performance.now());
+  }, [localSecret]);
 
   // A crowd gathering is a rising edge, not a level: the room celebrates the
   // moment the third watcher arrives, and stays quiet while they linger.
