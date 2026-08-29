@@ -764,6 +764,27 @@ lives beside the message types (`deliverableTo` in `engine/messages.ts`) so the
 boundary can be tested without a socket. Anything added later that is
 per-caretaker obeys the same rule.
 
+**Caches are kept coherent by the same channel.** The room rides a short
+TTL in front of Mongo, and a writer can only ever drop its *own* copy — so
+before this, every other replica went on serving the old room until its TTL
+ran out, while the `room` message announcing the change was already reaching
+those replicas' clients. The cache was contradicting a broadcast the browser
+had in hand.
+
+Each process therefore subscribes at **boot**, not on its first SSE client:
+the hub attaches lazily, so a replica serving only `/api/state` would never
+have heard the message at all. And it takes the room *off the message* rather
+than dropping its copy and re-reading — the payload is what `roomState`
+produced on the writer, so a drop-and-reread would turn every room change
+into one Mongo read per replica. That was tolerable when the room changed on
+a funding; it is not now that every vote on the day's ballot changes it
+(§22.9).
+
+Two replicas announcing at the same instant can deliver out of order, so one
+may briefly hold the older of two rooms. That is accepted: the next
+announcement corrects it and the TTL bounds it — the same staleness the
+cache already tolerated, minus the read.
+
 The purse is published by the **mutation**, never by its callers. Coins and
 pack contents are written in exactly five places — `recordContribution`,
 `creditCoins`, `spendCoins`, `consumeItem`, `refundItem` — and each publishes
@@ -865,6 +886,21 @@ differently ("Makoto is still eating", not "slow down").
 
 Max concurrent SSE streams per IP (default 5), so one client cannot pin
 resources by opening hundreds of streams. Exceeding it returns `429`.
+
+**The count is held in Redis, across the whole fleet.** A per-process count
+is not a smaller version of this rule, it is a different and worse one: with
+N replicas behind a load balancer each pod starts counting that address from
+zero, so the real ceiling is N × the limit and the guard *relaxes as the game
+scales*. `src/server/streamcap.ts`, keyed `streams:<ip>`.
+
+The shape is presence's (§2.11): a sorted set of open connection → last
+heartbeat, pruned by age on read, refreshed by the same 15s ping that
+refreshes presence. A plain INCR/DECR counter cannot survive a pod dying
+mid-stream — its decrements never run, and the address stays locked out
+until somebody clears the key by hand. Here an abandoned stream merely stops
+being refreshed and ages out. Prune, count and claim happen in one Lua call,
+because two streams opening at once would otherwise both read a count below
+the limit and both be let in.
 
 ### 8.4 Trusting Client Input
 
