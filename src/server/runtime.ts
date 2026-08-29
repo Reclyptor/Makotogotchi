@@ -22,6 +22,9 @@ import { TICK_SECONDS, TICKS_PER_HOUR } from "@/sim/tuning";
 import { ambientAt } from "@/sim/ambient";
 import { worthRecording } from "@/sim/difficulty";
 import { activeCaretakers } from "./population";
+import { subscribeToEvents } from "./stream/hub";
+import { primeRoomCache } from "./snapshot";
+import type { EngineMessage } from "./engine/messages";
 import { settleQuest } from "./quests";
 import { observeWants } from "./wants";
 import { isAlive, type Generation } from "@/sim/model";
@@ -126,6 +129,26 @@ const boot = async (): Promise<Runtime> => {
       console.error("tick failed", error);
     });
   }, TICK_SECONDS * 1000);
+
+  // Cache coherence across the fleet (SPEC §7.2). The room is cached for a
+  // few seconds in front of Mongo, and the writer can only ever drop its
+  // OWN copy — so every other pod kept serving the old room until its TTL
+  // expired, while the very message that says the room changed was already
+  // on its way to those pods' clients. The cache was contradicting a
+  // broadcast the browser had in hand.
+  //
+  // Subscribing here rather than on the first SSE client matters as much as
+  // the invalidation: the hub attaches lazily, so a replica serving only
+  // /api/state would never have heard the message at all.
+  await subscribeToEvents((raw) => {
+    try {
+      const message = JSON.parse(raw) as EngineMessage;
+      if (message.type === "room") primeRoomCache(message.room);
+    } catch {
+      // A malformed payload is not worth taking the process down over; the
+      // TTL is still there underneath as the backstop.
+    }
+  });
 
   return { engine, generation };
 };

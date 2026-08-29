@@ -45,6 +45,25 @@ export const invalidateRoomCache = (): void => {
   roomCache = null;
 };
 
+/**
+ * Take the room straight off the broadcast that announced it (SPEC §7.2).
+ *
+ * The `room` message already carries exactly what a fresh read would
+ * return — it was built by `roomState` on the writer — so a pod that merely
+ * dropped its copy would turn every room change into one Mongo read per
+ * replica. That was tolerable when the room changed on a funding; it is not
+ * now that every vote on the day's ballot changes it (§22.9).
+ *
+ * Ordering caveat, deliberately accepted: two pods announcing at the same
+ * moment can deliver out of order, so a replica may hold the older of two
+ * near-simultaneous rooms. The next announcement corrects it and the TTL
+ * bounds it — the same staleness this cache already tolerated, minus the
+ * read.
+ */
+export const primeRoomCache = (room: RoomView): void => {
+  roomCache = { room, at: Date.now() };
+};
+
 const cachedRoom = async (): Promise<RoomView> => {
   if (roomCache && Date.now() - roomCache.at < ROOM_TTL_MS) return roomCache.room;
   const room = await roomState(await db());

@@ -11,6 +11,7 @@ import { db } from "@/server/db/client";
 import { key, redis } from "@/server/redis/client";
 import { subscribeToEvents } from "@/server/stream/hub";
 import { dropPresence, listPresence, PresenceBroadcaster, shouldBroadcastPresence, touchPresence } from "@/server/presence";
+import { claimStreamSlot, releaseStreamSlot, touchStreamSlot } from "@/server/streamcap";
 import { anonymousName, caretakerProfile, leaderboard, nicknameMap } from "@/server/social";
 import { holderChips } from "@/server/titles";
 import { snapshotPayload } from "@/server/snapshot";
@@ -22,16 +23,6 @@ export const dynamic = "force-dynamic";
 
 const PING_INTERVAL_MS = 15_000;
 const SNAPSHOT_INTERVAL_MS = 30_000;
-
-// Per-process connection accounting (SPEC §8.3). One replica in production
-// makes this globally correct; more replicas would only loosen the cap.
-const GLOBAL_KEY = Symbol.for("makotogotchi.streamcounts");
-type GlobalWithCounts = typeof globalThis & { [GLOBAL_KEY]?: Map<string, number> };
-const streamCounts = (): Map<string, number> => {
-  const holder = globalThis as GlobalWithCounts;
-  holder[GLOBAL_KEY] ??= new Map();
-  return holder[GLOBAL_KEY];
-};
 
 const presenceView = async (): Promise<PresenceView> => {
   const ids = await listPresence(redis(), key("presence"));
@@ -70,16 +61,17 @@ const broadcastPresence = async (): Promise<void> => {
 export async function GET(request: NextRequest): Promise<Response> {
   const identity = resolveCaretaker(request);
   const ip = clientIp(request);
-  const counts = streamCounts();
+  // This stream's own identity in the presence set and in the per-IP cap —
+  // a caretaker can hold several at once, and each must come and go on its
+  // own.
+  const connectionId = randomUUID();
 
-  if ((counts.get(ip) ?? 0) >= env().MAX_STREAMS_PER_IP) {
+  // The cap is counted in Redis across the whole fleet, not per pod: a
+  // per-process count would let one address open the limit again for every
+  // replica behind the balancer (SPEC §8.3).
+  if (!(await claimStreamSlot(redis(), key(`streams:${ip}`), connectionId, env().MAX_STREAMS_PER_IP))) {
     return new Response("too many streams", { status: 429 });
   }
-  counts.set(ip, (counts.get(ip) ?? 0) + 1);
-
-  // This stream's own identity in the presence set — a caretaker can hold
-  // several at once, and each must come and go on its own.
-  const connectionId = randomUUID();
 
   const { engine, generation } = await runtime();
   const current = await generation();
@@ -148,6 +140,10 @@ export async function GET(request: NextRequest): Promise<Response> {
         // broadcast lost the 2s guard race would otherwise never be
         // reflected anywhere. This bounds presence staleness at one ping.
         void touchPresence(redis(), key("presence"), identity.caretakerId, connectionId).then(() => broadcastPresence());
+        // The same heartbeat keeps this stream's cap slot alive. Without it
+        // a long-lived stream ages out of the set and stops being counted,
+        // which would quietly hand the address a free extra connection.
+        void touchStreamSlot(redis(), key(`streams:${ip}`), connectionId);
       }, PING_INTERVAL_MS);
 
       snapshotTimer = setInterval(() => {
@@ -168,9 +164,7 @@ export async function GET(request: NextRequest): Promise<Response> {
       unsubscribe?.();
       if (pingTimer) clearInterval(pingTimer);
       if (snapshotTimer) clearInterval(snapshotTimer);
-      const remaining = (streamCounts().get(ip) ?? 1) - 1;
-      if (remaining <= 0) streamCounts().delete(ip);
-      else streamCounts().set(ip, remaining);
+      void releaseStreamSlot(redis(), key(`streams:${ip}`), connectionId);
       void dropPresence(redis(), key("presence"), identity.caretakerId, connectionId).then(() => broadcastPresence());
     },
   });
