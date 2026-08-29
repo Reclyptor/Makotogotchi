@@ -6,17 +6,13 @@
 // the sky opens with confetti or with meteors depends on when CI runs. Every
 // assertion here is therefore on the part of the copy both moods share.
 
-import { execFileSync } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
 
-/**
- * The room-wide guard holds for five minutes (SPEC §26.2), which outlives a
- * whole test run — so the second test to want a broadcast would silently get
- * the local-only path instead. Cleared before each test that needs one.
- */
-const clearGuard = (): void => {
-  execFileSync("docker", ["exec", "mgc-e2e-redis", "redis-cli", "DEL", "mgc:konami:guard"], { stdio: "ignore" });
-};
+// Nothing in this file resets room-wide state between entries, and nothing may
+// start (SPEC §26.8). A five-minute room guard used to live here, and every
+// test in this file passed for as long as each one cleared it first — the
+// clearing looked like test hygiene and was really the bug, in writing. If a
+// run can only pass by being handed a fresh room, that is the finding.
 
 const KONAMI = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a", "Enter"];
 
@@ -32,8 +28,7 @@ const live = async (page: Page): Promise<void> => {
 };
 
 test.describe("the ancient code", () => {
-  test("opens the sky on every screen at once", async ({ browser }) => {
-    clearGuard();
+  test("opens the sky on every screen at once, every time", async ({ browser }) => {
     const contextA = await browser.newContext();
     const contextB = await browser.newContext();
     const pageA = await contextA.newPage();
@@ -53,12 +48,19 @@ test.describe("the ancient code", () => {
     // …and nobody is told who did it (SPEC §26.2).
     await expect(pageB.getByText(/the ancient code/)).not.toContainText(/You|Friend/);
 
+    // The regression this file exists to catch. B tries it moments later, and
+    // it has to reach both screens again. Under the old room-wide guard this
+    // second entry was swallowed: B saw the full spectacle locally and A saw
+    // nothing, which is what "the easter egg is broken" turned out to mean.
+    await enterCode(pageB);
+    await expect(pageA.getByText(/the ancient code/)).toHaveCount(2, { timeout: 10_000 });
+    await expect(pageB.getByText(/the ancient code/)).toHaveCount(2, { timeout: 10_000 });
+
     await contextA.close();
     await contextB.close();
   });
 
   test("leaves a keepsake with its finder and nobody else", async ({ browser }) => {
-    clearGuard();
     const contextA = await browser.newContext();
     const contextB = await browser.newContext();
     const pageA = await contextA.newPage();
@@ -106,7 +108,6 @@ test.describe("the ancient code", () => {
   });
 
   test("stays inert while a dialog owns the keyboard", async ({ browser }) => {
-    clearGuard();
     const context = await browser.newContext();
     const page = await context.newPage();
     await page.goto("/");

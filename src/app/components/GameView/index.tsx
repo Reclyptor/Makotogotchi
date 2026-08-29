@@ -32,7 +32,7 @@ import { petClock, venueSpec } from "@/game/scene/backdrop";
 import { usePetStream } from "@/app/hooks/usePetStream";
 import { useKonami } from "@/app/hooks/useKonami";
 import { useRetro } from "@/app/hooks/useRetro";
-import type { SpectacleMood } from "@/sim/secret";
+import { spectacleMood, type SpectacleMood } from "@/sim/secret";
 import type { FeedEntryPayload } from "@/app/api/feed/route";
 
 const STAGE_LABELS: Record<string, string> = {
@@ -435,25 +435,29 @@ export default function GameView() {
   // place that knows both dialogs' open state.
   const onKonami = useCallback(() => {
     // The keepsake first, and unconditionally: it is this caretaker's alone,
-    // so it must not depend on the network, the guard, or anyone watching.
+    // so it must not depend on the network or on anyone else watching.
     if (retro.unlock()) pushFeed("📺", "RETRO MODE UNLOCKED");
     void (async () => {
       const response = await fetch("/api/konami", { method: "POST" }).catch(() => null);
-      if (!response?.ok) return;
-      const body = (await response.json().catch(() => null)) as { broadcast: boolean; mood: SpectacleMood } | null;
-      if (!body) return;
-      // A won broadcast comes back to this screen over its own stream, so the
-      // feed line is pushed once, there. Losing the guard means no message is
-      // coming — and the finder is never told they were second, so the line is
-      // written locally instead. The canvas is aria-hidden, which makes the
-      // feed the only carrier this reaches (SPEC §11.3); skipping it would
-      // leave a throttled screen-reader user with nothing at all.
-      if (!body.broadcast) {
-        pushFeed("🎮", secretFeedText(body.mood, petNameRef.current, projectNow()?.diedAtTick != null));
-        audioRef.current?.playSecret(body.mood);
-        secretNonce.current += 1;
-        setLocalSecret({ mood: body.mood, nonce: secretNonce.current });
-      }
+      // The ordinary path: the route published, and the spectacle arrives back
+      // on this screen over its own stream like everyone else's. Nothing to do
+      // here — one code path draws it, and this screen is not special.
+      if (response?.ok) return;
+      // Refused by the rate limiter, or the request never landed. Either way
+      // no message is coming, and a keypress that does nothing whatsoever is
+      // exactly what a broken feature looks like (SPEC §26.2) — so this screen
+      // runs the spectacle for itself. The mood is derived from the projection
+      // the browser already holds, which is safe here and only here: nobody
+      // else is watching this one, so there is no room left to disagree with.
+      // The canvas is aria-hidden, which makes the feed the only carrier that
+      // reaches a screen reader at all (§11.3).
+      const state = projectNow();
+      if (!state) return;
+      const mood = spectacleMood(state);
+      pushFeed("🎮", "The ancient code answered, but the sky is still settling — this one was yours alone.");
+      audioRef.current?.playSecret(mood);
+      secretNonce.current += 1;
+      setLocalSecret({ mood, nonce: secretNonce.current });
     })();
   }, [projectNow, retro]);
   useKonami(onKonami, !playing && !shopOpen);
