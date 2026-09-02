@@ -9,14 +9,33 @@ import { env } from "../env";
 let client: Redis | null = null;
 let subscriber: Redis | null = null;
 
+/**
+ * Open a connection that survives losing Redis.
+ *
+ * ioredis reconnects on its own, and every caller here is already written to
+ * tolerate a failed round trip — the tick loop retries next interval, the
+ * write lock throws and the request 500s, the hub falls back to the room
+ * cache's TTL. What none of that survives is the `error` event itself:
+ * EventEmitter rethrows an unhandled `error` as an uncaught exception, so a
+ * blip the client was about to recover from instead takes the pod down.
+ * Listening is the whole fix — the recovery already exists.
+ */
+const connect = (role: string): Redis => {
+  const connection = new Redis(env().REDIS_URL);
+  connection.on("error", (error: unknown) => {
+    console.error(`redis ${role} connection error`, error);
+  });
+  return connection;
+};
+
 export const redis = (): Redis => {
-  client ??= new Redis(env().REDIS_URL);
+  client ??= connect("command");
   return client;
 };
 
 /** A subscribed connection cannot issue commands; pub/sub gets its own. */
 export const redisSubscriber = (): Redis => {
-  subscriber ??= new Redis(env().REDIS_URL);
+  subscriber ??= connect("subscriber");
   return subscriber;
 };
 

@@ -722,6 +722,14 @@ Redis holding no unique durable state is a deliberate invariant: **flushing
 Redis must cost nothing but a cold cache.** Anything that would be lost
 permanently belongs in Mongo.
 
+**Every connection registers an `error` listener at construction.** ioredis
+reconnects on its own and every caller here already tolerates a failed round
+trip — the tick loop retries next interval, the write lock throws and the
+request 500s, the room cache falls back to its TTL. None of that survives the
+`error` event itself: EventEmitter rethrows an unhandled `error` as an
+uncaught exception, so a blip the client was about to recover from instead
+takes the pod down. The recovery exists; listening is what lets it run.
+
 ---
 
 ## 7. Realtime Protocol
