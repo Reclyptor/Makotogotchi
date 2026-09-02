@@ -1563,12 +1563,15 @@ Makotogotchi/
     │   ├── redis/              # client, write lock, leader lease
     │   ├── engine/             # engine (serialized write path), lifecycle, messages
     │   ├── push/               # subscriptions store, dispatcher, sender
-    │   ├── stream/             # SSE fanout hub (one Redis sub per pod)
+    │   ├── stream/             # hub (one Redis sub per pod) + snapshots
+    │   │                       # (one reconciliation cycle per pod, §7.4)
     │   ├── env.ts identity.ts ratelimit.ts presence.ts http.ts
     │   ├── social.ts votes.ts shop.ts snapshot.ts schedule.ts
-    │   └── runtime.ts testsetup.ts
+    │   └── runtime.ts once.ts testsetup.ts
     ├── game/                   # canvas engine, anim machine, room scene, audio
     │                           # scene/party (SPEC §26.4)
+    │                           # scene/backdrop/outdoors/ — one file per venue
+    │                           # over a shared sky/buffer module (SPEC §22.8)
     └── app/                    # Next.js App Router
         ├── layout.tsx page.tsx globals.css
         ├── memorial/ leaderboard/ about/
