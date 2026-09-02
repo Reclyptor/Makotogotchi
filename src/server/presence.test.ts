@@ -92,6 +92,31 @@ describe("the presence broadcast throttle", () => {
     broadcaster.cancel();
   });
 
+  it("takes a handed-over payload for the leading publish and reads fresh for the trailing one", async () => {
+    // A connecting stream has already assembled the presence view for its own
+    // hello, so it offers that instead of paying for an identical second one.
+    // The trailing publish must NOT reuse it: it fires a window later
+    // precisely because something has changed since, which makes the view it
+    // was offered the one thing it must not send.
+    const seen: (string | undefined)[] = [];
+    const broadcaster = new PresenceBroadcaster<string>(
+      stubWindow(),
+      async (precomputed) => void seen.push(precomputed),
+      WINDOW,
+    );
+
+    await broadcaster.request("the joining stream's own view");
+    expect(seen).toEqual(["the joining stream's own view"]);
+
+    // A second join inside the same window loses and arms the trailing one.
+    await broadcaster.request("a view that is stale by the time it fires");
+    await settle();
+
+    expect(seen).toHaveLength(2);
+    expect(seen[1]).toBeUndefined(); // read fresh, not the payload it was handed
+    broadcaster.cancel();
+  });
+
   it("publishes once more after the window closes, however many were dropped", async () => {
     let published = 0;
     const broadcaster = new PresenceBroadcaster(stubWindow(), async () => void published++, WINDOW);

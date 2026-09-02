@@ -25,16 +25,24 @@ export const dynamic = "force-dynamic";
 const PING_INTERVAL_MS = 15_000;
 const SNAPSHOT_INTERVAL_MS = 30_000;
 
+// Assembling one presence view is four store reads across Redis and Mongo,
+// and it is assembled on every connect and every won broadcast window. Only
+// two of them actually depend on anything: the names need the ids, and the
+// chips and crown need the generation. Everything else was sequential for no
+// reason but the order it was written in, so it runs in two waves rather than
+// five round trips.
 const presenceView = async (): Promise<PresenceView> => {
-  const ids = await listPresence(redis(), key("presence"));
-  const names = await nicknameMap(await db(), ids);
+  const { generation } = await runtime();
+  const [ids, current, database] = await Promise.all([listPresence(redis(), key("presence")), generation(), db()]);
   // Current title holders wear their chips, and the generation's leader the
   // §2.11 crown, in the presence list (SPEC §24.4). Generation scope reads
   // no day window, so nowTick is unused.
-  const { generation } = await runtime();
-  const current = await generation();
-  const chips = await holderChips(await db(), current.id);
-  const [leader] = await leaderboard(await db(), "generation", { generationId: current.id, nowTick: 0 }, 1);
+  const [names, chips, leaders] = await Promise.all([
+    nicknameMap(database, ids),
+    holderChips(database, current.id),
+    leaderboard(database, "generation", { generationId: current.id, nowTick: 0 }, 1),
+  ]);
+  const [leader] = leaders;
   return {
     count: ids.length,
     caretakers: ids.map((id) => ({ id, name: names.get(id) ?? anonymousName(id), titles: chips.get(id) ?? [] })),
@@ -42,21 +50,21 @@ const presenceView = async (): Promise<PresenceView> => {
   };
 };
 
-const publishPresence = async (): Promise<void> => {
-  const message: EngineMessage = { type: "presence", ...(await presenceView()) };
+const publishPresence = async (precomputed?: PresenceView): Promise<void> => {
+  const message: EngineMessage = { type: "presence", ...(precomputed ?? (await presenceView())) };
   await redis().publish(key("events"), JSON.stringify(message));
 };
 
 // One throttle per pod, shared by every stream it serves: the payload is read
 // fresh at publish time, so coalescing a join wave into one message loses
 // nothing (SPEC §7.4).
-let broadcaster: PresenceBroadcaster | null = null;
-const broadcastPresence = async (): Promise<void> => {
-  broadcaster ??= new PresenceBroadcaster(
+let broadcaster: PresenceBroadcaster<PresenceView> | null = null;
+const broadcastPresence = async (view?: PresenceView): Promise<void> => {
+  broadcaster ??= new PresenceBroadcaster<PresenceView>(
     () => shouldBroadcastPresence(redis(), key("presence-guard")),
     publishPresence,
   );
-  await broadcaster.request();
+  await broadcaster.request(view);
 };
 
 // The reconciliation cycle, likewise one per pod. Its payload is the same for
@@ -131,6 +139,12 @@ export async function GET(request: NextRequest): Promise<Response> {
       // the broadcast throttle (SPEC §7.4).
       await touchPresence(redis(), key("presence"), identity.caretakerId, connectionId);
 
+      // Built once and used twice: the hello reports it to this client, and
+      // the join it announces to everyone else carries the same view. It was
+      // assembled after touchPresence, so it already counts this stream —
+      // which is exactly what the broadcast needs to say.
+      const presence = await presenceView();
+
       const state = await engine.view(current);
       const payload = await snapshotPayload(state, current);
       send("hello", {
@@ -138,7 +152,7 @@ export async function GET(request: NextRequest): Promise<Response> {
         nickname: profile?.nickname ?? null,
         streakDays: profile?.streakDays ?? 0,
         generationsSurvived: profile?.generationsSurvived ?? 0,
-        presence: await presenceView(),
+        presence,
         // The opening balance comes with the connect, for the same reason the
         // presence count does: waiting for the next `purse` broadcast would
         // leave the chip reading zero until this caretaker happens to earn or
@@ -157,7 +171,7 @@ export async function GET(request: NextRequest): Promise<Response> {
         send(message.type, message);
       });
 
-      await broadcastPresence();
+      await broadcastPresence(presence);
 
       pingTimer = setInterval(() => {
         comment("ping");

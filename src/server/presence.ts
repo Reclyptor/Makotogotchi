@@ -72,19 +72,28 @@ export const shouldBroadcastPresence = async (redis: Redis, guardKey: string): P
  * The timer runs a full window rather than the guard's remaining TTL, so a
  * change is on every screen within two windows of happening.
  */
-export class PresenceBroadcaster {
+export class PresenceBroadcaster<Payload = never> {
   private trailing: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly claimWindow: () => Promise<boolean>,
-    private readonly publish: () => Promise<void>,
+    private readonly publish: (precomputed?: Payload) => Promise<void>,
     private readonly windowMs: number = BROADCAST_GUARD_MS,
   ) {}
 
-  /** Publish now if the window is free, otherwise once it closes. */
-  async request(): Promise<void> {
+  /**
+   * Publish now if the window is free, otherwise once it closes.
+   *
+   * A caller that has just assembled the payload for its own purposes may
+   * hand it over, which is what stops a connecting stream from building the
+   * same presence view twice in the space of a few milliseconds. It is used
+   * for the leading publish only: by the time a trailing one fires, the
+   * payload it was offered is exactly the thing that has gone stale, so that
+   * path still reads fresh.
+   */
+  async request(precomputed?: Payload): Promise<void> {
     if (await this.claimWindow()) {
-      await this.publish();
+      await this.publish(precomputed);
       return;
     }
     // One trailing publish per window: every loser folds into the same one.
