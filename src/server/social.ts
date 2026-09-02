@@ -9,6 +9,7 @@ import { NICKNAME_PATTERN } from "@/sim/events";
 import type { CareAction } from "@/sim/tuning";
 import { isDuplicateKeyError } from "./db/collections";
 import { announcePurse, purseOf } from "./purse";
+import { once } from "./once";
 
 export type CaretakerDoc = {
   _id: string;
@@ -37,9 +38,7 @@ export type ContributionDoc = {
 export const caretakers = (db: Db): Collection<CaretakerDoc> => db.collection("caretakers");
 export const contributions = (db: Db): Collection<ContributionDoc> => db.collection("contributions");
 
-let ensured = false;
-export const ensureSocialIndexes = async (db: Db): Promise<void> => {
-  if (ensured) return;
+export const ensureSocialIndexes = once(async (db: Db): Promise<void> => {
   await Promise.all([
     // Partial, not sparse: sparse indexes still index explicit nulls, and
     // profiles are created with nickname: null.
@@ -52,12 +51,9 @@ export const ensureSocialIndexes = async (db: Db): Promise<void> => {
     contributions(db).createIndex({ generationId: 1 }),
     contributions(db).createIndex({ day: 1 }),
   ]);
-  ensured = true;
-};
+});
 
-export const resetSocialIndexCache = (): void => {
-  ensured = false;
-};
+export const resetSocialIndexCache = (): void => ensureSocialIndexes.reset();
 
 // A tiny screen, not a moderation system: this is a toy for friends. Extend
 // the list before extending the audience.

@@ -5,6 +5,7 @@
 
 import type { Collection, Db } from "mongodb";
 import { NICKNAME_PATTERN } from "@/sim/events";
+import { once } from "./once";
 
 export type NameVoteDoc = {
   generationId: string;
@@ -17,16 +18,11 @@ export type NameVoteDoc = {
 
 export const nameVotes = (db: Db): Collection<NameVoteDoc> => db.collection("nameVotes");
 
-let ensured = false;
-export const ensureVoteIndexes = async (db: Db): Promise<void> => {
-  if (ensured) return;
+export const ensureVoteIndexes = once(async (db: Db): Promise<void> => {
   await nameVotes(db).createIndex({ generationId: 1, nameLower: 1 }, { unique: true });
-  ensured = true;
-};
+});
 
-export const resetVoteIndexCache = (): void => {
-  ensured = false;
-};
+export const resetVoteIndexCache = (): void => ensureVoteIndexes.reset();
 
 export type ProposeResult = { ok: true } | { ok: false; reason: "INVALID" | "EXISTS" };
 

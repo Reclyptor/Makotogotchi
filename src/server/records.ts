@@ -12,6 +12,7 @@ import type { Collection, Db } from "mongodb";
 import { MINIGAMES, MINIGAME_IDS, type MinigameId } from "@/sim/minigames";
 import { isDuplicateKeyError } from "./db/collections";
 import { anonymousName, nicknameMap } from "./social";
+import { once } from "./once";
 
 export const RECORD_SCOPES = ["weekly", "alltime"] as const;
 export type RecordScope = (typeof RECORD_SCOPES)[number];
@@ -28,15 +29,11 @@ export type RecordDoc = {
 
 export const records = (db: Db): Collection<RecordDoc> => db.collection("records");
 
-let ensured = false;
-
-export const ensureRecordIndexes = async (db: Db): Promise<void> => {
-  if (ensured) return;
+export const ensureRecordIndexes = once(async (db: Db): Promise<void> => {
   // Unique: the CAS relies on it to reject a losing upsert instead of
   // silently inserting a second row for the same board.
   await records(db).createIndex({ gameId: 1, scope: 1, weekKey: 1 }, { unique: true });
-  ensured = true;
-};
+});
 
 /**
  * True if this score took the board. A duplicate key means the row already

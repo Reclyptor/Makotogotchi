@@ -6,6 +6,7 @@ import type { Collection, Db } from "mongodb";
 import type { CauseOfDeath, PetState } from "@/sim/model";
 import type { PetEvent } from "@/sim/events";
 import type { Quirks } from "@/sim/quirks";
+import { once } from "../once";
 
 export type GenerationDoc = {
   _id: string;
@@ -65,10 +66,12 @@ export const generations = (database: Db): Collection<GenerationDoc> => database
 export const events = (database: Db): Collection<EventDoc> => database.collection("events");
 export const snapshots = (database: Db): Collection<SnapshotDoc> => database.collection("snapshots");
 
-let ensured = false;
-
-export const ensureIndexes = async (database: Db): Promise<void> => {
-  if (ensured) return;
+// Guarded by once() rather than a boolean set after the await: every caller
+// arriving while the first was still creating indexes read `false` and started
+// creating them again. It was harmless — createIndex is idempotent, which is
+// why it went unnoticed — but a cold process fired seven index creations per
+// concurrent request instead of seven in total.
+export const ensureIndexes = once(async (database: Db): Promise<void> => {
   await Promise.all([
     // Unique: the lifecycle's rotation guard — two leaders racing a rebirth
     // collapse into one successor generation.
@@ -87,10 +90,7 @@ export const ensureIndexes = async (database: Db): Promise<void> => {
     events(database).createIndex({ caretakerId: 1, at: -1 }),
     snapshots(database).createIndex({ generationId: 1, tick: -1 }),
   ]);
-  ensured = true;
-};
+});
 
 /** Test seam. */
-export const resetIndexCache = (): void => {
-  ensured = false;
-};
+export const resetIndexCache = (): void => ensureIndexes.reset();

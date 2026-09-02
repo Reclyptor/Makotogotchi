@@ -3,6 +3,7 @@
 // service reports gone (404/410) are pruned on send.
 
 import type { Collection, Db } from "mongodb";
+import { once } from "../once";
 
 export type PushSubscriptionDoc = {
   caretakerId: string;
@@ -13,19 +14,14 @@ export type PushSubscriptionDoc = {
 
 export const pushSubscriptions = (db: Db): Collection<PushSubscriptionDoc> => db.collection("pushSubscriptions");
 
-let ensured = false;
-export const ensurePushIndexes = async (db: Db): Promise<void> => {
-  if (ensured) return;
+export const ensurePushIndexes = once(async (db: Db): Promise<void> => {
   await Promise.all([
     pushSubscriptions(db).createIndex({ endpoint: 1 }, { unique: true }),
     pushSubscriptions(db).createIndex({ caretakerId: 1 }),
   ]);
-  ensured = true;
-};
+});
 
-export const resetPushIndexCache = (): void => {
-  ensured = false;
-};
+export const resetPushIndexCache = (): void => ensurePushIndexes.reset();
 
 export const saveSubscription = async (
   db: Db,

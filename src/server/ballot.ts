@@ -13,6 +13,7 @@
 import type { Collection, Db } from "mongodb";
 import { BALLOT_MAX_EXTRA_TICKETS, VENUE_TICKET_COINS, type DayBallot } from "@/sim/atmosphere";
 import { isDuplicateKeyError } from "./db/collections";
+import { once } from "./once";
 
 export type BallotDoc = {
   /** The pet-day these tickets weight — epoch days in the pet's zone, the
@@ -28,19 +29,14 @@ export type BallotDoc = {
 
 export const ballots = (db: Db): Collection<BallotDoc> => db.collection("venueBallots");
 
-let ensured = false;
-export const ensureBallotIndexes = async (db: Db): Promise<void> => {
-  if (ensured) return;
+export const ensureBallotIndexes = once(async (db: Db): Promise<void> => {
   // `_id` is the only query key. The TTL is housekeeping alone: a ballot
   // stops mattering the day after it is drawn, and thirty days is far
   // beyond any row still in play.
   await ballots(db).createIndex({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 30 });
-  ensured = true;
-};
+});
 
-export const resetBallotIndexCache = (): void => {
-  ensured = false;
-};
+export const resetBallotIndexCache = (): void => ensureBallotIndexes.reset();
 
 /**
  * The ballots in play, for the room broadcast: yesterday's, today's closed

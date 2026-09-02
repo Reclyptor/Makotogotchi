@@ -14,6 +14,7 @@ import type { Milestone } from "@/sim/events";
 import { isDuplicateKeyError } from "./db/collections";
 import { anonymousName, nicknameMap } from "./social";
 import { localHourAt } from "./schedule";
+import { once } from "./once";
 import type { TitleMessage } from "./engine/messages";
 
 import { NIGHT_END_HOUR, type TitleId } from "@/sim/titles";
@@ -46,19 +47,13 @@ export type TitleTakeover = {
 const titleStats = (db: Db): Collection<TitleStatsDoc> => db.collection("titleStats");
 const titles = (db: Db): Collection<TitleDoc> => db.collection("titles");
 
-let ensured = false;
-
-export const ensureTitleIndexes = async (db: Db): Promise<void> => {
-  if (ensured) return;
+export const ensureTitleIndexes = once(async (db: Db): Promise<void> => {
   await titleStats(db).createIndex({ generationId: 1, caretakerId: 1 }, { unique: true });
   // Unique: the CAS relies on it to reject a losing upsert (records pattern).
   await titles(db).createIndex({ generationId: 1, titleId: 1 }, { unique: true });
-  ensured = true;
-};
+});
 
-export const resetTitleIndexCache = (): void => {
-  ensured = false;
-};
+export const resetTitleIndexCache = (): void => ensureTitleIndexes.reset();
 
 /** What an accepted action means for the roster (SPEC §24.1). */
 export const classifyTitles = (input: {
