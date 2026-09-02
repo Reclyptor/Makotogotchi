@@ -31,6 +31,11 @@ import { isAlive, type Generation } from "@/sim/model";
 
 const GENERATION_TTL_MS = 10_000;
 const NAME_CACHE_TTL_MS = 30_000;
+/** A caretaker with no nickname yet — re-checked sooner, because that is the
+ *  answer most likely to have just changed. */
+const ANONYMOUS_CACHE_TTL_MS = 5_000;
+/** Leak guard on a map keyed by caretaker, in a process that runs for months. */
+const NAME_CACHE_LIMIT = 10_000;
 
 export type Runtime = {
   engine: PetEngine;
@@ -52,14 +57,28 @@ const boot = async (): Promise<Runtime> => {
   const database = await db();
 
   // Small cache in front of nickname lookups for published care messages.
-  const nameCache = new Map<string, { name: string; at: number }>();
+  //
+  // What is remembered is the LOOKUP, not the rendered name: a caretaker with
+  // no nickname is a cache entry too, or every care action by the many people
+  // who never set one would cost a Mongo query. But a miss is remembered for
+  // less time than a hit, because a miss is the answer most likely to have
+  // just stopped being true — somebody who has this moment chosen a name
+  // should not watch the room call them "Friend 3f2a" for another half minute.
+  const nameCache = new Map<string, { nickname: string | null; at: number }>();
   const caretakerName = async (caretakerId: string): Promise<string> => {
     const cached = nameCache.get(caretakerId);
-    if (cached && Date.now() - cached.at < NAME_CACHE_TTL_MS) return cached.name;
+    if (cached) {
+      const ttl = cached.nickname === null ? ANONYMOUS_CACHE_TTL_MS : NAME_CACHE_TTL_MS;
+      if (Date.now() - cached.at < ttl) return cached.nickname ?? anonymousName(caretakerId);
+    }
     const names = await nicknameMap(database, [caretakerId]);
-    const name = names.get(caretakerId) ?? anonymousName(caretakerId);
-    nameCache.set(caretakerId, name === anonymousName(caretakerId) ? { name, at: Date.now() } : { name, at: Date.now() });
-    return name;
+    const nickname = names.get(caretakerId) ?? null;
+    // Keyed by caretaker, so this grows with everyone who has ever been named
+    // in a broadcast — bounded here rather than left to a process that stays
+    // up for months. Entries are a TTL apart from worthless anyway.
+    if (nameCache.size >= NAME_CACHE_LIMIT) nameCache.clear();
+    nameCache.set(caretakerId, { nickname, at: Date.now() });
+    return nickname ?? anonymousName(caretakerId);
   };
 
   const engine = new PetEngine({ db: database, redis: redis(), key, timeZone: env().PET_TIMEZONE, caretakerName });
@@ -94,7 +113,17 @@ const boot = async (): Promise<Runtime> => {
   // is a Mongo query, and the log should record changes in difficulty, not a
   // heartbeat (SPEC §23.2).
   let lastPopulationTick = -Infinity;
+  // A tick that outruns its own interval must not start a second one beside
+  // itself. The lease does not stop this — the overrunning tick is the leader,
+  // so the next one acquires it too — and neither does the write lock, which
+  // serializes them into a queue rather than refusing them. A slow store would
+  // turn one late tick into a growing backlog of ticks all projecting to the
+  // same instant. Skipping is free: the next interval projects from absolute
+  // time and arrives at the identical state.
+  let ticking = false;
   setInterval(() => {
+    if (ticking) return;
+    ticking = true;
     void (async () => {
       if (!(await lease.acquire())) return;
       const current = await generation();
@@ -124,10 +153,14 @@ const boot = async (): Promise<Runtime> => {
       }
       await dispatcher?.observe(state);
       await lease.renew();
-    })().catch((error: unknown) => {
-      // Failed ticks retry next interval; projection catches up losslessly.
-      console.error("tick failed", error);
-    });
+    })()
+      .catch((error: unknown) => {
+        // Failed ticks retry next interval; projection catches up losslessly.
+        console.error("tick failed", error);
+      })
+      .finally(() => {
+        ticking = false;
+      });
   }, TICK_SECONDS * 1000);
 
   // Cache coherence across the fleet (SPEC §7.2). The room is cached for a
