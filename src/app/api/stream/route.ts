@@ -10,6 +10,7 @@ import { env } from "@/server/env";
 import { db } from "@/server/db/client";
 import { key, redis } from "@/server/redis/client";
 import { subscribeToEvents } from "@/server/stream/hub";
+import { snapshotFanout, type SnapshotFanout } from "@/server/stream/snapshots";
 import { dropPresence, listPresence, PresenceBroadcaster, shouldBroadcastPresence, touchPresence } from "@/server/presence";
 import { claimStreamSlot, releaseStreamSlot, touchStreamSlot } from "@/server/streamcap";
 import { anonymousName, caretakerProfile, leaderboard, nicknameMap } from "@/server/social";
@@ -58,6 +59,18 @@ const broadcastPresence = async (): Promise<void> => {
   await broadcaster.request();
 };
 
+// The reconciliation cycle, likewise one per pod. Its payload is the same for
+// every watcher, so it is built and serialized once a cycle no matter how many
+// streams this process is holding.
+const reconciliation = (): SnapshotFanout =>
+  snapshotFanout(async () => {
+    // Re-resolve the generation each cycle: after a death-and-rebirth every
+    // stream starts carrying the successor egg.
+    const { engine, generation } = await runtime();
+    const live = await generation();
+    return JSON.stringify(await snapshotPayload(await engine.view(live), live));
+  }, SNAPSHOT_INTERVAL_MS);
+
 export async function GET(request: NextRequest): Promise<Response> {
   const identity = resolveCaretaker(request);
   const ip = clientIp(request);
@@ -88,19 +101,22 @@ export async function GET(request: NextRequest): Promise<Response> {
   const encoder = new TextEncoder();
   let closed = false;
   let unsubscribe: (() => void) | null = null;
+  let unsubscribeSnapshots: (() => void) | null = null;
   let pingTimer: ReturnType<typeof setInterval> | null = null;
-  let snapshotTimer: ReturnType<typeof setInterval> | null = null;
 
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (event: string, data: unknown): void => {
+      // Split so the shared reconciliation cycle can hand over JSON it has
+      // already serialized once for every stream on this pod.
+      const sendRaw = (event: string, data: string): void => {
         if (closed) return;
         try {
-          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
         } catch {
           closed = true;
         }
       };
+      const send = (event: string, data: unknown): void => sendRaw(event, JSON.stringify(data));
       const comment = (text: string): void => {
         if (closed) return;
         try {
@@ -155,24 +171,16 @@ export async function GET(request: NextRequest): Promise<Response> {
         void touchStreamSlot(redis(), key(`streams:${ip}`), connectionId);
       }, PING_INTERVAL_MS);
 
-      snapshotTimer = setInterval(() => {
-        void (async () => {
-          // Re-resolve the generation each cycle: after a death-and-rebirth
-          // the same stream starts carrying the successor egg.
-          const liveGeneration = await generation();
-          const liveState = await engine.view(liveGeneration);
-          send("snapshot", await snapshotPayload(liveState, liveGeneration));
-        })().catch(() => {
-          // A transient store error skips one reconciliation cycle; the
-          // next cycle or the live event flow catches the client up.
-        });
-      }, SNAPSHOT_INTERVAL_MS);
+      // Reconciliation rides the pod's shared cycle rather than a timer of
+      // this stream's own: the payload is identical for everyone watching,
+      // and is already serialized by the time it arrives here.
+      unsubscribeSnapshots = reconciliation().subscribe((data) => sendRaw("snapshot", data));
     },
     cancel() {
       closed = true;
       unsubscribe?.();
+      unsubscribeSnapshots?.();
       if (pingTimer) clearInterval(pingTimer);
-      if (snapshotTimer) clearInterval(snapshotTimer);
       void releaseStreamSlot(redis(), key(`streams:${ip}`), connectionId);
       void dropPresence(redis(), key("presence"), identity.caretakerId, connectionId).then(() => broadcastPresence());
     },

@@ -823,6 +823,22 @@ rather than at the next snapshot. The local actor's own actions apply
 optimistically and are corrected by the next non-stale snapshot if the server
 disagreed. Hard resets happen only on non-stale snapshots.
 
+**The 30s cadence is the pod's, not each client's.** Nothing in a snapshot
+belongs to its recipient — state, derived view, clock alignment, phase
+schedule and room are all generation-scoped — so one ticker per process builds
+the payload, serializes it once, and hands the same bytes to every stream it
+holds (`src/server/stream/snapshots.ts`). On a per-client timer the cost of
+reconciliation scaled with the audience: a thousand watchers meant a thousand
+Redis reads, a thousand projections, a thousand phase schedules and a thousand
+JSON encodes per cycle, all computing the identical answer. Reconciliation
+should cost what the pet costs, and there is one pet.
+
+This is the hub's argument (§7.2 — one Redis subscription serves a thousand
+clients) applied to the half of the stream the hub never covered, because
+these messages are produced locally rather than received. The ticker runs only
+while a stream is attached, so an idle replica behind the balancer costs
+nothing.
+
 Clock skew is handled by tracking the offset between the local clock and the
 `serverNowMs` in `hello`, refreshed on every snapshot. The client never trusts
 its own wall clock in absolute terms.
