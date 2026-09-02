@@ -18,6 +18,11 @@ const schema = z.object({
   /** SSE connections allowed per client IP (SPEC §8.3). The e2e harness
    *  raises it — every Playwright worker shares 127.0.0.1. */
   MAX_STREAMS_PER_IP: z.coerce.number().int().positive().default(5),
+  /** Requests per minute per client IP, and actions per minute per caretaker
+   *  (SPEC §8.2). Raised by the e2e harness for the reason above: one address
+   *  there carries the traffic an entire visiting crowd would in production. */
+  RATE_LIMIT_PER_IP: z.coerce.number().int().positive().default(60),
+  RATE_LIMIT_PER_CARETAKER: z.coerce.number().int().positive().default(30),
 });
 
 export type Env = z.infer<typeof schema>;

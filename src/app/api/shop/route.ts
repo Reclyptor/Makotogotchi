@@ -8,7 +8,7 @@ import { db } from "@/server/db/client";
 import { runtime } from "@/server/runtime";
 import { caretakerProfile } from "@/server/social";
 import { catalog, fundingState, purchase, roomState, setActiveTheme, wearCosmetic } from "@/server/shop";
-import { caretakerCookieHeader, resolveCaretaker } from "@/server/http";
+import { caretakerCookieHeader, rateLimit, resolveCaretaker } from "@/server/http";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +22,13 @@ const STATUS: Record<string, number> = { UNKNOWN_ITEM: 400, INSUFFICIENT_COINS: 
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const identity = resolveCaretaker(request);
+
+  const limited = await rateLimit(request, { kind: "read" });
+  if (limited) {
+    if (identity.setCookie) limited.headers.set("Set-Cookie", caretakerCookieHeader(identity.setCookie));
+    return limited;
+  }
+
   const database = await db();
   const { engine, generation } = await runtime();
   const current = await generation();
@@ -49,6 +56,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (identity.setCookie) response.headers.set("Set-Cookie", caretakerCookieHeader(identity.setCookie));
     return response;
   };
+
+  // Buying spends coins; wearing and re-styling mutate the shared room and
+  // announce it to every open stream.
+  const limited = await rateLimit(request, { kind: "write", caretakerId: identity.caretakerId });
+  if (limited) return withCookie(limited);
+
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return withCookie(NextResponse.json({ error: "invalid_body" }, { status: 400 }));
 

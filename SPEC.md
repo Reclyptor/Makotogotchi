@@ -890,6 +890,41 @@ Exceeding a limit returns `429` with `Retry-After`. Exceeding a *cooldown*
 returns `409` with the remaining time — a different thing, and the UI says so
 differently ("Makoto is still eating", not "slow down").
 
+**Every route is metered, and the meter lives in one place.** The buckets are
+taken by `rateLimit` in `src/server/http.ts`, never re-typed in a handler: a
+limit copied into fifteen files is a limit that is eventually missing from
+one, which is exactly what had happened — four routes enforced this section
+and thirteen did not, among them the write-locking `/api/play`, the
+coin-spending `/api/shop/contribute`, and the `$group`-aggregating
+`/api/leaderboard`.
+
+A route declares what it costs rather than which buckets to take:
+
+- **`read`** answers from the stores and takes the per-address bucket alone.
+  Several fire on one page load; they are shared work, not an allowance.
+- **`write`** changes something — appends to the log, moves coins, publishes
+  to every open stream — and takes the per-caretaker bucket on top. The scope
+  carries the caretaker to charge, so a write cannot be metered without one.
+
+Two deliberate exceptions, both about metering what a request actually costs:
+
+- `/api/play`'s `score` phase is a 2s progress heartbeat that mostly no-ops
+  behind the room-wide broadcast guard. It pays the address bucket only —
+  charging a caretaker's action allowance would let the longest game spend its
+  whole budget on progress reports. `start` and `finish` pay in full.
+- `/api/stream` takes the bucket *as well as* the §8.3 cap. The cap bounds how
+  many streams an address holds; it says nothing about how fast it may open
+  them, so an open/close loop stays under the cap forever while paying the
+  stores a full connect each time round. The bucket bounds rate, the cap
+  bounds concurrency.
+
+Both budgets are read from `env()` (`RATE_LIMIT_PER_IP`,
+`RATE_LIMIT_PER_CARETAKER`) for the reason `MAX_STREAMS_PER_IP` is: the e2e
+suite drives the entire application from 127.0.0.1, where production sees a
+crowd. The defaults are the numbers in the table above, and a budget is
+expressed per minute — the bucket holds a minute's worth and refills at
+exactly that rate, so burst and sustained rate cannot drift apart.
+
 ### 8.3 Connection Limits
 
 Max concurrent SSE streams per IP (default 5), so one client cannot pin

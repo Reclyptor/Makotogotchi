@@ -36,7 +36,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   };
 
   // This route spends coins, so it takes both buckets exactly as care does.
-  const limited = await rateLimit(request, identity, "write");
+  const limited = await rateLimit(request, { kind: "write", caretakerId: identity.caretakerId });
   if (limited) return withCookie(limited);
 
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));

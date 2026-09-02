@@ -9,7 +9,7 @@ import { key, redis } from "@/server/redis/client";
 import { runtime } from "@/server/runtime";
 import { contribute } from "@/server/shop";
 import { anonymousName, nicknameMap } from "@/server/social";
-import { caretakerCookieHeader, resolveCaretaker } from "@/server/http";
+import { caretakerCookieHeader, rateLimit, resolveCaretaker } from "@/server/http";
 import type { EngineMessage } from "@/server/engine/messages";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +27,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (identity.setCookie) response.headers.set("Set-Cookie", caretakerCookieHeader(identity.setCookie));
     return response;
   };
+
+  // Spends coins, like its sibling vote route — both buckets.
+  const limited = await rateLimit(request, { kind: "write", caretakerId: identity.caretakerId });
+  if (limited) return withCookie(limited);
+
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return withCookie(NextResponse.json({ error: "invalid_body" }, { status: 400 }));
 

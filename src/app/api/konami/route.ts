@@ -34,7 +34,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return response;
   };
 
-  const limited = await rateLimit(request, identity, "write");
+  const limited = await rateLimit(request, { kind: "write", caretakerId: identity.caretakerId });
   if (limited) return withCookie(limited);
 
   const { engine, generation } = await runtime();

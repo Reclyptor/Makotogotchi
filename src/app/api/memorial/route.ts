@@ -1,13 +1,18 @@
 // GET /api/memorial — the wall of past generations (SPEC §2.10).
 
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/server/db/client";
 import { generations } from "@/server/db/collections";
 import { TICKS_PER_DAY } from "@/sim/tuning";
+import { rateLimit } from "@/server/http";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  // Scans the generations collection for every pet that has ever died.
+  const limited = await rateLimit(request, { kind: "read" });
+  if (limited) return limited;
+
   const docs = await generations(await db())
     .find({ died: { $ne: null } })
     .sort({ ordinal: -1 })

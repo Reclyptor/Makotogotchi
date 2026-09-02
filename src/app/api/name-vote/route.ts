@@ -7,7 +7,7 @@ import { z } from "zod";
 import { db } from "@/server/db/client";
 import { runtime } from "@/server/runtime";
 import { proposeName, tallyVotes, voteForName } from "@/server/votes";
-import { caretakerCookieHeader, resolveCaretaker } from "@/server/http";
+import { caretakerCookieHeader, rateLimit, resolveCaretaker } from "@/server/http";
 
 export const dynamic = "force-dynamic";
 
@@ -18,12 +18,18 @@ const bodySchema = z.union([
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const identity = resolveCaretaker(request);
+  const withCookie = (response: NextResponse): NextResponse => {
+    if (identity.setCookie) response.headers.set("Set-Cookie", caretakerCookieHeader(identity.setCookie));
+    return response;
+  };
+
+  const limited = await rateLimit(request, { kind: "read" });
+  if (limited) return withCookie(limited);
+
   const { generation } = await runtime();
   const current = await generation();
   const tally = await tallyVotes(await db(), current.id, identity.caretakerId);
-  const response = NextResponse.json({ tally });
-  if (identity.setCookie) response.headers.set("Set-Cookie", caretakerCookieHeader(identity.setCookie));
-  return response;
+  return withCookie(NextResponse.json({ tally }));
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -32,6 +38,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (identity.setCookie) response.headers.set("Set-Cookie", caretakerCookieHeader(identity.setCookie));
     return response;
   };
+
+  // Proposing and voting both write, and the egg's window is exactly when
+  // the room is busiest.
+  const limited = await rateLimit(request, { kind: "write", caretakerId: identity.caretakerId });
+  if (limited) return withCookie(limited);
 
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return withCookie(NextResponse.json({ error: "invalid_body" }, { status: 400 }));

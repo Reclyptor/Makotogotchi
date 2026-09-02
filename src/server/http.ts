@@ -7,7 +7,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { CARETAKER_COOKIE, COOKIE_MAX_AGE_SECONDS, mintCaretaker, verifyCaretaker } from "./identity";
 import { key, redis } from "./redis/client";
-import { LIMITS, takeToken, type TokenBucketLimit } from "./ratelimit";
+import { limits, takeToken, type TokenBucketLimit } from "./ratelimit";
 
 export type CaretakerIdentity = {
   caretakerId: string;
@@ -33,15 +33,16 @@ export const clientIp = (request: NextRequest): string =>
  * What a route costs the server, which is what decides how it is metered.
  *
  * `read` answers from the stores and pays the per-address bucket alone —
- * several of these fire on a single page load, and they are shared work, not
- * a caretaker spending their allowance.
+ * several of these fire on a single page load, and they are shared work
+ * rather than a caretaker spending an allowance.
  *
  * `write` changes something — appends to the log, moves coins, publishes to
  * every open stream — and pays the per-caretaker bucket on top, because for
  * those the interesting abuser is one identity behind many addresses as much
- * as one address behind many identities.
+ * as one address behind many identities. It carries the caretaker to charge,
+ * so a write scope cannot be asked for without one.
  */
-export type RateLimitScope = "read" | "write";
+export type RateLimitScope = { kind: "read" } | { kind: "write"; caretakerId: string };
 
 /**
  * Meter the request (SPEC §8.2). Returns the 429 to send back, or null to
@@ -49,15 +50,12 @@ export type RateLimitScope = "read" | "write";
  * other response, so a caretaker minted on a refused request still keeps the
  * identity that refusal was counted against.
  */
-export const rateLimit = async (
-  request: NextRequest,
-  identity: CaretakerIdentity,
-  scope: RateLimitScope,
-): Promise<NextResponse | null> => {
+export const rateLimit = async (request: NextRequest, scope: RateLimitScope): Promise<NextResponse | null> => {
+  const budget = limits();
   const buckets: { name: string; limit: TokenBucketLimit }[] = [
-    { name: `rl:ip:${clientIp(request)}`, limit: LIMITS.perIp },
+    { name: `rl:ip:${clientIp(request)}`, limit: budget.perIp },
   ];
-  if (scope === "write") buckets.push({ name: `rl:ct:${identity.caretakerId}`, limit: LIMITS.perCaretaker });
+  if (scope.kind === "write") buckets.push({ name: `rl:ct:${scope.caretakerId}`, limit: budget.perCaretaker });
 
   for (const { name, limit } of buckets) {
     const bucket = await takeToken(redis(), key(name), limit.capacity, limit.refillPerSecond);

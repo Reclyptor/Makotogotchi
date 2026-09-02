@@ -4,11 +4,12 @@
 // streams exactly: keep history, then accept live messages with seq greater
 // than the newest historical one.
 
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/server/db/client";
 import { events } from "@/server/db/collections";
 import { runtime } from "@/server/runtime";
 import { anonymousName, nicknameMap } from "@/server/social";
+import { rateLimit } from "@/server/http";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,11 @@ export type FeedEntryPayload = {
   wantItemId?: string;
 };
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  // One indexed tail query plus a nickname lookup, on every page load.
+  const limited = await rateLimit(request, { kind: "read" });
+  if (limited) return limited;
+
   const { generation } = await runtime();
   const current = await generation();
   const database = await db();

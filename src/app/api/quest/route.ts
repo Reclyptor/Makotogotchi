@@ -2,15 +2,20 @@
 // (SPEC §21.7). Progress is derived on every call from one pet-day of the
 // event log, so there is nothing to keep in sync and nothing to reset.
 
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/server/db/client";
 import { runtime } from "@/server/runtime";
 import { questSettled, questView } from "@/server/quests";
 import { env } from "@/server/env";
+import { rateLimit } from "@/server/http";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  // Progress is re-derived from a pet-day of the event log on every call.
+  const limited = await rateLimit(request, { kind: "read" });
+  if (limited) return limited;
+
   const { engine, generation } = await runtime();
   const current = await generation();
   const state = await engine.view(current);

@@ -24,7 +24,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // A reaction reaches every open stream in the room, so it is metered per
   // caretaker as well as per address — the address bucket alone left one
   // identity free to paper the room from a handful of them.
-  const limited = await rateLimit(request, identity, "write");
+  const limited = await rateLimit(request, { kind: "write", caretakerId: identity.caretakerId });
   if (limited) return withCookie(limited);
 
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));

@@ -15,7 +15,7 @@ import { claimStreamSlot, releaseStreamSlot, touchStreamSlot } from "@/server/st
 import { anonymousName, caretakerProfile, leaderboard, nicknameMap } from "@/server/social";
 import { holderChips } from "@/server/titles";
 import { snapshotPayload } from "@/server/snapshot";
-import { caretakerCookieHeader, clientIp, resolveCaretaker } from "@/server/http";
+import { caretakerCookieHeader, clientIp, rateLimit, resolveCaretaker } from "@/server/http";
 import { deliverableTo, type EngineMessage, type PresenceView } from "@/server/engine/messages";
 import { purseOf } from "@/server/purse";
 
@@ -65,6 +65,15 @@ export async function GET(request: NextRequest): Promise<Response> {
   // a caretaker can hold several at once, and each must come and go on its
   // own.
   const connectionId = randomUUID();
+
+  // The cap bounds how many streams an address HOLDS; it says nothing about
+  // how fast it may open them. Opening one is the most expensive thing this
+  // route does — a presence view, a profile, a projection, a snapshot — so an
+  // open/close loop stays under the cap forever while costing the stores a
+  // connect's worth of work each time round. The bucket bounds the rate; the
+  // cap bounds the concurrency.
+  const limited = await rateLimit(request, { kind: "read" });
+  if (limited) return limited;
 
   // The cap is counted in Redis across the whole fleet, not per pod: a
   // per-process count would let one address open the limit again for every

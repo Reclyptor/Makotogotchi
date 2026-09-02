@@ -21,7 +21,7 @@ import { rollTitles } from "@/server/titles";
 import { submitScore } from "@/server/records";
 import { isoWeekKeyAtTick } from "@/server/schedule";
 import { env } from "@/server/env";
-import { caretakerCookieHeader, resolveCaretaker } from "@/server/http";
+import { caretakerCookieHeader, rateLimit, resolveCaretaker } from "@/server/http";
 import type { EngineMessage } from "@/server/engine/messages";
 
 export const dynamic = "force-dynamic";
@@ -47,8 +47,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (identity.setCookie) response.headers.set("Set-Cookie", caretakerCookieHeader(identity.setCookie));
     return response;
   };
+  // The address bucket first, before anything is parsed, so a flood of
+  // malformed bodies costs the same as a flood of well-formed ones.
+  const flooding = await rateLimit(request, { kind: "read" });
+  if (flooding) return withCookie(flooding);
+
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return withCookie(NextResponse.json({ error: "invalid_body" }, { status: 400 }));
+
+  // `start` and `finish` are real actions: they claim the room's single game
+  // session and take the engine's write lock, so they pay a caretaker's
+  // allowance like care does. A `score` ping does not — it is a 2s heartbeat
+  // that mostly no-ops behind the room-wide broadcast guard below, and the
+  // longest game would spend a whole action budget on progress reports alone.
+  if (parsed.data.phase !== "score") {
+    const limited = await rateLimit(request, { kind: "write", caretakerId: identity.caretakerId });
+    if (limited) return withCookie(limited);
+  }
 
   const { engine, generation } = await runtime();
   const current = await generation();

@@ -39,6 +39,13 @@ export default defineConfig({
       // Every Playwright worker connects from 127.0.0.1; the production
       // per-IP stream cap would reject parallel specs' EventSources.
       MAX_STREAMS_PER_IP: "40",
+      // Same address, same reason (SPEC §8.2). The whole suite's traffic —
+      // every page load, poll, care action and minigame heartbeat in every
+      // spec — arrives on one IP, where production would see a crowd. The
+      // per-caretaker budget is raised alongside it: a spec drives a single
+      // cookie far harder than a person ever plays.
+      RATE_LIMIT_PER_IP: "6000",
+      RATE_LIMIT_PER_CARETAKER: "3000",
     },
   },
 });
