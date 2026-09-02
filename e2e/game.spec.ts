@@ -41,9 +41,27 @@ test.describe("the shared pet", () => {
     // (GameView's care handler).
     const idB = ((await (await pageB.request.get("/api/state")).json()) as { caretakerId: string }).caretakerId;
     const pet = pageB.getByRole("button", { name: /^Pet/ });
-    await expect(pet).not.toHaveAttribute("aria-disabled", "true", { timeout: 60_000 });
-    await pet.click();
-    await expect(pageA.getByText(`Friend ${idB.slice(0, 4)} petted Makoto`)).toBeVisible({ timeout: 10_000 });
+    const seenByA = pageA.getByText(`Friend ${idB.slice(0, 4)} petted Makoto`);
+
+    // And a third thing, which is why this is a loop rather than a click.
+    // That global cooldown makes "enabled a moment ago" different from
+    // "accepted now": the spec files run in parallel, so another worker's
+    // caretaker can take the cooldown in the gap between the check and the
+    // click, and the click is refused with a 409 that never broadcasts.
+    // Asserting on one attempt makes the suite's core claim a coin flip.
+    // Retry the beat until one lands, the way social.spec retries a
+    // contended minigame run — what is under test is the broadcast, not
+    // which caretaker won the cooldown.
+    let landed = false;
+    for (let attempt = 0; attempt < 4 && !landed; attempt++) {
+      await expect(pet).not.toHaveAttribute("aria-disabled", "true", { timeout: 60_000 });
+      await pet.click();
+      landed = await seenByA
+        .waitFor({ state: "visible", timeout: 10_000 })
+        .then(() => true)
+        .catch(() => false);
+    }
+    expect(landed, "A never saw B's pet arrive over the stream").toBe(true);
     await expect(pageB.getByText(/You petted Makoto/)).toBeVisible({ timeout: 10_000 });
 
     // Presence counts both watchers on both screens. Match the whole badge:
