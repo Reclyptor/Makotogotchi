@@ -23,8 +23,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { runtime } from "@/server/runtime";
 import { key, redis } from "@/server/redis/client";
-import { LIMITS, takeToken } from "@/server/ratelimit";
-import { caretakerCookieHeader, clientIp, resolveCaretaker } from "@/server/http";
+import { caretakerCookieHeader, rateLimit, resolveCaretaker } from "@/server/http";
 import { spectacleMood } from "@/sim/secret";
 import type { EngineMessage } from "@/server/engine/messages";
 
@@ -35,26 +34,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return response;
   };
 
-  const ipBucket = await takeToken(redis(), key(`rl:ip:${clientIp(request)}`), LIMITS.perIp.capacity, LIMITS.perIp.refillPerSecond);
-  if (!ipBucket.allowed) {
-    return withCookie(
-      NextResponse.json({ error: "rate_limited" }, { status: 429, headers: { "Retry-After": String(ipBucket.retryAfterSeconds) } }),
-    );
-  }
-  const caretakerBucket = await takeToken(
-    redis(),
-    key(`rl:ct:${identity.caretakerId}`),
-    LIMITS.perCaretaker.capacity,
-    LIMITS.perCaretaker.refillPerSecond,
-  );
-  if (!caretakerBucket.allowed) {
-    return withCookie(
-      NextResponse.json(
-        { error: "rate_limited" },
-        { status: 429, headers: { "Retry-After": String(caretakerBucket.retryAfterSeconds) } },
-      ),
-    );
-  }
+  const limited = await rateLimit(request, identity, "write");
+  if (limited) return withCookie(limited);
 
   const { engine, generation } = await runtime();
   const mood = spectacleMood(await engine.view(await generation()));

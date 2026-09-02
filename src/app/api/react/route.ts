@@ -6,9 +6,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/server/db/client";
 import { key, redis } from "@/server/redis/client";
-import { LIMITS, takeToken } from "@/server/ratelimit";
 import { anonymousName, nicknameMap } from "@/server/social";
-import { caretakerCookieHeader, clientIp, resolveCaretaker } from "@/server/http";
+import { caretakerCookieHeader, rateLimit, resolveCaretaker } from "@/server/http";
 import type { EngineMessage } from "@/server/engine/messages";
 
 export const REACTION_EMOJI = ["❤️", "💛", "😂", "😮", "😢", "🎉"] as const;
@@ -22,12 +21,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return response;
   };
 
-  const ipBucket = await takeToken(redis(), key(`rl:ip:${clientIp(request)}`), LIMITS.perIp.capacity, LIMITS.perIp.refillPerSecond);
-  if (!ipBucket.allowed) {
-    return withCookie(
-      NextResponse.json({ error: "rate_limited" }, { status: 429, headers: { "Retry-After": String(ipBucket.retryAfterSeconds) } }),
-    );
-  }
+  // A reaction reaches every open stream in the room, so it is metered per
+  // caretaker as well as per address — the address bucket alone left one
+  // identity free to paper the room from a handful of them.
+  const limited = await rateLimit(request, identity, "write");
+  if (limited) return withCookie(limited);
 
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return withCookie(NextResponse.json({ error: "invalid_body" }, { status: 400 }));

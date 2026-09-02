@@ -12,13 +12,12 @@ import { CARE_ACTIONS } from "@/sim/tuning";
 import { runtime } from "@/server/runtime";
 import { db } from "@/server/db/client";
 import { key, redis } from "@/server/redis/client";
-import { LIMITS, takeToken } from "@/server/ratelimit";
 import { recordContribution } from "@/server/social";
 import { settleWantFulfillment } from "@/server/wants";
 import { rollTitles } from "@/server/titles";
 import { consumeItem, refundItem } from "@/server/shop";
 import { env } from "@/server/env";
-import { caretakerCookieHeader, clientIp, resolveCaretaker } from "@/server/http";
+import { caretakerCookieHeader, rateLimit, resolveCaretaker } from "@/server/http";
 
 const bodySchema = z.object({
   action: z.enum(CARE_ACTIONS),
@@ -32,26 +31,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return response;
   };
 
-  const ipBucket = await takeToken(redis(), key(`rl:ip:${clientIp(request)}`), LIMITS.perIp.capacity, LIMITS.perIp.refillPerSecond);
-  if (!ipBucket.allowed) {
-    return withCookie(
-      NextResponse.json({ error: "rate_limited" }, { status: 429, headers: { "Retry-After": String(ipBucket.retryAfterSeconds) } }),
-    );
-  }
-  const caretakerBucket = await takeToken(
-    redis(),
-    key(`rl:ct:${identity.caretakerId}`),
-    LIMITS.perCaretaker.capacity,
-    LIMITS.perCaretaker.refillPerSecond,
-  );
-  if (!caretakerBucket.allowed) {
-    return withCookie(
-      NextResponse.json(
-        { error: "rate_limited" },
-        { status: 429, headers: { "Retry-After": String(caretakerBucket.retryAfterSeconds) } },
-      ),
-    );
-  }
+  const limited = await rateLimit(request, identity, "write");
+  if (limited) return withCookie(limited);
 
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {

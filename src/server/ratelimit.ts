@@ -47,8 +47,11 @@ export const takeToken = async (
   return allowed === 1 ? { allowed: true } : { allowed: false, retryAfterSeconds: retry };
 };
 
+/** One bucket's shape: how many it holds, and how fast it fills back up. */
+export type TokenBucketLimit = { readonly capacity: number; readonly refillPerSecond: number };
+
 /** SPEC §8.2: 60 requests/min per IP, 30 actions/min per caretaker. */
 export const LIMITS = {
   perIp: { capacity: 60, refillPerSecond: 1 },
   perCaretaker: { capacity: 30, refillPerSecond: 0.5 },
-} as const;
+} as const satisfies Record<string, TokenBucketLimit>;

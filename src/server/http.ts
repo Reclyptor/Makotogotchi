@@ -1,9 +1,13 @@
 // Shared HTTP-boundary helpers for the route handlers: caretaker cookie
-// resolution and client IP extraction. Kept out of the route files so every
-// endpoint resolves identity and IP identically.
+// resolution, client IP extraction, and the §8.2 rate limit. Kept out of the
+// route files so every endpoint resolves identity, reads the address, and
+// meters traffic identically — a limit that is re-typed per route is a limit
+// that is eventually forgotten on one.
 
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { CARETAKER_COOKIE, COOKIE_MAX_AGE_SECONDS, mintCaretaker, verifyCaretaker } from "./identity";
+import { key, redis } from "./redis/client";
+import { LIMITS, takeToken, type TokenBucketLimit } from "./ratelimit";
 
 export type CaretakerIdentity = {
   caretakerId: string;
@@ -24,3 +28,45 @@ export const caretakerCookieHeader = (cookieValue: string): string =>
 /** Cloudflare gives the real client address; fall back for local dev. */
 export const clientIp = (request: NextRequest): string =>
   request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+
+/**
+ * What a route costs the server, which is what decides how it is metered.
+ *
+ * `read` answers from the stores and pays the per-address bucket alone —
+ * several of these fire on a single page load, and they are shared work, not
+ * a caretaker spending their allowance.
+ *
+ * `write` changes something — appends to the log, moves coins, publishes to
+ * every open stream — and pays the per-caretaker bucket on top, because for
+ * those the interesting abuser is one identity behind many addresses as much
+ * as one address behind many identities.
+ */
+export type RateLimitScope = "read" | "write";
+
+/**
+ * Meter the request (SPEC §8.2). Returns the 429 to send back, or null to
+ * carry on; the caller attaches its own cookie exactly as it does to every
+ * other response, so a caretaker minted on a refused request still keeps the
+ * identity that refusal was counted against.
+ */
+export const rateLimit = async (
+  request: NextRequest,
+  identity: CaretakerIdentity,
+  scope: RateLimitScope,
+): Promise<NextResponse | null> => {
+  const buckets: { name: string; limit: TokenBucketLimit }[] = [
+    { name: `rl:ip:${clientIp(request)}`, limit: LIMITS.perIp },
+  ];
+  if (scope === "write") buckets.push({ name: `rl:ct:${identity.caretakerId}`, limit: LIMITS.perCaretaker });
+
+  for (const { name, limit } of buckets) {
+    const bucket = await takeToken(redis(), key(name), limit.capacity, limit.refillPerSecond);
+    if (!bucket.allowed) {
+      return NextResponse.json(
+        { error: "rate_limited" },
+        { status: 429, headers: { "Retry-After": String(bucket.retryAfterSeconds) } },
+      );
+    }
+  }
+  return null;
+};
