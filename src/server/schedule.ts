@@ -47,8 +47,30 @@ const wallClockAt = (epochMs: number, timeZone: string): WallClock => {
   };
 };
 
+/**
+ * Answers already computed, kept because a local wall-clock slot names a
+ * fixed instant forever: what "07:00 on 2026-03-08 in America/Chicago" means
+ * is immutable history, DST transition or not.
+ *
+ * This is the only expensive call in the module — two refinement passes, each
+ * a `formatToParts` — and it is asked the same handful of questions over and
+ * over: `scheduleFor` walks four day-cursors and asks each for a wake hour and
+ * a sleep hour, so a single schedule pays for sixteen of these, and a schedule
+ * is built on every projection, every snapshot, and every pass through the
+ * fleet-wide write lock. The working set is days, not instants, so it is
+ * measured in a handful of entries.
+ */
+const epochBySlot = new Map<string, number>();
+
+/** A leak guard, not a working-set bound: real usage never approaches this. */
+const SLOT_CACHE_LIMIT = 4096;
+
 /** Epoch instant of a local wall-clock time, correct across DST shifts. */
 const localToEpoch = (wall: Omit<WallClock, "minute" | "second">, timeZone: string): number => {
+  const slot = `${timeZone}|${wall.year}-${wall.month}-${wall.day}T${wall.hour}`;
+  const known = epochBySlot.get(slot);
+  if (known !== undefined) return known;
+
   let epoch = Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour);
   // Two refinement passes converge for any real-world offset, including the
   // transition days themselves.
@@ -58,6 +80,13 @@ const localToEpoch = (wall: Omit<WallClock, "minute" | "second">, timeZone: stri
     const wantAsUtc = Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour);
     epoch += wantAsUtc - seenAsUtc;
   }
+
+  // Dropping everything on overflow rather than evicting one entry: the map is
+  // only ever a few days wide, so reaching the limit means something is asking
+  // about history in bulk, and that caller wants a clean cache more than it
+  // wants whichever entries an LRU would have kept.
+  if (epochBySlot.size >= SLOT_CACHE_LIMIT) epochBySlot.clear();
+  epochBySlot.set(slot, epoch);
   return epoch;
 };
 

@@ -60,6 +60,37 @@ describe("scheduleFor", () => {
     const precedingSleep = [...schedule.boundaries].reverse().find((b) => b.phase === "SLEEP" && b.tick < nov1Wake!.tick);
     expect(nov1Wake!.tick - precedingSleep!.tick).toBe(10 * TICKS_PER_HOUR);
   });
+
+  // Wall-clock slots are memoized, and the transition days are precisely
+  // where a cache could hand back an instant computed under a different
+  // offset. A warm cache must be indistinguishable from a cold one.
+  it("returns identical schedules however warm the wall-clock cache is", () => {
+    const spans = [
+      { genesis: GENESIS, zone: "America/Chicago" }, // spans spring forward
+      { genesis: Date.UTC(2026, 9, 25, 12), zone: "America/Chicago" }, // spans fall back
+      { genesis: GENESIS, zone: "Asia/Tokyo" }, // no DST at all
+      { genesis: GENESIS, zone: "Australia/Sydney" }, // transitions the other way
+    ];
+    for (const { genesis, zone } of spans) {
+      const first = scheduleFor(genesis, 0, 70 * TICKS_PER_DAY, zone);
+      for (let repeat = 0; repeat < 3; repeat++) {
+        expect(scheduleFor(genesis, 0, 70 * TICKS_PER_DAY, zone)).toEqual(first);
+      }
+    }
+  });
+
+  it("puts a boundary on the same tick however the window reaches it", () => {
+    // Two windows covering the same day must agree about that day's
+    // boundaries — the case a cache gets wrong if it keys on anything but
+    // the wall-clock slot itself.
+    const wide = scheduleFor(GENESIS, 0, 70 * TICKS_PER_DAY, "America/Chicago");
+    for (const from of [0, 10 * TICKS_PER_DAY, 60 * TICKS_PER_DAY]) {
+      const narrow = scheduleFor(GENESIS, from, from + 5 * TICKS_PER_DAY, "America/Chicago");
+      expect(narrow.boundaries).toEqual(
+        wide.boundaries.filter((b) => b.tick > from && b.tick <= from + 5 * TICKS_PER_DAY),
+      );
+    }
+  });
 });
 
 describe("isoWeekKey (SPEC §21.3)", () => {
