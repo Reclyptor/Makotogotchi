@@ -29,7 +29,7 @@ import { TICKS_PER_DAY, TICK_SECONDS, type CareAction } from "@/sim/tuning";
 import type { Milestone, MilestoneKind, PetEvent } from "@/sim/events";
 import type { EventExtras } from "../db/collections";
 import {
-  appendEvent,
+  appendEvents,
   createGeneration,
   eventsSince,
   latestGeneration,
@@ -67,7 +67,23 @@ export type CareOutcome =
     }
   | { ok: false; rejection: Exclude<ValidationResult, { ok: true }> };
 
-type HotState = { state: PetState; lastEventSeq: number };
+/** What lives under the hot key: the state and the seq it was folded to. */
+type CachedState = { state: PetState; lastEventSeq: number };
+
+type HotState = CachedState & {
+  /**
+   * Tick of the newest snapshot on disk, or null when nobody has told us.
+   *
+   * The write path needs this for one decision — whether to write another
+   * snapshot — and used to answer it by asking Mongo for the latest snapshot
+   * on EVERY advance: a sorted query per care action and per tick, inside the
+   * fleet-wide write lock, which is the most expensive place in the system to
+   * spend a round trip. It is bookkeeping about a shared resource, so it lives
+   * in Redis beside the state rather than in a field of one pod's engine, and
+   * null simply means "read it once, then carry it forward".
+   */
+  lastSnapshotTick: number | null;
+};
 
 /** What the caller wants applied once the lock is held and state is current. */
 type Prepared =
@@ -125,10 +141,17 @@ export class PetEngine {
 
   /** Authoritative state: Redis hot key, else Mongo snapshot + event fold. */
   private async loadHot(generation: Generation): Promise<HotState> {
-    const cached = await this.deps.redis.get(this.deps.key("state"));
+    // Both keys in one round trip: the snapshot tick is bookkeeping the state
+    // read already had to go to Redis for.
+    const [cached, snapshotTick] = await this.deps.redis.mget(
+      this.deps.key("state"),
+      this.deps.key("snapshot-tick"),
+    );
     if (cached) {
-      const parsed = JSON.parse(cached) as HotState;
-      if (parsed.state.generation.id === generation.id) return parsed;
+      const parsed = JSON.parse(cached) as CachedState;
+      if (parsed.state.generation.id === generation.id) {
+        return { ...parsed, lastSnapshotTick: snapshotTick === null ? null : Number(snapshotTick) };
+      }
     }
     return this.recover(generation);
   }
@@ -144,11 +167,9 @@ export class PetEngine {
       state = reduce(state, event, ctx).state;
       seq = event.seq;
     }
-    return { state, lastEventSeq: seq };
-  }
-
-  private async publish(message: EngineMessage): Promise<void> {
-    await this.deps.redis.publish(this.deps.key("events"), JSON.stringify(message));
+    // Recovery has just read the newest snapshot, so it knows this for free;
+    // -Infinity is "there is genuinely none", distinct from null's "unknown".
+    return { state, lastEventSeq: seq, lastSnapshotTick: snapshot?.state.tick ?? -Infinity };
   }
 
   /** The serialized write path. */
@@ -205,8 +226,13 @@ export class PetEngine {
         eventMilestones.push(...reduced.milestones);
       }
 
+      // One insert for the whole advance rather than one per event. The seqs
+      // are consecutive and the batch is ordered, so the fold order on disk is
+      // exactly what the loop of single inserts produced — for one round trip
+      // inside the lock instead of one per milestone.
+      await appendEvents(this.deps.db, toAppend);
+
       for (const entry of toAppend) {
-        await appendEvent(this.deps.db, entry.event, entry.extras);
         if (entry.event.type === "MILESTONE") {
           toPublish.push({
             type: "milestone",
@@ -259,16 +285,27 @@ export class PetEngine {
         await recordDeath(this.deps.db, state);
       }
 
-      await this.deps.redis.set(this.deps.key("state"), JSON.stringify({ state, lastEventSeq: seq } satisfies HotState));
+      // The new hot state and every broadcast in a single round trip.
+      // Redis runs a pipeline in order, so the state is still committed before
+      // the messages announcing it go out — which was the reason these were
+      // sequential, and is preserved rather than traded away.
+      const writes = this.deps.redis.pipeline();
+      writes.set(this.deps.key("state"), JSON.stringify({ state, lastEventSeq: seq } satisfies CachedState));
       for (const message of toPublish) {
-        await this.publish(message);
+        writes.publish(this.deps.key("events"), JSON.stringify(message));
       }
+      await writes.exec();
 
       // Snapshot on any recorded event, and periodically by tick distance.
-      const snapshot = await latestSnapshot(this.deps.db, generation.id);
-      const lastSnapshotTick = snapshot?.state.tick ?? -Infinity;
+      // The last snapshot's tick comes off the hot state; only a cold cache
+      // pays Mongo for it, and then hands the answer to everyone after.
+      const lastSnapshotTick =
+        hot.lastSnapshotTick ?? (await latestSnapshot(this.deps.db, generation.id))?.state.tick ?? -Infinity;
       if ((toAppend.length > 0 || state.tick - lastSnapshotTick >= SNAPSHOT_INTERVAL_TICKS) && state.tick > lastSnapshotTick) {
         await writeSnapshot(this.deps.db, state, seq);
+        // Only after the write actually landed: a pointer claiming a snapshot
+        // that does not exist would suppress the next one too.
+        await this.deps.redis.set(this.deps.key("snapshot-tick"), String(state.tick));
       }
 
       return { state, applied, rejected: null, eventMilestones };

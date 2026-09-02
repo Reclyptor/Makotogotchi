@@ -40,14 +40,34 @@ export const recordDeath = async (database: Db, state: PetState): Promise<void> 
 };
 
 /**
- * Append one event. The caller holds the write lock and supplies the seq it
- * computed from in-order state; the unique index turns any serialization
- * failure into a loud duplicate-key error instead of a corrupted fold order.
+ * Append a run of events in one round trip. The caller holds the write lock
+ * and supplies the seqs it computed from in-order state; the unique index
+ * turns any serialization failure into a loud duplicate-key error instead of
+ * a corrupted fold order.
+ *
+ * `ordered` is the point, not a default worth inheriting silently: these
+ * events are one advance, their seqs are consecutive, and a failure part-way
+ * must stop rather than carry on inserting past the gap. That is what makes
+ * this equivalent to the loop of single inserts it replaces — a loop that ran
+ * inside the fleet-wide write lock and paid a round trip per milestone.
+ *
+ * They share one `at` for the same reason they share a seq run: they happened
+ * in one advance, and `at` is a display field rather than an ordering one.
  */
-export const appendEvent = async (database: Db, event: PetEvent, extras: EventExtras = {}): Promise<void> => {
+export const appendEvents = async (
+  database: Db,
+  entries: readonly { event: PetEvent; extras?: EventExtras }[],
+): Promise<void> => {
+  if (entries.length === 0) return;
   await ensureIndexes(database);
-  const doc: EventDoc = { ...event, ...extras, at: new Date() };
-  await events(database).insertOne(doc);
+  const at = new Date();
+  const docs: EventDoc[] = entries.map(({ event, extras }) => ({ ...event, ...extras, at }));
+  await events(database).insertMany(docs, { ordered: true });
+};
+
+/** Append a single event — the same path, for callers that only ever have one. */
+export const appendEvent = async (database: Db, event: PetEvent, extras: EventExtras = {}): Promise<void> => {
+  await appendEvents(database, [{ event, extras }]);
 };
 
 export const eventsSince = async (database: Db, generationId: string, afterSeq: number): Promise<PetEvent[]> => {

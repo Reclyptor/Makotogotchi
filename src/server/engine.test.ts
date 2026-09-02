@@ -102,6 +102,57 @@ describe("PetEngine", () => {
     expect(project(recovered.state, before.tick, ctx).state).toEqual(before);
   });
 
+  // The snapshot cadence used to be decided by asking Mongo for the newest
+  // snapshot on every advance — a sorted query inside the fleet-wide write
+  // lock. It is a Redis pointer now, so these pin the two things that could
+  // go wrong with that: the pointer must track what is actually on disk, and
+  // losing it must cost one read rather than the cadence.
+  describe("the snapshot pointer", () => {
+    const snapshotTicks = async (): Promise<number[]> => {
+      const docs = await (await db()).collection("snapshots").find({ generationId: generation.id }).toArray();
+      return docs.map((doc) => doc.tick as number).sort((first, second) => first - second);
+    };
+
+    it("advances to the snapshot it just wrote", async () => {
+      advanceClockTicks(30);
+      expect((await engine.care(generation, "PET", "snap-a")).ok).toBe(true);
+
+      const pointer = await redis().get(key("snapshot-tick"));
+      expect(pointer).not.toBeNull();
+      expect(Number(pointer)).toBe((await snapshotTicks()).at(-1));
+    });
+
+    it("never writes a snapshot behind the one already on disk", async () => {
+      advanceClockTicks(30);
+      await engine.care(generation, "CLEAN", "snap-b");
+      const written = await snapshotTicks();
+
+      // An advance that records nothing new must not add a snapshot at the
+      // same or an earlier tick — the guard the Mongo read used to provide.
+      await engine.tick(generation);
+      expect(await snapshotTicks()).toEqual(written);
+    });
+
+    it("rebuilds the pointer from Mongo when Redis has lost it", async () => {
+      advanceClockTicks(30);
+      await engine.care(generation, "PET", "snap-c");
+      const before = (await snapshotTicks()).at(-1)!;
+
+      // Exactly the state a deploy predating the pointer leaves behind, or an
+      // evicted key: the hot state is there, the bookkeeping is not.
+      await redis().del(key("snapshot-tick"));
+
+      advanceClockTicks(30);
+      await engine.care(generation, "CLEAN", "snap-c");
+
+      // It read the truth from Mongo, snapshotted past it, and left the
+      // pointer correct for every advance after.
+      const healed = await redis().get(key("snapshot-tick"));
+      expect(Number(healed)).toBe((await snapshotTicks()).at(-1));
+      expect(Number(healed)).toBeGreaterThan(before);
+    });
+  });
+
   it("records a shared rare moment that survives a cold restart (SPEC §21.5)", async () => {
     advanceClockTicks(30);
     const moment = ambientAt(generation.seed, 4242, false) ?? "butterfly";

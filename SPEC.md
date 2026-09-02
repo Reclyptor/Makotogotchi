@@ -475,6 +475,24 @@ Each event carries a per-generation monotonic `seq`, assigned inside the
 lock. `seq` — not `tick` — is the canonical fold order: multiple events can
 share a tick, and replay determinism requires a total order.
 
+**Nothing avoidable happens between acquiring the lock and releasing it.**
+This is the one section the entire fleet queues behind, so a round trip spent
+here is a round trip every caretaker waits for. Three used to be spent
+needlessly, and are not any more:
+
+- the advance's events are appended with a single ordered `insertMany` rather
+  than one insert per event, so a tick that crosses three milestones pays one
+  round trip instead of three;
+- the new hot state and every broadcast go out as one Redis pipeline. A
+  pipeline executes in order, so the state is still committed before the
+  messages announcing it — the property the sequential awaits were there for,
+  kept without the round trips;
+- whether to write a snapshot is decided from `mgc:snapshot-tick` (§6.2)
+  rather than by asking Mongo for the newest snapshot every time.
+
+The hold is milliseconds, and it should stay that way: anything that can be
+computed before the lock, or written after it, belongs outside it.
+
 ---
 
 ## 4. Simulation Core
@@ -710,6 +728,7 @@ so the prefix is what actually prevents collision and must never be relaxed.
 | Key | Type | Purpose |
 | --- | --- | --- |
 | `mgc:state` | string (JSON) | Hot snapshot of current `PetState`. Read path for SSE connects. |
+| `mgc:snapshot-tick` | string | Tick of the newest snapshot on disk. Bookkeeping for one decision — whether the write path owes another snapshot — which was previously a sorted Mongo query on *every* advance, inside the fleet-wide write lock. Written only after a snapshot actually lands, so a pointer can never suppress a snapshot that was never taken. Losing it costs one read, which then refills it. |
 | `mgc:events` | pub/sub channel | Cross-pod fanout. |
 | `mgc:tick-leader` | string w/ PX | Leader lease (§3.3). |
 | `mgc:presence` | sorted set | `caretakerId\|connectionId → lastSeen`. Pruned by score on read, then counted unique by caretaker. Keyed per open stream, not per caretaker: one caretaker holds several at once (a refresh overlaps two, a second tab is ordinary), and a caretaker-keyed set lets the first stream to close evict someone who is still watching. |
