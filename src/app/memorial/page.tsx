@@ -9,17 +9,9 @@ import { MINIGAMES } from "@/sim/minigames";
 import { TICKS_PER_DAY } from "@/sim/tuning";
 import { isTitleId, TITLES } from "@/sim/titles";
 import type { Quirks } from "@/sim/quirks";
+import { CAUSE_OF_DEATH_TEXT } from "@/app/copy/death";
 
 export const dynamic = "force-dynamic";
-
-const CAUSE_TEXT: Record<string, string> = {
-  hunger: "starved",
-  energy: "collapsed from exhaustion",
-  hygiene: "wasted away in squalor",
-  joy: "died of loneliness",
-  sickness: "succumbed to illness",
-  age: "passed peacefully of old age",
-};
 
 /** "loved pizza, hated peppers, was best at Wheel Sprint" (SPEC §21.4). */
 const quirkText = (quirks: Quirks | undefined): string | null =>
@@ -59,7 +51,7 @@ export default async function MemorialPage() {
                 <span className="text-xs text-muted">generation {doc.ordinal}</span>
               </div>
               <p className="text-sm text-muted">
-                Lived {lifespanDays} days · {CAUSE_TEXT[doc.died!.cause] ?? doc.died!.cause} ·{" "}
+                Lived {lifespanDays} days · {CAUSE_OF_DEATH_TEXT[doc.died!.cause]} ·{" "}
                 {doc.died!.at.toLocaleDateString()}
               </p>
               {quirks && <p className="text-sm italic text-muted">{quirks}</p>}
