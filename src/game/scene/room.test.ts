@@ -9,6 +9,7 @@ import { RUG } from "./backdrop";
 import { SPECTACLE_MS } from "./party";
 import { drawRect } from "../engine/atlas";
 import { BASE_CLIPS, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP } from "../anim/clips";
+import { HEAD_ANCHORS } from "./head";
 import { SPRITE_FRAMES, type FrameName } from "../atlas.generated";
 import { derive } from "@/sim/derive";
 import { hatchedState, projectImmortal, testCtx } from "@/sim/testkit";
@@ -39,6 +40,8 @@ const IDENTITY: Matrix = { a: 1, d: 1, e: 0, f: 0 };
 const recordingContext = (failAtCall = -1) => {
   /** Every sprite blit: where it landed, and whether the transform flipped it. */
   const drawn: { x0: number; x1: number; mirrored: boolean }[] = [];
+  /** Every filled rectangle, in canvas pixels. */
+  const fills: { x0: number; x1: number; y0: number; y1: number; mirrored: boolean }[] = [];
   /** Every full-canvas paint, with the clip that was in force when it landed. */
   const paints: (Rect | null)[] = [];
   const stack: CanvasState[] = [];
@@ -94,7 +97,12 @@ const recordingContext = (failAtCall = -1) => {
       step();
       if (path) state.clip = path;
     },
-    fillRect: () => step(),
+    fillRect: (x: number, y: number, w: number, h: number) => {
+      step();
+      const { a, d, e, f } = state.matrix;
+      const [p, q] = [e + a * x, e + a * (x + w)];
+      fills.push({ x0: Math.min(p, q), x1: Math.max(p, q), y0: f + d * y, y1: f + d * (y + h), mirrored: a < 0 });
+    },
     fillText: () => step(),
     createImageData: (w: number, h: number) => {
       step();
@@ -121,6 +129,7 @@ const recordingContext = (failAtCall = -1) => {
   return {
     ctx: ctx2d as unknown as CanvasRenderingContext2D,
     drawn,
+    fills,
     paints,
     depth: () => stack.length,
     current: () => state,
@@ -134,12 +143,12 @@ const recordingContext = (failAtCall = -1) => {
   };
 };
 
-const contentedRoom = () => {
+const contentedRoom = (days = 1) => {
   const room = new Room();
   // No image loads in a test; a stand-in makes the atlas draw.
   (room.atlas as unknown as { image: unknown }).image = {};
   const born = hatchedState(ctx);
-  const settled = projectImmortal(born, TICKS_PER_DAY, ctx);
+  const settled = projectImmortal(born, days * TICKS_PER_DAY, ctx);
   const contented = {
     ...settled,
     needs: { hunger: NEED_MAX, energy: NEED_MAX, hygiene: NEED_MAX, joy: NEED_MAX },
@@ -330,6 +339,84 @@ describe("a frame that dies half-drawn", () => {
 // The pet is 137px wide in a 260px room. The wander band used to be the rug's
 // own span, which is a range of *centres* — so at either end the pet stood
 // half off the rug with its silhouette running through the wall.
+// The crown sat two pixels left of the front view's ear dip and four short of
+// filling it, so the right ear's outline poked out beside it — and the idle
+// clip's side view has its dip fourteen pixels further left again, so no one
+// fixed position could ever have been right. Hats now follow a per-frame
+// head anchor (SPEC §10.5).
+describe("a hat on the head", () => {
+  const petFrames = (): FrameName[] => {
+    const names = new Set<FrameName>();
+    for (const clip of [...Object.values(BASE_CLIPS), ...Object.values(ONE_SHOT_CLIPS), ...IDLE_FLOURISH_CLIPS, WALK_CLIP]) {
+      for (const frame of clip.frames) names.add(frame);
+    }
+    return [...names];
+  };
+
+  it("has an anchor, or an explicit none, for every frame the pet is drawn in", () => {
+    for (const frame of petFrames()) expect(HEAD_ANCHORS[frame], `${frame} has no head anchor`).not.toBeUndefined();
+  });
+
+  it("wears nothing on the egg, the gravestone or the medicine", () => {
+    for (const frame of [...BASE_CLIPS.egg.frames, ...BASE_CLIPS.dead.frames, ...ONE_SHOT_CLIPS.medicated.frames]) {
+      expect(HEAD_ANCHORS[frame], frame).toBeNull();
+    }
+  });
+
+  // An adult, drawn at full scale so canvas pixels are frame pixels. Reduced
+  // motion pins her to the first idle frame, so the crown's band can be
+  // checked against that frame's art: it must span exactly the dip between
+  // the ears, sitting on the head outline at its floor.
+  const crowned = () => {
+    const { room, derived } = contentedRoom(10);
+    room.reducedMotion = true;
+    room.decor = { decor: [], activeCosmetic: "crown" };
+    room.syncDerived(derived, false, 0);
+    expect(room.petScale).toBe(1);
+    return room;
+  };
+  const crownBand = (fills: ReturnType<typeof recordingContext>["fills"]) =>
+    fills.find((fill) => fill.x1 - fill.x0 === 27 && fill.y1 - fill.y0 === 7);
+
+  it("draws the crown's band across the ear dip of the frame on screen", () => {
+    const room = crowned();
+    const recorder = recordingContext();
+    room.render(recorder.ctx, 1000);
+    const frame = BASE_CLIPS.idle.frames[0]!;
+    const anchor = HEAD_ANCHORS[frame]!;
+    const sprite = recorder.drawn.find((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES[frame].w)!;
+    const band = crownBand(recorder.fills)!;
+    expect(band).toBeDefined();
+    // In the frame's own pixels: the band is centred on the anchor column,
+    // and its bottom edge is the head outline's row, measured from the pet's
+    // feet at y = 172.
+    const centre = Math.floor(SPRITE_FRAMES[frame].w / 2) + anchor.x;
+    expect(band.x0 - sprite.x0).toBe(centre - 13);
+    expect(band.x1 - sprite.x0).toBe(centre + 14);
+    expect(band.y1 - 172).toBe(anchor.y);
+  });
+
+  it("mirrors the hat with her when she faces right", () => {
+    vi.useFakeTimers();
+    try {
+      for (let slot = 0; slot < 64; slot++) {
+        vi.setSystemTime(slot * 9000);
+        const { room, derived } = contentedRoom(10);
+        room.decor = { decor: [], activeCosmetic: "crown" };
+        room.syncDerived(derived, false, 0);
+        const recorder = recordingContext();
+        room.render(recorder.ctx, 1000);
+        if (!recorder.drawn.some((entry) => entry.mirrored)) continue;
+        expect(crownBand(recorder.fills)?.mirrored).toBe(true);
+        return;
+      }
+      throw new Error("no wander slot sent the pet right");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("the wander band", () => {
   // The widest pet frame, and how far the idle pose's outer foot reaches
   // from the centre line — both read off the sheet, so the band's promises

@@ -1176,6 +1176,32 @@ pose per state, and removes toast motion. The canvas carries
 `aria-hidden="true"` — it is decorative, and every piece of information it
 conveys is also present as semantic HTML (§11.3).
 
+### 10.5 The Head Anchor
+
+Hats are drawn in code over the sprite, and the sprite's head is not in the
+same place from one frame to the next: the side view's ear dip sits fourteen
+pixels left of the front view's, a bored pet tilts its head, a cheering one
+throws its arms past its ears. One fixed position put the crown on an ear as
+often as between them, with the far ear's outline poking out beside it.
+
+`scene/head.ts` holds a **head anchor per pet frame**: the column midway
+between the two pink inner ears, and the row of the head outline at the
+bottom of the dip between them — in the room's head space, columns from the
+frame's bottom-centre as the atlas snaps it and rows from its bottom edge.
+Frames with no ears (the egg, the gravestone, the medicine) carry `null` and
+wear nothing. `npm run head-anchors` derives candidate entries from the art
+(the ears are pink in every frame) and draws a contact sheet with the crown
+on every frame for review; the table is committed, hand-corrected where the
+art hides an ear, and a render test holds every clip frame to having an
+entry.
+
+The room draws the head layer inside the same transform as the sprite — so a
+hat mirrors with a pet strolling right, scales with a hatchling, and lands at
+this frame's own anchor — and cosmetics are shaped around the anchor: x = 0
+between the ears, y = 0 the top of the outline, a hat's base row at y = −1.
+The crown's band is 27 pixels, the width of the front view's dip, so it
+fills that dip edge to edge.
+
 ---
 
 ## 11. User Interface
@@ -2114,8 +2140,9 @@ pet just never looks different. Presentation-layer only:
 - **JUVENILE**: 90%.
 - **ADULT**: 100% (today's look).
 - **ELDER**: 100% plus a new `@1x` accessory sprite — gray brow tufts —
-  drawn at the head anchor like cosmetics are (stacking under any worn
-  cosmetic).
+  drawn in the head layer with the cosmetics (stacking under any worn
+  cosmetic; the tufts keep a fixed face position, hats follow the §10.5
+  head anchor).
 
 The stage scale applies everywhere the room draws the pet (idle, wander,
 one-shots). Minigames keep drawing the adult frames — the game canvas is a

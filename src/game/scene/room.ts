@@ -11,7 +11,8 @@ import { Portrait, PORTRAIT_HEIGHT, PORTRAIT_WIDTH } from "./portrait";
 import { Spectacle } from "./party";
 import { AnimationMachine } from "../anim/machine";
 import { BASE_CLIPS, BUTTERFLY_CLIP, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP, type OneShotName } from "../anim/clips";
-import { SPRITE_FRAMES } from "../atlas.generated";
+import { SPRITE_FRAMES, type FrameName } from "../atlas.generated";
+import { HEAD_ANCHORS } from "./head";
 import { Backdrop, keyOf, ROOM_HEIGHT, ROOM_WIDTH, RUG, venueSpec, WINDOW, type BackdropKey, type Condition } from "./backdrop";
 import { celestialAt, seasonFor, skyMomentAt, weatherFor, type Celestial } from "@/sim/atmosphere";
 import type { DerivedState } from "@/sim/derive";
@@ -427,16 +428,14 @@ export class Room {
       // facing outlives the stroll, and the gravestone must not inherit it:
       // its letters have to read whichever way she was last walking.
       const mirrored = this.facingRight && this.machine.baseKey !== "dead";
-      if (mirrored) {
-        layer(ctx, () => {
-          ctx.translate(x, 0);
-          ctx.scale(-1, 1);
-          this.atlas.draw(ctx, frame, 0, PET_Y, scale);
-        });
-      } else {
-        this.atlas.draw(ctx, frame, x, PET_Y, scale);
-      }
-      this.renderHead(ctx, x, scale);
+      layer(ctx, () => {
+        ctx.translate(x, 0);
+        if (mirrored) ctx.scale(-1, 1);
+        this.atlas.draw(ctx, frame, 0, PET_Y, scale);
+        // Whatever the head wears is drawn in the same transform, so it
+        // mirrors with her and finds the head wherever this frame put it.
+        this.renderHead(ctx, frame, scale);
+      });
     }
 
     this.particles.render(ctx);
@@ -569,39 +568,51 @@ export class Room {
 
   /**
    * Everything worn on the head, drawn inside the pet's own scaled space so
-   * a hatchling's hat is a hatchling-sized hat. An elder's brow tufts stack
-   * underneath whatever cosmetic is on top of them (SPEC §21.9).
+   * a hatchling's hat is a hatchling-sized hat, and at this frame's own head
+   * anchor (SPEC §10.5) so it sits between the ears wherever the pose put
+   * them. An elder's brow tufts stack underneath whatever cosmetic is on top
+   * of them (SPEC §21.9).
    */
-  private renderHead(ctx: SceneContext, x: number, scale: number): void {
+  private renderHead(ctx: SceneContext, frame: FrameName, scale: number): void {
     layer(ctx, () => {
-      ctx.translate(x, PET_Y);
+      ctx.translate(0, PET_Y);
       ctx.scale(scale, scale);
       if (this.stage === "ELDER") this.atlas.draw(ctx, "elderBrows", -2, ELDER_BROWS_Y);
-      this.renderCosmetic(ctx);
+      const anchor = HEAD_ANCHORS[frame];
+      if (anchor) {
+        ctx.translate(anchor.x, anchor.y);
+        this.renderCosmetic(ctx);
+      }
     });
   }
 
-  /** The worn cosmetic, in head-anchored coordinates. */
+  /**
+   * The worn cosmetic, drawn around the head anchor: x = 0 is the column
+   * midway between the ears, y = 0 the top of the head outline in the dip,
+   * so a hat's base row is y = -1. The crown's band is 27 wide — the width
+   * of the front view's dip — so it fills it edge to edge and no ear outline
+   * shows beside it.
+   */
   private renderCosmetic(ctx: SceneContext): void {
     const hat = this.decor.activeCosmetic;
     if (!hat) return;
     const px = (dx: number, dy: number, w: number, h: number, color: string): void => {
       ctx.fillStyle = color;
-      ctx.fillRect(dx - 2, dy - 128, w, h);
+      ctx.fillRect(dx, dy, w, h);
     };
     if (hat === "bow") {
-      px(-10, 2, 8, 8, "#d9538a");
-      px(2, 2, 8, 8, "#d9538a");
-      px(-2, 4, 4, 4, "#a83766");
+      px(-10, -5, 8, 8, "#d9538a");
+      px(2, -5, 8, 8, "#d9538a");
+      px(-2, -3, 4, 4, "#a83766");
     } else if (hat === "cap") {
-      px(-12, 0, 24, 6, "#3b6ea5");
-      px(-12, 6, 30, 3, "#2c5480");
+      px(-13, -7, 27, 6, "#3b6ea5");
+      px(-15, -1, 31, 3, "#2c5480");
     } else if (hat === "crown") {
-      px(-12, 0, 24, 7, "#e8c76a");
-      px(-12, -6, 5, 6, "#e8c76a");
-      px(-2, -6, 5, 6, "#e8c76a");
-      px(7, -6, 5, 6, "#e8c76a");
-      px(-4, 2, 3, 3, "#d9538a");
+      px(-13, -7, 27, 7, "#e8c76a");
+      px(-13, -13, 5, 6, "#e8c76a");
+      px(-2, -13, 5, 6, "#e8c76a");
+      px(9, -13, 5, 6, "#e8c76a");
+      px(-1, -5, 3, 3, "#d9538a");
     }
   }
 }
