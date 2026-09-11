@@ -5,7 +5,7 @@ import { project } from "./project";
 import { genesis } from "./genesis";
 import { budgetRemaining, caretakerRecord } from "./score";
 import { quirks } from "./quirks";
-import { FOOD_ITEMS, QUIRK_DISLIKED_PERCENT, QUIRK_FAVORITE_PERCENT, type FoodItemId } from "./economy";
+import { DRINK_ITEMS, FOOD_ITEMS, QUIRK_DISLIKED_PERCENT, QUIRK_FAVORITE_PERCENT, type FoodItemId } from "./economy";
 import { EventLog, hatchedState, replay, TEST_GENERATION, testCtx } from "./testkit";
 import { WANT_BONUS_PERCENT, WANT_EXPIRY_JOY_DEBIT, windowEndTick, windowIndexAt, type Want } from "./wants";
 import {
@@ -476,5 +476,60 @@ describe("want fulfillment (SPEC §25.3)", () => {
     const result = reduce(open, care(1010, "PET"), ctx);
     expect(result.applied).toBe(ACTION_MAGNITUDE.PET);
     expect(result.state.wantOpen).toEqual({ window: windowIndexAt(1000), kind: "moon-cheese" });
+  });
+});
+
+// The energy drink (SPEC §13.2): energy, not hunger, flat and budget-exempt,
+// and the one thing Makoto takes while asleep — during an exhaustion nap —
+// which it ends once energy clears the wake line.
+describe("an energy drink", () => {
+  const drink = DRINK_ITEMS.energy_drink;
+  const log = new EventLog();
+  const awake = project(hatchedState(ctx), 1000, ctx).state;
+  const napping = (energy: number) => ({
+    ...awake,
+    asleep: true,
+    sleepReason: "NAP" as const,
+    needs: { ...awake.needs, energy },
+  });
+  const sip = (state: typeof awake) => reduce(state, { ...log.care(1, "FEED", "a"), tick: 1000, itemId: "energy_drink" }, ctx);
+
+  it("may be given during an exhaustion nap, and nothing else may", () => {
+    const state = napping(100_000);
+    expect(canPerform(state, "FEED", "a", ctx, "energy_drink")).toMatchObject({ ok: true });
+    expect(canPerform(state, "FEED", "a", ctx)).toMatchObject({ ok: false, reason: "ASLEEP" });
+    expect(canPerform(state, "FEED", "a", ctx, "onigiri")).toMatchObject({ ok: false, reason: "ASLEEP" });
+    expect(canPerform({ ...state, sleepReason: "LULLABY" }, "FEED", "a", ctx, "energy_drink")).toMatchObject({ ok: false, reason: "ASLEEP" });
+    const night = project(hatchedState(ctx), 16 * TICKS_PER_HOUR, ctx).state;
+    expect(night.sleepReason).toBe("NIGHT");
+    expect(canPerform(night, "FEED", "a", ctx, "energy_drink")).toMatchObject({ ok: false, reason: "ASLEEP" });
+  });
+
+  it("lifts energy by its flat amount and feeds nothing", () => {
+    const { state, applied } = sip(awake);
+    expect(state.needs.energy).toBe(Math.min(awake.needs.energy + drink.energyBonus, NEED_MAX));
+    expect(applied).toBe(state.needs.energy - awake.needs.energy);
+    expect(state.needs.hunger).toBe(awake.needs.hunger);
+    expect(state.needs.joy).toBe(awake.needs.joy);
+  });
+
+  it("never lifts past full", () => {
+    const nearlyRested = { ...awake, needs: { ...awake.needs, energy: NEED_MAX - 10_000 } };
+    const { state, applied } = sip(nearlyRested);
+    expect(state.needs.energy).toBe(NEED_MAX);
+    expect(applied).toBe(10_000);
+  });
+
+  it("ends a nap only once energy clears the wake line", () => {
+    const still = sip(napping(100_000));
+    expect(still.state.needs.energy).toBe(350_000);
+    expect(still.state.asleep).toBe(true);
+    expect(still.milestones.map((m) => m.kind)).not.toContain("WOKE");
+
+    const woken = sip(napping(200_000));
+    expect(woken.state.needs.energy).toBe(450_000);
+    expect(woken.state.asleep).toBe(false);
+    expect(woken.state.sleepReason).toBeNull();
+    expect(woken.milestones.map((m) => m.kind)).toContain("WOKE");
   });
 });

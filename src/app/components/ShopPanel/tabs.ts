@@ -115,6 +115,7 @@ const ITEM_ICONS: Record<string, string> = {
   onigiri: "🍙",
   fish_feast: "🍣",
   super_medicine: "💊",
+  energy_drink: "🥤",
   teeter: "🛝",
   wheel: "🛞",
   bow: "🎀",
@@ -153,6 +154,7 @@ const ITEM_ICONS: Record<string, string> = {
 const CATEGORY_ICONS = {
   food: "🍖",
   medicine: "💊",
+  drink: "🧃",
   toy: "🎮",
   cosmetic: "🎩",
   decor: "🛋️",
@@ -263,13 +265,14 @@ const packTab = (shop: ShopModel, gate: CareGate): ShopTab => {
     .filter(([, count]) => (count ?? 0) > 0)
     .map(([itemId, count]): ShopRow => {
       const medicine = itemId in shop.catalog.medicine;
+      const drink = itemId in shop.catalog.drinks;
       const care = medicine ? "MEDICATE" : "FEED";
       const availability = usable(gate, care, itemId);
       return {
         id: itemId,
-        icon: icon(itemId, CATEGORY_ICONS[medicine ? "medicine" : "food"]),
+        icon: icon(itemId, CATEGORY_ICONS[medicine ? "medicine" : drink ? "drink" : "food"]),
         name: `${itemLabel(shop.catalog, itemId)} ×${count}`,
-        detail: medicine ? "Cures instantly, no cooldown" : "An extra-tasty meal",
+        detail: medicine ? "Cures instantly, no cooldown" : drink ? "A jolt of energy, even mid-nap" : "An extra-tasty meal",
         action: { kind: "use", itemId, care, availability },
       };
     });
@@ -298,6 +301,9 @@ const foodTab = (shop: ShopModel): ShopTab => ({
             shop,
             "🍖",
           ),
+        ),
+        ...Object.entries(shop.catalog.drinks).map(([itemId, item]) =>
+          buyRow(itemId, item, `+${item.energyBonus / 10_000}% energy · wakes from a nap`, shop, CATEGORY_ICONS.drink),
         ),
         ...Object.entries(shop.catalog.medicine).map(([itemId, item]) =>
           buyRow(itemId, item, "Cures instantly, no cooldown", shop, CATEGORY_ICONS.medicine),
@@ -465,6 +471,7 @@ const roomTab = (shop: ShopModel): ShopTab => {
 export const itemLabel = (shopCatalog: ShopCatalog, itemId: string): string => {
   const sections = [
     shopCatalog.food,
+    shopCatalog.drinks,
     shopCatalog.medicine,
     shopCatalog.toys,
     shopCatalog.cosmetics,

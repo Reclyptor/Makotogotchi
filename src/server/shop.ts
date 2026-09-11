@@ -9,7 +9,7 @@
 // pool row is kept afterwards — generations remember who built the room.
 
 import type { Collection, Db } from "mongodb";
-import { FOOD_ITEMS, MEDICINE_ITEMS, TOY_ITEMS } from "@/sim/economy";
+import { DRINK_ITEMS, FOOD_ITEMS, MEDICINE_ITEMS, TOY_ITEMS } from "@/sim/economy";
 import { petClock } from "@/sim/clock";
 import { isVenueId, rotationPool, type DayBallot, type VenueId } from "@/sim/atmosphere";
 import { ballotsAround, voteForVenue, type VoteResult } from "./ballot";
@@ -204,6 +204,7 @@ export const setActiveTheme = async (db: Db, themeId: string): Promise<boolean> 
 /** All purchasable items with prices, for the shop UI. */
 export const catalog = () => ({
   food: FOOD_ITEMS,
+  drinks: DRINK_ITEMS,
   medicine: MEDICINE_ITEMS,
   toys: TOY_ITEMS,
   cosmetics: COSMETIC_ITEMS,
@@ -219,6 +220,7 @@ type ItemKind = "consumable" | "toy" | "cosmetic" | "decor";
 
 const priceOf = (itemId: string): { price: number; kind: ItemKind } | null => {
   if (itemId in FOOD_ITEMS) return { price: FOOD_ITEMS[itemId as keyof typeof FOOD_ITEMS].price, kind: "consumable" };
+  if (itemId in DRINK_ITEMS) return { price: DRINK_ITEMS[itemId as keyof typeof DRINK_ITEMS].price, kind: "consumable" };
   if (itemId in MEDICINE_ITEMS) return { price: MEDICINE_ITEMS[itemId as keyof typeof MEDICINE_ITEMS].price, kind: "consumable" };
   if (itemId in TOY_ITEMS) return { price: TOY_ITEMS[itemId as keyof typeof TOY_ITEMS].price, kind: "toy" };
   if (itemId in COSMETIC_ITEMS) return { price: COSMETIC_ITEMS[itemId as CosmeticId].price, kind: "cosmetic" };

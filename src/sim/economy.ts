@@ -13,6 +13,17 @@ export type FoodItem = {
   joyBonus: number;
 };
 
+export type DrinkItem = {
+  kind: "drink";
+  label: string;
+  price: number;
+  /**
+   * Flat energy, bounded by purchase price like a food's joy bonus, so it
+   * skips the diminishing curve and the caretaker budget — never the clamp.
+   */
+  energyBonus: number;
+};
+
 export type MedicineItem = {
   kind: "medicine";
   label: string;
@@ -36,6 +47,15 @@ export const FOOD_ITEMS = {
   fish_feast: { kind: "food", label: "Fish Feast", price: 150, scalePercent: 145, joyBonus: 35_000 },
 } as const satisfies Record<string, FoodItem>;
 
+// Drinks are not meals: they restore energy, not hunger, and they stay out of
+// FOOD_ITEMS so the taste quirks and the cravings that index that list by
+// position (SPEC §21.4, §25) are untouched by their arrival. An energy drink
+// is the one consumable Makoto takes while asleep — during an exhaustion nap
+// — and it wakes Makoto once energy clears the wake line (SPEC §13.2).
+export const DRINK_ITEMS = {
+  energy_drink: { kind: "drink", label: "Energy Drink", price: 120, energyBonus: 250_000 },
+} as const satisfies Record<string, DrinkItem>;
+
 export const MEDICINE_ITEMS = {
   super_medicine: { kind: "medicine", label: "Super Medicine", price: 250, bypassCooldowns: true },
 } as const satisfies Record<string, MedicineItem>;
@@ -46,15 +66,19 @@ export const TOY_ITEMS = {
 } as const satisfies Record<string, ToyItem>;
 
 export type FoodItemId = keyof typeof FOOD_ITEMS;
+export type DrinkItemId = keyof typeof DRINK_ITEMS;
 export type MedicineItemId = keyof typeof MEDICINE_ITEMS;
 export type ToyItemId = keyof typeof TOY_ITEMS;
-export type SimItemId = FoodItemId | MedicineItemId | ToyItemId;
+export type SimItemId = FoodItemId | DrinkItemId | MedicineItemId | ToyItemId;
 
 /** Declaration order is the canonical order every quirk draw indexes into. */
 export const FOOD_ITEM_IDS = Object.keys(FOOD_ITEMS) as readonly FoodItemId[];
 
 export const foodItem = (itemId: string | undefined): FoodItem | null =>
   itemId !== undefined && itemId in FOOD_ITEMS ? FOOD_ITEMS[itemId as FoodItemId] : null;
+
+export const drinkItem = (itemId: string | undefined): DrinkItem | null =>
+  itemId !== undefined && itemId in DRINK_ITEMS ? DRINK_ITEMS[itemId as DrinkItemId] : null;
 
 export const medicineItem = (itemId: string | undefined): MedicineItem | null =>
   itemId !== undefined && itemId in MEDICINE_ITEMS ? MEDICINE_ITEMS[itemId as MedicineItemId] : null;

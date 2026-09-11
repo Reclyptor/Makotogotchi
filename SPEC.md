@@ -186,7 +186,7 @@ anyone a weapon.
 
 | Action | Restores | Global cooldown | Per-caretaker cooldown | Available when |
 | --- | --- | --- | --- | --- |
-| `FEED` | Hunger | 50s | 3 min | Awake |
+| `FEED` | Hunger (or energy, with a drink — §13.2) | 50s | 3 min | Awake — or napping from exhaustion, with a drink |
 | `PLAY` | Joy | 60s | 3 min | Awake, energy > 10% |
 | `CLEAN` | Hygiene | 90s | 5 min | Awake |
 | `MEDICATE` | Clears `SICK`, small health | 5 min | 10 min | `SICK` present |
@@ -1387,6 +1387,7 @@ keeping live.
 | Category | Items |
 | --- | --- |
 | Food | Better food restores more hunger and adds a small joy bonus. Consumed on use. Peppers are characters in this world, not ingredients, so they never appear here — the Pepper Treat was legacy and is now Onigiri. |
+| Drinks | Restore energy, not hunger. The lift is flat and bounded by price, so like a food's joy bonus it skips the diminishing curve and the caretaker budget. Drinks are not meals: they live in their own table, outside the taste quirks (§21.4) and the cravings (§25), which index the meal list by position. The Energy Drink (120 coins, +25% energy) is the one consumable Makoto takes while asleep — during an exhaustion nap (§2.9), never the night's sleep or a lullaby's — and it wakes Makoto from the nap the moment energy clears the 40% wake line. Given through `FEED`, so it shares `FEED`'s cooldowns. Consumed. |
 | Medicine | Cures `SICK` instantly with no cooldown. Consumed. |
 | Toys | Raise the `PLAY` base magnitude. Permanent for the generation. |
 | Cosmetics | Hats and accessories for the pet. Permanent, cross-generation. |
@@ -1418,7 +1419,7 @@ centred card from `sm:` up.
 
 - **Five tabs, one visible at a time**, filed by what an item *does* rather
   than by how it is paid for: **Pack** (consumables you own, used from here),
-  **Food** (food + medicine), **Toys** (this generation), **Style**
+  **Food** (food, drinks and medicine), **Toys** (this generation), **Style**
   (cosmetics Makoto wears), **Room** (everything everyone sees — decor, wall
   styles §22.5, and places §22.8 with their ballots §22.9). Pack keeps its
 slot when empty, carrying an

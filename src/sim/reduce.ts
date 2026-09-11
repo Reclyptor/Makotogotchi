@@ -5,13 +5,14 @@
 
 import { phaseAt, type PetState, type ProjectionContext } from "./model";
 import { project } from "./project";
-import { foodItem, toysPlayBonusPercent } from "./economy";
+import { drinkItem, foodItem, toysPlayBonusPercent } from "./economy";
 import { quirkFoodPercent } from "./quirks";
 import { caretakerRecord, pruneCaretakers, recordApplied } from "./score";
 import {
   ACTION_MAGNITUDE,
   HEALTH_MAX,
   MEDICATE_HEALTH_RESTORE,
+  NAP_WAKE_THRESHOLD,
   NEED_MAX,
   PLAY_ENERGY_COST,
   type CareAction,
@@ -131,6 +132,7 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
         WANT_FULFILLING_ACTION[want.kind] === event.action &&
         (want.itemId === undefined || want.itemId === event.itemId);
 
+      const drink = event.action === "FEED" ? drinkItem(event.itemId) : null;
       if (event.action === "MEDICATE") {
         if (state.sick) {
           state.sick = false;
@@ -138,6 +140,20 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
           milestones.push({ kind: "RECOVERED", tick: event.tick });
         }
         state.healthRaw = clamp(state.healthRaw + MEDICATE_HEALTH_RESTORE, HEALTH_MAX);
+      } else if (drink) {
+        // A drink feeds nothing; its energy is flat and bounded by purchases,
+        // so like a food's joy bonus it bypasses the curve and the caretaker
+        // budget but never the clamp (SPEC §13.2). Given during an
+        // exhaustion nap, it ends the nap the way rest would: once energy
+        // clears the wake line.
+        const before = state.needs.energy;
+        state.needs.energy = clamp(state.needs.energy + drink.energyBonus, NEED_MAX);
+        applied = state.needs.energy - before;
+        if (state.asleep && state.sleepReason === "NAP" && state.needs.energy >= NAP_WAKE_THRESHOLD) {
+          state.asleep = false;
+          state.sleepReason = null;
+          milestones.push({ kind: "WOKE", tick: event.tick });
+        }
       } else {
         const magnitude = MAGNITUDE_ACTIONS[event.action];
         if (magnitude) {

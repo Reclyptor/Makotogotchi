@@ -7,6 +7,7 @@
 import { useEffect, useRef } from "react";
 import { derive } from "@/sim/derive";
 import { quirks } from "@/sim/quirks";
+import { drinkItem } from "@/sim/economy";
 import { isAmbientEvent } from "@/sim/ambient";
 import type { CareAction } from "@/sim/tuning";
 import { SPRITE_SHEET_URL } from "@/game/atlas.generated";
@@ -143,7 +144,9 @@ export default function PetCanvas({ stream, localSecret = null }: PetCanvasProps
           : (notice.caretakerName ?? `friend ${notice.caretakerId.slice(0, 4)}`);
       const amount = notice.applied >= 1000 ? `+${(notice.applied / 10_000).toFixed(1)}% ` : "";
       const taste = notice.action === "FEED" ? tasteOf(notice.itemId) : undefined;
-      room.onCare(notice.action, `${amount}${ACTION_EMOJI[notice.action]} ${who}`, performance.now(), taste);
+      // A drink is fed, but it is not a meal (SPEC §13.2).
+      const emoji = notice.action === "FEED" && drinkItem(notice.itemId) ? "🥤" : ACTION_EMOJI[notice.action];
+      room.onCare(notice.action, `${amount}${emoji} ${who}`, performance.now(), taste);
     });
     const offMilestone = onMilestone((notice) => {
       if (notice.kind === "AMBIENT" && isAmbientEvent(notice.detail)) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { quirkFoodPercent, quirks } from "./quirks";
-import { FOOD_ITEM_IDS, FOOD_ITEMS, QUIRK_DISLIKED_PERCENT, QUIRK_FAVORITE_PERCENT } from "./economy";
+import { DRINK_ITEMS, FOOD_ITEM_IDS, FOOD_ITEMS, QUIRK_DISLIKED_PERCENT, QUIRK_FAVORITE_PERCENT } from "./economy";
 import { MINIGAME_IDS } from "./minigames";
 
 const SEEDS = Array.from({ length: 400 }, (_, index) => index * 7919 + 13);
@@ -40,5 +40,16 @@ describe("generational quirks (SPEC §21.4)", () => {
     expect(quirkFoodPercent(seed, taste.dislikedFood)).toBe(QUIRK_DISLIKED_PERCENT);
     expect(quirkFoodPercent(seed, "super_medicine")).toBe(100);
     expect(quirkFoodPercent(seed, undefined)).toBe(100);
+  });
+});
+
+// Drinks live outside the meal list on purpose: quirks and cravings index that
+// list by position, and a new meal would shift every generation's taste.
+describe("drinks and taste", () => {
+  it("keeps drinks out of the meal list, so no generation loves or hates one", () => {
+    for (const itemId of Object.keys(DRINK_ITEMS)) {
+      expect(FOOD_ITEM_IDS).not.toContain(itemId);
+      for (const seed of [1, 7, 1337, 424242]) expect(quirkFoodPercent(seed, itemId)).toBe(100);
+    }
   });
 });

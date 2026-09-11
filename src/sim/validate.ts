@@ -6,7 +6,7 @@
 // validates and applies zero (SPEC §2.5) — the UI explains separately.
 
 import { isAlive, type PetState, type ProjectionContext } from "./model";
-import { medicineItem } from "./economy";
+import { drinkItem, medicineItem } from "./economy";
 import { COOLDOWNS, LULLABY_ENERGY_GATE, PLAY_ENERGY_GATE, type CareAction } from "./tuning";
 
 export type RejectionReason =
@@ -81,6 +81,10 @@ export const canPerform = (
 
   switch (action) {
     case "FEED":
+      if (!state.asleep) return { ok: true };
+      // A drink is the one thing Makoto takes while asleep — and only during
+      // an exhaustion nap, never the night's sleep or a lullaby's (SPEC §13.2).
+      return drinkItem(itemId) && state.sleepReason === "NAP" ? { ok: true } : reject("ASLEEP");
     case "CLEAN":
       return state.asleep ? reject("ASLEEP") : { ok: true };
     case "PLAY":
