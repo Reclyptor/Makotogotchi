@@ -1200,7 +1200,9 @@ hat mirrors with a pet strolling right, scales with a hatchling, and lands at
 this frame's own anchor — and cosmetics are shaped around the anchor: x = 0
 between the ears, y = 0 the top of the outline, a hat's base row at y = −1.
 The crown's band is 27 pixels, the width of the front view's dip, so it
-fills that dip edge to edge.
+fills that dip edge to edge. An elder's brow tufts (§21.9) sit on the same
+anchor, nine rows down, so they stay on the brow when the head tilts; a
+frame with no anchor gets no tufts either — the gravestone wears nothing.
 
 ---
 
@@ -2140,9 +2142,8 @@ pet just never looks different. Presentation-layer only:
 - **JUVENILE**: 90%.
 - **ADULT**: 100% (today's look).
 - **ELDER**: 100% plus a new `@1x` accessory sprite — gray brow tufts —
-  drawn in the head layer with the cosmetics (stacking under any worn
-  cosmetic; the tufts keep a fixed face position, hats follow the §10.5
-  head anchor).
+  drawn in the head layer at the §10.5 head anchor like the cosmetics are
+  (stacking under any worn cosmetic).
 
 The stage scale applies everywhere the room draws the pet (idle, wander,
 one-shots). Minigames keep drawing the adult frames — the game canvas is a

@@ -143,7 +143,12 @@ export const STAGE_SCALE: Record<LifeStage, number> = {
 export const stageScale = (stage: LifeStage): number => STAGE_SCALE[stage];
 
 /** Where the brow tufts sit above the floor, in the pet's own pixels. */
-const ELDER_BROWS_Y = -112;
+/**
+ * Where an elder's brow tufts sit, from the head anchor (SPEC §10.5): the
+ * sprite's bottom-centre nine rows below the top of the head outline, so the
+ * tufts rest on the brow with one ear either side of them.
+ */
+const ELDER_BROWS = { x: 0, y: 9 };
 
 /** How this generation feels about the meal it was just fed (SPEC §21.4). */
 export type FoodTaste = "favorite" | "disliked";
@@ -571,18 +576,18 @@ export class Room {
    * a hatchling's hat is a hatchling-sized hat, and at this frame's own head
    * anchor (SPEC §10.5) so it sits between the ears wherever the pose put
    * them. An elder's brow tufts stack underneath whatever cosmetic is on top
-   * of them (SPEC §21.9).
+   * of them (SPEC §21.9). A frame with no anchor has no head to speak of —
+   * the egg, the gravestone — and wears nothing.
    */
   private renderHead(ctx: SceneContext, frame: FrameName, scale: number): void {
+    const anchor = HEAD_ANCHORS[frame];
+    if (!anchor) return;
     layer(ctx, () => {
       ctx.translate(0, PET_Y);
       ctx.scale(scale, scale);
-      if (this.stage === "ELDER") this.atlas.draw(ctx, "elderBrows", -2, ELDER_BROWS_Y);
-      const anchor = HEAD_ANCHORS[frame];
-      if (anchor) {
-        ctx.translate(anchor.x, anchor.y);
-        this.renderCosmetic(ctx);
-      }
+      ctx.translate(anchor.x, anchor.y);
+      if (this.stage === "ELDER") this.atlas.draw(ctx, "elderBrows", ELDER_BROWS.x, ELDER_BROWS.y);
+      this.renderCosmetic(ctx);
     });
   }
 

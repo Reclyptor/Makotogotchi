@@ -396,6 +396,27 @@ describe("a hat on the head", () => {
     expect(band.y1 - 172).toBe(anchor.y);
   });
 
+  it("rests an elder's brow tufts on the same anchor, and takes them off the gravestone", () => {
+    const { room, derived, state } = contentedRoom(22);
+    expect(derived.stage).toBe("ELDER");
+    room.reducedMotion = true;
+    room.syncDerived(derived, false, 0);
+    const recorder = recordingContext();
+    room.render(recorder.ctx, 1000);
+    const frame = BASE_CLIPS.idle.frames[0]!;
+    const anchor = HEAD_ANCHORS[frame]!;
+    const sprite = recorder.drawn.find((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES[frame].w)!;
+    const tufts = recorder.drawn.find((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES.elderBrows.w)!;
+    expect(tufts).toBeDefined();
+    // Centred on the anchor column, like a hat.
+    expect(tufts.x0 - sprite.x0).toBe(Math.floor(SPRITE_FRAMES[frame].w / 2) + anchor.x - SPRITE_FRAMES.elderBrows.w / 2);
+
+    room.syncDerived(derive({ ...state, diedAtTick: state.tick }), false, 2000);
+    const mourning = recordingContext();
+    room.render(mourning.ctx, 3000);
+    expect(mourning.drawn.map((entry) => entry.x1 - entry.x0)).toEqual([SPRITE_FRAMES.dead1.w]);
+  });
+
   it("mirrors the hat with her when she faces right", () => {
     vi.useFakeTimers();
     try {
