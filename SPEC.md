@@ -512,7 +512,7 @@ codebase.
 | `reduce.ts` | `reduce(state, event): PetState` — pure, total, exhaustive over the union. |
 | `project.ts` | `project(state, toTick): PetState` — advances simulated time. |
 | `validate.ts` | `canPerform(state, action, ctx): Result` — the single authority on whether an action is legal. Used by the server to reject and by the client to grey out buttons. |
-| `derive.ts` | `derive(state): DerivedState` — ailments, mood, animation key, alert level. Everything presentational. |
+| `derive.ts` | `derive(state): DerivedState` — ailments, mood, animation key, alert level, vitality (whether low health is climbing back or not). Everything presentational. |
 | `rng.ts` | Seeded `mulberry32`, keyed by `(generationSeed, tickIndex, purpose)`. |
 | `score.ts` | Contribution scoring, the `careScore` accumulator, and the caretaker budget rings. |
 
@@ -1276,6 +1276,34 @@ API directly; no audio library.
 Tailwind CSS v4 with a small token layer in `globals.css`. A pixel-art
 typeface for headings, a legible system stack for body text. Dark by default,
 with a light theme honouring `prefers-color-scheme`.
+
+### 11.7 The Status Line
+
+The one sentence under the canvas ("Makoto is doing fine.") is built from the
+whole of the pet's state, not from the ailments list alone — a pet nursed
+back from the brink has every need met and a 1% health meter, and "doing
+fine" over that meter is a lie. `statusLine()` in
+`components/GameView/status.ts` is a pure function of `PetState` and
+`DerivedState`, unit-tested line by line, and the first rule that matches
+wins:
+
+| Priority | State | Line |
+| --- | --- | --- |
+| 1 | dead | "Makoto starved. A new egg will appear soon." — the cause worded exactly as the memorial wall words it (`app/copy/death.ts`, one table for both) |
+| 2 | egg | "The egg is incubating…" |
+| 3 | asleep | by `sleepReason`: "is asleep for the night." / "is napping until the energy comes back." / "was sung to sleep." |
+| 4 | any ailment | "is starving, filthy and sad" — worst first, in §2.9's order — with sickness dated last: "just fell sick" (under an hour), "has been sick for 5 hours", "since yesterday", "for 3 days" |
+| 5 | health below 25% (§2.3) | "is recovering." while health is climbing back; "is dangerously weak." while it is not — an elder, a sick pet, or a critical need |
+| 6 | a need under 50% | the lowest one: "is getting hungry." / "is getting sleepy." / "could use a bath." / "is getting bored." |
+| 7 | well | by stage: "is small and curious." / "is full of beans." / "is growing fast." / "is doing fine." / "is taking it slow." |
+
+Rules 3 and 4 carry the health verdict as a second sentence when there is
+one: "Makoto is asleep for the night. Health is coming back." The verdict is
+`derive()`'s `vitality`, which mirrors exactly the conditions under which
+`project()` regenerates health, so the line never promises a recovery the
+simulation is not making. One fixed line per state, warm in tone, no
+rotation: every caretaker reads the same words, and the tests are exact.
+The venue clause ("Out at the shrine path today.", §22.8) follows on its own.
 
 ---
 

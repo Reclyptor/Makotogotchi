@@ -23,6 +23,7 @@ import ShopPanel from "@/app/components/ShopPanel";
 import QuestBanner from "@/app/components/QuestBanner";
 import WantBanner from "@/app/components/WantBanner";
 import { wantAsk, wantGranted, wantLapse } from "@/app/components/WantBanner/copy";
+import { statusLine } from "@/app/components/GameView/status";
 import MinigameShell from "@/app/components/minigames/Shell";
 import { isMinigameId, MINIGAME_IDS, MINIGAMES, type MinigameId } from "@/sim/minigames";
 import { isAmbientEvent, type AmbientEvent } from "@/sim/ambient";
@@ -492,17 +493,7 @@ export default function GameView() {
     return venueId === "home" ? null : venueSpec(venueId).label;
   })();
 
-  const statusText = ui
-    ? isDead
-      ? `${petName} has died. A new egg will appear soon.`
-      : isEgg
-        ? "The egg is incubating…"
-        : ui.state.asleep
-          ? `${petName} is asleep.`
-          : ui.derived.ailments.length > 0
-            ? `${petName} is ${ui.derived.ailments.join(", ").toLowerCase()}.`
-            : `${petName} is doing fine.`
-    : "Connecting…";
+  const statusText = ui ? statusLine(petName, ui.state, ui.derived) : "Connecting…";
 
   return (
     <div className="flex w-full max-w-xl flex-col items-center gap-3">

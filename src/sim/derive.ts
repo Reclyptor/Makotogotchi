@@ -19,11 +19,20 @@ export type AnimationKey = "egg" | "idle" | "sleeping" | "sick" | "dirty" | "hun
 
 export type AlertLevel = "OK" | "WARN" | "CRITICAL";
 
+/**
+ * How the death clock is doing, for copy that has to say more than "fine":
+ * `well` above the critical line; below it, `recovering` while health is
+ * actually climbing back, `frail` while it is not — an elder never regains
+ * health (SPEC §2.3), and sickness or a critical need cancels the regen.
+ */
+export type Vitality = "well" | "recovering" | "frail";
+
 export type DerivedState = {
   stage: ReturnType<typeof stageAt>;
   ailments: Ailment[];
   animation: AnimationKey;
   alert: AlertLevel;
+  vitality: Vitality;
   /** Needs as display percentages, 0–100. */
   percentages: Record<NeedKey, number> & { health: number };
   /** Caretakers the difficulty is currently set for (SPEC §23.3). */
@@ -64,6 +73,10 @@ export const derive = (state: PetState): DerivedState => {
   const anyCritical = NEED_KEYS.some((need) => state.needs[need] < CRITICAL_THRESHOLD);
   const alert: AlertLevel =
     state.healthRaw < HEALTH_CRITICAL || (state.sick && anyCritical) ? "CRITICAL" : anyCritical || state.sick ? "WARN" : "OK";
+  // The same conditions under which project.ts lets health regenerate, and
+  // sickness drains exactly what regen restores, so it stalls the climb.
+  const healing = !anyCritical && !state.sick && stage !== "ELDER";
+  const vitality: Vitality = state.healthRaw >= HEALTH_CRITICAL ? "well" : healing ? "recovering" : "frail";
 
   const percentages = {
     hunger: Math.floor(state.needs.hunger / 10_000),
@@ -78,6 +91,7 @@ export const derive = (state: PetState): DerivedState => {
     ailments,
     animation,
     alert,
+    vitality,
     percentages,
     population: state.population ?? DIFFICULTY_BASELINE,
     careMultiplier: careMultiplier(state.population),
