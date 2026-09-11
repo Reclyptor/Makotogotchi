@@ -3,7 +3,7 @@
 // Mostly arithmetic, tested directly; the one case that needs a canvas gets a
 // recording stub rather than a real one.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Room, ROOM_HEIGHT, ROOM_WIDTH, STAGE_SCALE, stageScale, wanderBand } from "./room";
 import { RUG } from "./backdrop";
 import { SPECTACLE_MS } from "./party";
@@ -37,7 +37,8 @@ const IDENTITY: Matrix = { a: 1, d: 1, e: 0, f: 0 };
  * loop's guard swallows (engine/loop.ts).
  */
 const recordingContext = (failAtCall = -1) => {
-  const drawn: { x0: number; x1: number }[] = [];
+  /** Every sprite blit: where it landed, and whether the transform flipped it. */
+  const drawn: { x0: number; x1: number; mirrored: boolean }[] = [];
   /** Every full-canvas paint, with the clip that was in force when it landed. */
   const paints: (Rect | null)[] = [];
   const stack: CanvasState[] = [];
@@ -113,7 +114,7 @@ const recordingContext = (failAtCall = -1) => {
       const [dx, , dw] = args.slice(5);
       const a = state.matrix.e + state.matrix.a * dx!;
       const b = state.matrix.e + state.matrix.a * (dx! + dw!);
-      drawn.push({ x0: Math.min(a, b), x1: Math.max(a, b) });
+      drawn.push({ x0: Math.min(a, b), x1: Math.max(a, b), mirrored: state.matrix.a < 0 });
     },
   };
 
@@ -147,7 +148,7 @@ const contentedRoom = () => {
     asleep: false,
   };
   room.syncAtmosphere({ hour: 13, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, venueId: "home" });
-  return { room, derived: derive(contented) };
+  return { room, state: contented, derived: derive(contented) };
 };
 
 describe("stage scale", () => {
@@ -217,6 +218,44 @@ describe("rendering a pet that was just petted", () => {
       }
     }
     expect(drawn.length).toBeGreaterThan(0);
+  });
+});
+
+// The gravestone came up with its letters backwards. A stroll to the right
+// mirrors the art, the facing outlives the stroll, and the one frame that
+// carries text inherited it when she died mid-wander.
+describe("the gravestone", () => {
+  it("is one still frame, not a cycle through the round alternate design", () => {
+    expect(BASE_CLIPS.dead.frames).toEqual(["dead1"]);
+  });
+
+  it("keeps its letters readable whichever way she was last walking", () => {
+    vi.useFakeTimers();
+    try {
+      // The stroll picks its destination from Date.now() in nine-second
+      // slots; walk the slots until one sends her right of where she stands.
+      const strolledRight = (): ReturnType<typeof contentedRoom> => {
+        for (let slot = 0; slot < 64; slot++) {
+          vi.setSystemTime(slot * 9000);
+          const scene = contentedRoom();
+          const recorder = recordingContext();
+          scene.room.syncDerived(scene.derived, false, 0);
+          scene.room.render(recorder.ctx, 1000);
+          if (recorder.drawn.some((entry) => entry.mirrored)) return scene;
+        }
+        throw new Error("no wander slot sent the pet right");
+      };
+      const { room, state } = strolledRight();
+
+      const recorder = recordingContext();
+      room.syncDerived(derive({ ...state, diedAtTick: TICKS_PER_DAY }), false, 2000);
+      room.render(recorder.ctx, 3000);
+      const gravestone = Math.round(SPRITE_FRAMES.dead1.w * room.petScale);
+      expect(recorder.drawn.map((entry) => entry.x1 - entry.x0)).toEqual([gravestone]);
+      expect(recorder.drawn.some((entry) => entry.mirrored)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

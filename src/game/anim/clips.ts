@@ -25,7 +25,9 @@ export const BASE_CLIPS: Record<AnimationKey, Clip> = {
   dirty: clip(["lift1", "lift2", "lift1", "lift2", "shiver1", "shiver2"], 900, true),
   tired: clip(["tired1", "tired2", "tired1", "tired2", "yawn1", "yawn2"], 1000, true),
   bored: clip(["bored1", "bored2", "bored3"], 1000, true),
-  dead: clip(["dead1", "dead2"], 2000, true),
+  // The gravestone stands still. `dead2` is the round alternate design the
+  // artist delivered, not a second frame — it is never played.
+  dead: clip(["dead1"], 2000, true),
 };
 
 export const ONE_SHOT_NAMES = [

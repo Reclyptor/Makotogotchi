@@ -346,8 +346,10 @@ On death:
 1. The generation is sealed with `diedAt`, `causeOfDeath`, final age, and the
    ranked list of that generation's caretakers by contribution.
 2. A `DIED` milestone broadcasts to every connected client. The scene shows
-   the gravestone sprite. This state persists for `MOURNING_DURATION`
-   (2 hours) — long enough that people who were asleep still see it happened.
+   the gravestone sprite: the one still `dead1` frame, never mirrored, so its
+   letters read whichever way the pet was last strolling. This state persists
+   for `MOURNING_DURATION` (2 hours) — long enough that people who were
+   asleep still see it happened.
 3. The memorial wall (`/memorial`) gains a permanent entry.
 4. When mourning ends, a new egg appears and begins its 30-minute
    incubation; a naming vote opens with it. Any caretaker may propose a name

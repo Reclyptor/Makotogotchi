@@ -423,8 +423,11 @@ export class Room {
         : this.machine.frameAt(nowMs);
       const x = Math.round(this.petX);
       const scale = this.petScale;
-      if (this.facingRight) {
-        // The art faces left; strolling right mirrors it around the anchor.
+      // The art faces left; strolling right mirrors it around the anchor. The
+      // facing outlives the stroll, and the gravestone must not inherit it:
+      // its letters have to read whichever way she was last walking.
+      const mirrored = this.facingRight && this.machine.baseKey !== "dead";
+      if (mirrored) {
         layer(ctx, () => {
           ctx.translate(x, 0);
           ctx.scale(-1, 1);
