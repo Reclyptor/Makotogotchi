@@ -12,6 +12,7 @@ import { quirks } from "@/sim/quirks";
 import { INCUBATION_TICKS, MOURNING_TICKS } from "@/sim/tuning";
 import { generations, isDuplicateKeyError } from "../db/collections";
 import { createGeneration } from "../db/repository";
+import { announceRoom } from "../shop";
 import { anonymousName, generationRanking, incrementGenerationsSurvived, nicknameMap } from "../social";
 import { titleHolders } from "../titles";
 import { resolveWinner } from "../votes";
@@ -72,6 +73,9 @@ export class Lifecycle {
     }));
     await generations(this.db).updateOne({ _id: generationId }, { $set: { "memorial.ranking": ranking, "memorial.titles": titles } });
     await incrementGenerationsSurvived(this.db, generationId);
+    // A sealed generation hangs on the family wall (SPEC §22.10); every
+    // open room learns of it the way it learns of a new hat.
+    await announceRoom(this.db);
   }
 
   /** Lay the next egg. Guarded by ordinal uniqueness against double-rotation. */

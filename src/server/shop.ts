@@ -14,7 +14,7 @@ import { petClock } from "@/sim/clock";
 import { isVenueId, rotationPool, type DayBallot, type VenueId } from "@/sim/atmosphere";
 import { ballotsAround, voteForVenue, type VoteResult } from "./ballot";
 import { env } from "./env";
-import { isDuplicateKeyError } from "./db/collections";
+import { generations, isDuplicateKeyError } from "./db/collections";
 import { caretakerProfile, caretakers, creditCoins } from "./social";
 import { invalidateRoomCache } from "./snapshot";
 import { announcePurse, purseOf } from "./purse";
@@ -108,6 +108,22 @@ export type RoomView = {
    * midnight turn seamless through this view's cache.
    */
   ballots: DayBallot[];
+  /**
+   * The generations before this one, newest first, as many as the family
+   * wall has slots for (SPEC §22.10). Sealed generations only: a gravestone
+   * goes up on the wall the moment it goes up in the room.
+   */
+  ancestors: { ordinal: number; name: string }[];
+};
+
+/** How many ancestors the home wall can hang — scene/ancestors.ts lays out exactly this many slots. */
+export const FAMILY_WALL_SLOTS = 5;
+
+const ancestorsOf = async (db: Db): Promise<RoomView["ancestors"]> => {
+  const sealed = await generations(db)
+    .find({ died: { $ne: null } }, { projection: { ordinal: 1, name: 1 }, sort: { ordinal: -1 }, limit: FAMILY_WALL_SLOTS })
+    .toArray();
+  return sealed.map((doc) => ({ ordinal: doc.ordinal, name: doc.name ?? "Unnamed" }));
 };
 
 /** The style a funded item bought the room, or null if it bought something else. */
@@ -125,7 +141,11 @@ export const ownedThemes = (decor: string[]): string[] => [
 
 export const roomState = async (db: Db): Promise<RoomView> => {
   const today = petClock(env().PET_TIMEZONE, Date.now()).dayIndex;
-  const [doc, dayBallots] = await Promise.all([roomCollection(db).findOne({ _id: "room" }), ballotsAround(db, today)]);
+  const [doc, dayBallots, ancestors] = await Promise.all([
+    roomCollection(db).findOne({ _id: "room" }),
+    ballotsAround(db, today),
+    ancestorsOf(db),
+  ]);
   const decor = doc?.decor ?? [];
   const themes = ownedThemes(decor);
   const active = doc?.activeTheme ?? DEFAULT_THEME;
@@ -138,6 +158,7 @@ export const roomState = async (db: Db): Promise<RoomView> => {
     activeTheme: themes.includes(active) ? active : DEFAULT_THEME,
     themes,
     ballots: dayBallots,
+    ancestors,
   };
 };
 
@@ -151,7 +172,7 @@ export const roomState = async (db: Db): Promise<RoomView> => {
  * appear, on your own screen, for half a minute. The room is shared, so its
  * changes are announced the same way the pet's are.
  */
-const announceRoom = async (db: Db): Promise<void> => {
+export const announceRoom = async (db: Db): Promise<void> => {
   invalidateRoomCache();
   const room = await roomState(db);
   const message: EngineMessage = { type: "room", room };

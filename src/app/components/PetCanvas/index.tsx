@@ -254,7 +254,7 @@ export default function PetCanvas({ stream, localSecret = null }: PetCanvasProps
           maybeGreet(state.bornAtTick !== null && state.diedAtTick === null && !state.asleep, now);
         }
         const view = roomViewRef.current;
-        if (view) room.decor = { decor: view.decor, activeCosmetic: view.activeCosmetic };
+        if (view) room.decor = { decor: view.decor, activeCosmetic: view.activeCosmetic, ancestors: view.ancestors };
         room.render(ctx, now);
       },
     });

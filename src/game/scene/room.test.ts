@@ -10,6 +10,7 @@ import { SPECTACLE_MS } from "./party";
 import { drawRect } from "../engine/atlas";
 import { BASE_CLIPS, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP } from "../anim/clips";
 import { HEAD_ANCHORS } from "./head";
+import { MOULDING, WALL_SLOTS } from "./ancestors";
 import { SPRITE_FRAMES, type FrameName } from "../atlas.generated";
 import { derive } from "@/sim/derive";
 import { hatchedState, projectImmortal, testCtx } from "@/sim/testkit";
@@ -44,6 +45,8 @@ const recordingContext = (failAtCall = -1) => {
   const fills: { x0: number; x1: number; y0: number; y1: number; mirrored: boolean }[] = [];
   /** Every full-canvas paint, with the clip that was in force when it landed. */
   const paints: (Rect | null)[] = [];
+  /** Every smaller image laid onto the canvas — a picture landing on the wall. */
+  const blits: { dx: number; dy: number; width: number; height: number }[] = [];
   const stack: CanvasState[] = [];
   let state: CanvasState = { matrix: { ...IDENTITY }, clip: null, alpha: 1 };
   let path: Rect | null = null;
@@ -115,6 +118,7 @@ const recordingContext = (failAtCall = -1) => {
       // full-canvas paint, so a small blit is not one of them.
       const whole = dx === 0 && dy === 0 && image.width === ROOM_WIDTH && image.height === ROOM_HEIGHT;
       if (whole) paints.push(state.clip);
+      else blits.push({ dx, dy, width: image.width, height: image.height });
     },
     drawImage: (...args: number[]) => {
       step();
@@ -131,6 +135,7 @@ const recordingContext = (failAtCall = -1) => {
     drawn,
     fills,
     paints,
+    blits,
     depth: () => stack.length,
     current: () => state,
     calls: () => calls,
@@ -370,7 +375,7 @@ describe("a hat on the head", () => {
   const crowned = () => {
     const { room, derived } = contentedRoom(10);
     room.reducedMotion = true;
-    room.decor = { decor: [], activeCosmetic: "crown" };
+    room.decor = { decor: [], activeCosmetic: "crown", ancestors: [] };
     room.syncDerived(derived, false, 0);
     expect(room.petScale).toBe(1);
     return room;
@@ -423,7 +428,7 @@ describe("a hat on the head", () => {
       for (let slot = 0; slot < 64; slot++) {
         vi.setSystemTime(slot * 9000);
         const { room, derived } = contentedRoom(10);
-        room.decor = { decor: [], activeCosmetic: "crown" };
+        room.decor = { decor: [], activeCosmetic: "crown", ancestors: [] };
         room.syncDerived(derived, false, 0);
         const recorder = recordingContext();
         room.render(recorder.ctx, 1000);
@@ -435,6 +440,55 @@ describe("a hat on the head", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// The home wall remembers the generations before this one (SPEC §22.10):
+// one framed picture per ancestor in its slot, none anywhere else.
+describe("the family wall", () => {
+  const ancestors = [
+    { ordinal: 4, name: "Makoto" },
+    { ordinal: 3, name: "Mochi" },
+    { ordinal: 2, name: "Pepper" },
+  ];
+
+  it("hangs one picture per ancestor, parent first, in the slots the spec lays out", () => {
+    const { room, derived } = contentedRoom();
+    room.decor = { decor: [], activeCosmetic: null, ancestors };
+    room.syncDerived(derived, false, 0);
+    const recorder = recordingContext();
+    room.render(recorder.ctx, 1000);
+    expect(recorder.blits).toEqual(
+      WALL_SLOTS.slice(0, ancestors.length).map((slot) => ({
+        dx: slot.x + MOULDING,
+        dy: slot.y + MOULDING,
+        width: slot.art,
+        height: slot.art,
+      })),
+    );
+  });
+
+  it("hangs nothing on a bare wall, and stops at the slots it has", () => {
+    const { room, derived } = contentedRoom();
+    room.syncDerived(derived, false, 0);
+    const bare = recordingContext();
+    room.render(bare.ctx, 1000);
+    expect(bare.blits).toEqual([]);
+
+    const crowded = recordingContext();
+    room.decor = { decor: [], activeCosmetic: null, ancestors: Array.from({ length: 9 }, (_, i) => ({ ordinal: 9 - i, name: "Makoto" })) };
+    room.render(crowded.ctx, 2000);
+    expect(crowded.blits.length).toBe(WALL_SLOTS.length);
+  });
+
+  it("stays home: a day trip carries none of the room's decor", () => {
+    const { room, derived } = contentedRoom();
+    room.decor = { decor: [], activeCosmetic: null, ancestors };
+    room.syncDerived(derived, false, 0);
+    room.syncAtmosphere({ hour: 13, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, venueId: "meadow" });
+    const recorder = recordingContext();
+    room.render(recorder.ctx, 1000);
+    expect(recorder.blits).toEqual([]);
   });
 });
 
@@ -565,7 +619,7 @@ describe("skipping frames that would paint the same pixels", () => {
     const recorder = recordingContext();
     room.syncDerived(derived, false, 0);
     room.render(recorder.ctx, 1000);
-    room.decor = { decor: ["plant"], activeCosmetic: null };
+    room.decor = { decor: ["plant"], activeCosmetic: null, ancestors: [] };
     expect(paintedCalls(recorder, () => room.render(recorder.ctx, 1000))).toBeGreaterThan(0);
   });
 
@@ -574,7 +628,7 @@ describe("skipping frames that would paint the same pixels", () => {
     const recorder = recordingContext();
     room.syncDerived(derived, false, 0);
     room.render(recorder.ctx, 1000);
-    room.decor = { decor: [], activeCosmetic: "crown" };
+    room.decor = { decor: [], activeCosmetic: "crown", ancestors: [] };
     expect(paintedCalls(recorder, () => room.render(recorder.ctx, 1000))).toBeGreaterThan(0);
   });
 
@@ -810,7 +864,7 @@ describe("the skip never hides a frame that differs", () => {
     room.syncDerived(derived, false, 0);
     const first = callLog();
     room.render(first.ctx, 1000);
-    room.decor = { decor: ["plant"], activeCosmetic: null };
+    room.decor = { decor: ["plant"], activeCosmetic: null, ancestors: [] };
     const second = callLog();
     room.render(second.ctx, 1000);
     expect(second.log).not.toEqual(first.log);

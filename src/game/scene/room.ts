@@ -8,6 +8,7 @@ import { Particles, type ParticleKind } from "../engine/particles";
 import { DigestContext, type SceneContext } from "../engine/digest";
 import { Toasts } from "./toasts";
 import { Portrait, PORTRAIT_HEIGHT, PORTRAIT_WIDTH } from "./portrait";
+import { FamilyWall, type Ancestor } from "./ancestors";
 import { Spectacle } from "./party";
 import { AnimationMachine } from "../anim/machine";
 import { BASE_CLIPS, BUTTERFLY_CLIP, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP, type OneShotName } from "../anim/clips";
@@ -169,7 +170,12 @@ const STAR_FLIGHT_MS = 1200;
 const STAR_INTERVAL_MS = 2000;
 const NOISE_DIM_MS = 700;
 
-export type RoomDecor = { decor: string[]; activeCosmetic: string | null };
+export type RoomDecor = {
+  decor: string[];
+  activeCosmetic: string | null;
+  /** The generations before this one, newest first (SPEC §22.10). */
+  ancestors: Ancestor[];
+};
 
 export class Room {
   readonly atlas = new Atlas();
@@ -178,6 +184,7 @@ export class Room {
   private readonly toasts = new Toasts();
   private readonly backdrop = new Backdrop();
   private readonly portrait = new Portrait();
+  private readonly familyWall = new FamilyWall();
   private readonly spectacle = new Spectacle();
   private condition: Condition = "well";
   private seed = 0;
@@ -202,7 +209,7 @@ export class Room {
   private walking = false;
   private lastWanderMs: number | null = null;
   private moment: { event: AmbientEvent; startedMs: number } | null = null;
-  decor: RoomDecor = { decor: [], activeCosmetic: null };
+  decor: RoomDecor = { decor: [], activeCosmetic: null, ancestors: [] };
 
   /** The frame the canvas is currently showing, and the recorder that decides
    *  whether the next one would differ from it (engine/digest.ts). */
@@ -526,6 +533,8 @@ export class Room {
       px(PICTURE_X + width - 1, PICTURE_Y, 1, height, "#4a3828");
       this.portrait.render(ctx, PICTURE_X + PICTURE_MOULDING, PICTURE_Y + PICTURE_MOULDING);
     }
+    // The generations before this one, on the same wall (SPEC §22.10).
+    this.familyWall.render(ctx, this.decor.ancestors);
     if (this.decor.decor.includes("lamp")) {
       px(226, 96, 4, 66, "#57492f"); // pole
       px(216, 84, 24, 14, "#e8c76a"); // shade

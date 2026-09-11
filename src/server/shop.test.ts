@@ -6,7 +6,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, db } from "./db/client";
 import { closeRedis } from "./redis/client";
-import { clampContribution, contribute, fundingOverflow, fundingState, GRAND_ITEMS, roomState } from "./shop";
+import { clampContribution, contribute, FAMILY_WALL_SLOTS, fundingOverflow, fundingState, GRAND_ITEMS, roomState } from "./shop";
+import { generations, type GenerationDoc } from "./db/collections";
 import { caretakerProfile, creditCoins } from "./social";
 import { startTestInfra, type TestInfra } from "./testsetup";
 
@@ -88,5 +89,39 @@ describe("funding a grand item", () => {
     for (const giver of givers) spent += aquarium - ((await caretakerProfile(database, giver))?.coins ?? 0);
     expect(spent).toBe(aquarium);
     expect((await roomState(database)).decor).toContain("aquarium");
+  });
+});
+
+// The family wall (SPEC §22.10) reads the sealed generations with the room:
+// newest first, only the dead, only as many as the wall has slots.
+describe("the room's ancestors", () => {
+  const generation = (ordinal: number, name: string | null, died: boolean): GenerationDoc => ({
+    _id: `gen-wall-${ordinal}`,
+    ordinal,
+    seed: ordinal,
+    genesisEpochMs: 0,
+    name,
+    hatchedAtTick: 0,
+    died: died ? { tick: 100, at: new Date(0), cause: "age" } : null,
+    memorial: died ? { sealedAt: new Date(0), ranking: [], titles: [] } : null,
+  });
+
+  it("hangs the dead newest first, names the unnamed, and stops at the wall's slots", async () => {
+    const database = await db();
+    const docs = [
+      ...Array.from({ length: FAMILY_WALL_SLOTS + 2 }, (_, i) => generation(100 + i, i === 3 ? null : `Gen${100 + i}`, true)),
+      generation(200, "Alive", false),
+    ];
+    await generations(database).insertMany(docs);
+    try {
+      const { ancestors } = await roomState(database);
+      expect(ancestors).toHaveLength(FAMILY_WALL_SLOTS);
+      expect(ancestors[0]).toEqual({ ordinal: 100 + FAMILY_WALL_SLOTS + 1, name: `Gen${100 + FAMILY_WALL_SLOTS + 1}` });
+      expect(ancestors.map((a) => a.ordinal)).toEqual([...ancestors.map((a) => a.ordinal)].sort((a, b) => b - a));
+      expect(ancestors.some((a) => a.name === "Alive")).toBe(false);
+      expect(ancestors.find((a) => a.ordinal === 103)?.name).toBe("Unnamed");
+    } finally {
+      await generations(database).deleteMany({ _id: { $in: docs.map((doc) => doc._id) } });
+    }
   });
 });

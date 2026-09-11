@@ -21,6 +21,7 @@
     "head-anchors": "node scripts/head-anchors.ts",
     "art:natsumi": "node scripts/art/natsumi.mjs",
     "art:portrait": "node scripts/art/portrait.ts",
+    "art:ancestors": "node scripts/art/ancestors.ts",
     "art:props": "node scripts/art/props.mjs",
     "test:e2e": "npm run build && PLAYWRIGHT_CHROME=\"$(readlink -f /run/current-system/sw/bin/google-chrome 2>/dev/null || true)\" playwright test"
   },

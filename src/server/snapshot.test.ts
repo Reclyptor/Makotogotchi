@@ -34,6 +34,7 @@ const ANOTHER_PODS_ROOM: RoomView = {
   activeTheme: "cabin",
   themes: ["cozy", "cabin"],
   ballots: [{ forDay: 20_700, tickets: { mountain: 6 } }],
+  ancestors: [{ ordinal: 3, name: "Mochi" }],
 };
 
 describe("the room cache", () => {

@@ -26,6 +26,7 @@ const CATALOG = {
 const ROOM: RoomView = {
   decor: [],
   activeCosmetic: null,
+  ancestors: [],
   cosmetics: [],
   activeTheme: "cozy",
   themes: ["cozy"],

@@ -2573,6 +2573,67 @@ denominated in tickets, so that is the unit the server clamps in — and is
 rate-limited on both buckets like any route that spends.
 
 
+### 22.10 The Family Wall
+
+The home wall remembers. Every Makoto that has died hangs on it as a framed
+portrait with a plaque, the way a house keeps its grandparents and
+great-grandparents over the sideboard — the memorial page (§2.10) is the
+archive; this is the living room's copy of it. Away venues carry none of it,
+like the rest of the decor (§22.8).
+
+**The portrait.** Every generation looks the same in life, so every portrait
+is the same picture: the front idle frame's head and shoulders, put through
+the §22.3 pixel filter (area-averaged, median-cut to 8 colours, on cream
+paper where the sprite is transparent). It is generated once by
+`npm run art:ancestors` into `scene/ancestors.generated.ts` at each of the
+wall's frame sizes — the filter is re-run per size rather than the largest
+picture being shrunk on the canvas, which turns pixel art to mush — and the
+script and `art:portrait` share one filter module, so the two pictures on
+the wall are made the same way.
+
+**Slots.** The wall is 260 pixels wide and already holds a window and a
+picture, so it has room for five ancestors, largest and most recent first,
+shrinking with distance the way memory does. The pet stands in front of the
+middle of that wall — an adult's silhouette spans 138 pixels and reaches up
+to y = 34 at the ear tips, y = 51 between them — so the pictures keep to
+the two side columns and the strip above her head, where they can be seen
+wherever she wanders. Slot geometry is fixed; a slot whose generation does
+not exist yet is empty wall.
+
+| Slot | Who | Art | Frame (outer, with 2px moulding) | Plaque width | Fade |
+| --- | --- | --- | --- | --- | --- |
+| 1 | parent | 32 | 36×36 at (222, 6) — high, right of the window | ≤ 36 | none |
+| 2 | grandparent | 24 | 28×28 at (108, 13) — between the picture and the window, at her head height, so its plate hangs *over* the frame | ≤ 52 | 0.30 |
+| 3 | great-grandparent | 20 | 24×24 at (8, 14) — left of the picture | ≤ 32 | 0.50 |
+| 4 | 4th | 16 | 20×20 at (10, 52) — below slot 3 | ≤ 28 | 0.65 |
+| 5 | 5th | 16 | 20×20 at (230, 54) — below slot 1, above the lamp | ≤ 28 | 0.80 |
+
+Older generations than the fifth stay on the memorial page. The frames use
+the picture's moulding (§22.3), lit top-left; the fade is a blend of the
+portrait's palette toward sepia, applied per slot, so the same picture reads
+as an old photograph the further back it hangs.
+
+**The plaque.** A brass plate under each frame — over it for slot 2, whose
+frame sits where her ears and crown reach, so the name stays clear of them —
+centred on the frame, engraved with the generation's name in capitals. The room's 7px font would need 42 pixels
+for "MAKOTO" alone, so plaques use a **3×5 pixel font** (`engine/tinyfont.ts`,
+4 pixels per character): capitals, digits, space, hyphen and underscore —
+the §8.5 name alphabet — with diacritics folded away (É → E) and any other
+letter shown as a hollow box rather than dropped. A plate is as wide as its
+name needs, never narrower than its frame, and never wider than its slot
+allows; a name that would not fit is cut to the characters that do (slot 2
+holds 12, slot 1 eight, slots 4–5 six). The full name is always on the
+memorial page. A
+generation sealed without a name reads `UNNAMED`, as the memorial has it.
+
+**Data.** `RoomView` carries `ancestors`: the sealed generations newest
+first, at most five, as `{ ordinal, name }` — read from the `generations`
+collection with the rest of the room, and re-announced through the same
+`room` message when a generation is sealed (§7.2), so the new frame goes up
+on every wall the moment the gravestone does. The scene keeps them with its
+decor; the digest (§10.1) repaints the room when the list changes, like any
+other decor change.
+
 ---
 
 ## 23. Dynamic Difficulty

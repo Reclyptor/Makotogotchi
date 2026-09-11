@@ -4,7 +4,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, db } from "./db/client";
-import { closeRedis, key, redis } from "./redis/client";
+import { closeRedis, key, redis, redisSubscriber } from "./redis/client";
 import { generations } from "./db/collections";
 import { PetEngine } from "./engine/engine";
 import { Lifecycle } from "./engine/lifecycle";
@@ -13,11 +13,14 @@ import { settleTitles } from "./titles";
 import { proposeName, voteForName } from "./votes";
 import { startTestInfra, type TestInfra } from "./testsetup";
 import type { Generation } from "@/sim/model";
+import type { RoomView } from "./shop";
 import { INCUBATION_TICKS, MOURNING_TICKS, TICKS_PER_DAY, TICK_SECONDS } from "@/sim/tuning";
 
 let infra: TestInfra;
 let engine: PetEngine;
 let lifecycle: Lifecycle;
+/** Every room announced on the bus: the family wall goes up through one (SPEC §22.10). */
+const rooms: RoomView[] = [];
 
 // Late morning in the pet's timezone so the newborn is awake.
 let fakeNowMs = 1_760_028_800_000;
@@ -30,7 +33,24 @@ beforeAll(async () => {
   const database = await db();
   engine = new PetEngine({ db: database, redis: redis(), key, timeZone: "America/Chicago", now: () => fakeNowMs });
   lifecycle = new Lifecycle(database, engine, () => fakeNowMs);
+  const subscriber = redisSubscriber();
+  await subscriber.subscribe(key("events"));
+  subscriber.on("message", (channel, payload) => {
+    if (channel !== key("events")) return;
+    const message = JSON.parse(payload) as { type: string; room?: RoomView };
+    if (message.type === "room" && message.room) rooms.push(message.room);
+  });
 }, 120_000);
+
+/** The first room announcement that hangs `name` on the wall, within a moment. */
+const wallWith = async (name: string): Promise<RoomView> => {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const room = rooms.find((candidate) => candidate.ancestors.some((ancestor) => ancestor.name === name));
+    if (room) return room;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`no room announcement hung ${name} on the wall`);
+};
 
 afterAll(async () => {
   await closeDb();
@@ -85,6 +105,9 @@ describe("generation lifecycle", () => {
     expect(sealed?.memorial?.titles).toEqual([{ titleId: "cuddler", caretakerId: "ana", name: "Friend ana", value: 1 }]);
     expect((await caretakerProfile(database, "ana"))?.generationsSurvived).toBe(1);
     expect((await caretakerProfile(database, "bo"))?.generationsSurvived).toBe(1);
+    // ...and the family wall learns of it at once, newest first (SPEC §22.10).
+    const wall = await wallWith("Makoto");
+    expect(wall.ancestors[0]).toEqual({ ordinal: first.ordinal, name: "Makoto" });
 
     // ...then mourning ends and the next egg is laid.
     advanceTicks(MOURNING_TICKS + 30);
