@@ -1467,7 +1467,7 @@ time, world-wide, by design.
 | Natsumi's Watch | 30s sneak: scurry for the treat only while Natsumi looks away | +1 per treat reached; caught moving means back to the start |
 | Coffee Run | 30s: brew a pot, and hide the machine before Natsumi reaches it | +1 per cup poured; a smashed machine costs the pot in progress |
 | Sausage Party | 35s: serve each guest the plate they are holding up | +1 per plate matched; a wrong plate costs that guest's patience |
-| Don't Get Sausaged | reaction: do what Natsumi says, before she finishes saying it | +1 per command obeyed; one miss and he is a sausage |
+| Don't Get Sausaged | reaction: do what Natsumi says, before she finishes saying it | +1 per command obeyed; one miss and Makoto is a sausage |
 
 ### 13.3.1 The three-second pre-roll
 
@@ -1486,7 +1486,7 @@ the envelopes below keep meaning exactly what they meant before.
 
 ### 13.3.2 Natsumi
 
-**Natsumi is Makoto's owner, and she torments him.** Natsumi's Watch is her
+**Natsumi is Makoto's owner, and she torments the pet.** Natsumi's Watch is her
 debut, and she is the sheet's first character besides the pet. Her frames are
 authored as letter grids in `scripts/art/natsumi.mjs` — one head per state
 stamped onto a shared body — and `npm run art:natsumi` writes them into
@@ -1505,8 +1505,8 @@ Four states, each drawn twice — bare-headed, and under the witch hat:
 | --- | --- | --- |
 | `natsumiAway` | turned around: all hair, plain dress | run |
 | `natsumiTurn` | mid-swing, one eye clear of the hair | run, briefly |
-| `natsumiWatch` | facing him | not move |
-| `natsumiGrin` | eyes bulging, teeth bared, having caught him | nothing — he is back at the start |
+| `natsumiWatch` | facing Makoto | not move |
+| `natsumiGrin` | eyes bulging, teeth bared, having caught Makoto | nothing — Makoto is back at the start |
 
 `natsumiHatAway`, `natsumiHatTurn`, `natsumiHatWatch` and `natsumiHatGrin` are
 the same four under the hat, which the generator stamps over the top rows of
@@ -1531,7 +1531,7 @@ Watch is the same sausage the party is eating.
 
 **Makoto Shuffle.** Three bowls sit overturned on the floor. Makoto ducks
 under one in plain sight, the bowls drop, and then they swap in pairs — more
-swaps and faster ones every round — until the player picks the bowl he is
+swaps and faster ones every round — until the player picks the bowl Makoto is
 under. A correct pick is a point and the next round starts harder; a wrong
 pick ends the run, so the tension is cumulative rather than per-round. The run
 also ends at twelve rounds or eighty seconds, whichever comes first. It is the
@@ -1539,11 +1539,11 @@ only game in the roster that asks the player to *track* rather than react,
 remember a sequence, or keep a beat.
 
 **Natsumi's Watch.** A treat sits at the far end of the desk and Natsumi looms
-over it. Hold the pointer (or space) and Makoto scurries; release and he
-freezes. While her back is turned he can run freely; a moment before she turns
-she telegraphs it, and if she catches him moving she flicks him back to the
-start and he sits dizzy for a beat. Reaching the treat is a point, after which
-she resets him herself and dangles the next one. Thirty seconds, no score
+over it. Hold the pointer (or space) and Makoto scurries; release and Makoto
+freezes. While her back is turned the pet can run freely; a moment before she
+turns she telegraphs it, and if she catches Makoto moving she flicks the pet
+back to the start, dizzy for a beat. Reaching the treat is a point, after
+which she resets Makoto herself and dangles the next one. Thirty seconds, no score
 penalty for being caught — the punishment is the lost ground, which is
 punishment enough. It is the roster's only hold-and-release game.
 
@@ -1565,7 +1565,7 @@ at once rather than time one thing.
 **Don't Get Sausaged.** Natsumi gives a command — sit, spin, sleep, cheer —
 and Makoto has a shrinking window to obey it on the four pads. Obeying is a
 point and the window tightens; one wrong move or one hesitation and she turns
-him into a sausage on a plate, which ends the run. It is Simon Squeaks' pads
+Makoto into a sausage on a plate, which ends the run. It is Simon Squeaks' pads
 with the memory replaced by pure reaction, and the roster's best fail state.
 
 Each game is scored client-side but validated server-side against a
@@ -2597,14 +2597,14 @@ picture, so it has room for five ancestors, largest and most recent first,
 shrinking with distance the way memory does. The pet stands in front of the
 middle of that wall — an adult's silhouette spans 138 pixels and reaches up
 to y = 34 at the ear tips, y = 51 between them — so the pictures keep to
-the two side columns and the strip above her head, where they can be seen
-wherever she wanders. Slot geometry is fixed; a slot whose generation does
+the two side columns and the strip above the pet's head, where they can be
+seen wherever the pet wanders. Slot geometry is fixed; a slot whose generation does
 not exist yet is empty wall.
 
 | Slot | Who | Art | Frame (outer, with 2px moulding) | Plaque width | Fade |
 | --- | --- | --- | --- | --- | --- |
 | 1 | parent | 32 | 36×36 at (222, 6) — high, right of the window | ≤ 36 | none |
-| 2 | grandparent | 24 | 28×28 at (108, 13) — between the picture and the window, at her head height, so its plate hangs *over* the frame | ≤ 52 | 0.30 |
+| 2 | grandparent | 24 | 28×28 at (108, 13) — between the picture and the window, at head height, so its plate hangs *over* the frame | ≤ 52 | 0.30 |
 | 3 | great-grandparent | 20 | 24×24 at (8, 14) — left of the picture | ≤ 32 | 0.50 |
 | 4 | 4th | 16 | 20×20 at (10, 52) — below slot 3 | ≤ 28 | 0.65 |
 | 5 | 5th | 16 | 20×20 at (230, 54) — below slot 1, above the lamp | ≤ 28 | 0.80 |
@@ -2615,7 +2615,7 @@ portrait's palette toward sepia, applied per slot, so the same picture reads
 as an old photograph the further back it hangs.
 
 **The plaque.** A brass plate under each frame — over it for slot 2, whose
-frame sits where her ears and crown reach, so the name stays clear of them —
+frame sits where the ears and crown reach, so the name stays clear of them —
 centred on the frame, engraved with the generation's name in capitals. The room's 7px font would need 42 pixels
 for "MAKOTO" alone, so plaques use a **3×5 pixel font** (`engine/tinyfont.ts`,
 4 pixels per character): capitals, digits, space, hyphen and underscore —

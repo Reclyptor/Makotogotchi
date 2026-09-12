@@ -36,8 +36,8 @@ const PLATE_GAP = 2;
 /**
  * Where each ancestor hangs, parent first (SPEC §22.10's table). The pet
  * stands in front of the middle of the wall, so the pictures keep to the
- * side columns and the strip above her head: the parent high beside the
- * window, the grandparent between the picture and the window — at her head
+ * side columns and the strip above the pet's head: the parent high beside the
+ * window, the grandparent between the picture and the window — at head
  * height, so its plate goes over the frame where nothing reaches — and the
  * rest down the two edges.
  */

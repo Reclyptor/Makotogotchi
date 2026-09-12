@@ -162,7 +162,7 @@ export default function MakotoShuffle({ sheet, reportScore, finish }: GameProps)
         if (stage === "peek") return LIFT;
         if (stage === "lower") return LIFT * (1 - stageMs / LOWER_MS);
         // The reveal lifts the picked bowl, and on a miss the one that was
-        // hiding him too — losing without seeing where he was is no fun.
+        // hiding Makoto too — losing without seeing where the pet was is no fun.
         if (stage === "reveal" && (bowl === picked || (!correct && bowl === hiding))) {
           return LIFT * Math.min(1, stageMs / 200);
         }
@@ -187,7 +187,7 @@ export default function MakotoShuffle({ sheet, reportScore, finish }: GameProps)
       ctx.fillStyle = "#3a3145";
       ctx.fillRect(0, FLOOR_Y, GAME_W, GAME_H - FLOOR_Y);
 
-      // Makoto shows during the peek and the reveal; the rest of the round he
+      // Makoto shows during the peek and the reveal; the rest of the round the pet
       // is under a bowl and the player is on their own.
       const petVisible = stage === "peek" || stage === "lower" || (stage === "reveal" && raise(hiding) > 0);
       if (petVisible) {

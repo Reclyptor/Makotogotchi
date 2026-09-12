@@ -1,9 +1,9 @@
 "use client";
 
-// Natsumi's Watch: Makoto sneaks across the desk for a sausage while his owner
+// Natsumi's Watch: Makoto sneaks across the desk for a sausage while Natsumi
 // pretends not to look. Hold to scurry, release to freeze. She telegraphs the
-// turn; get caught moving and she flicks him back to the start, grinning. A
-// treat reached is a point — and she resets him herself for the next one,
+// turn; get caught moving and she flicks Makoto back to the start, grinning. A
+// treat reached is a point — and she resets Makoto herself for the next one,
 // which is the whole relationship in one loop.
 
 import { useEffect, useRef } from "react";
@@ -17,8 +17,8 @@ const START_X = 18;
 const TREAT_X = 158;
 const SPEED = 70; // px/s — the desk is a two-second dash if she never turns
 
-const CAUGHT_MS = 700; // frozen and dizzy, with Natsumi grinning over him
-const CHEER_MS = 600; // celebrating a treat before she puts him back
+const CAUGHT_MS = 700; // frozen and dizzy, with Natsumi grinning over Makoto
+const CHEER_MS = 600; // celebrating a treat before she puts Makoto back
 
 // Her cycle. The turn is the tell: short, but long enough to stop for.
 const AWAY_MS = [1000, 2200] as const;
@@ -56,7 +56,7 @@ export default function NatsumisWatch({ sheet, reportScore, finish }: GameProps)
     let cheerMs = 0;
     let walkMs = 0;
     // The raw press, and whether it has been counted: a press begun during the
-    // pre-roll still moves him the moment the count ends, and still counts
+    // pre-roll still moves Makoto the moment the count ends, and still counts
     // exactly one input — but not a countdown's worth of free ones.
     let pressed = false;
     let counted = false;
@@ -77,7 +77,7 @@ export default function NatsumisWatch({ sheet, reportScore, finish }: GameProps)
     };
     canvas.addEventListener("pointerdown", press);
     // Release on the window: a pointer lifted off the canvas must still stop
-    // him, or he would keep running under her nose.
+    // Makoto, who would otherwise keep running under her nose.
     window.addEventListener("pointerup", release);
     window.addEventListener("pointercancel", release);
     window.addEventListener("keydown", onKeyDown);
@@ -97,7 +97,7 @@ export default function NatsumisWatch({ sheet, reportScore, finish }: GameProps)
         counted = true;
       }
 
-      // Her cycle runs whether or not he moves — the rhythm is the level.
+      // Her cycle runs whether or not Makoto moves — the rhythm is the level.
       if (phaseMs >= phaseFor) {
         phaseMs = 0;
         if (phase === "away") {
@@ -131,7 +131,7 @@ export default function NatsumisWatch({ sheet, reportScore, finish }: GameProps)
           }
         }
       }
-      // She always puts him back where he started, with a fresh treat out.
+      // She always puts Makoto back at the start, with a fresh treat out.
       if (cheerMs === 0 && petX >= TREAT_X) petX = START_X;
 
       ctx.imageSmoothingEnabled = false;

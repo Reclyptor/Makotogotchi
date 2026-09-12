@@ -49,7 +49,7 @@ describe("the status line", () => {
     expect(line({ ...nearDeath, bornAtTick: null, sick: true })).toBe("The egg is incubating…");
   });
 
-  it("says why she is asleep, and keeps health in the picture", () => {
+  it("says why Makoto is asleep, and keeps health in the picture", () => {
     expect(line({ ...adult, asleep: true, sleepReason: "NIGHT" })).toBe("Makoto is asleep for the night.");
     expect(line({ ...adult, asleep: true, sleepReason: "NAP" })).toBe("Makoto is napping until the energy comes back.");
     expect(line({ ...adult, asleep: true, sleepReason: "LULLABY" })).toBe("Makoto was sung to sleep.");

@@ -2,8 +2,8 @@
 
 // Don't Get Sausaged: Natsumi barks a command and Makoto has a shrinking
 // window to obey it. Obey and the window tightens; hesitate or hit the wrong
-// pad and she turns him into a sausage, which is what she does to Makotos who
-// displease her (SPEC §13.3.2) — and the run is over.
+// pad and she turns Makoto into a sausage, which is what she does to Makotos
+// who displease her (SPEC §13.3.2) — and the run is over.
 //
 // Simon Squeaks' pads with the memory taken out and pure reaction put in. Like
 // Simon it runs on timers rather than the shared loop, so it opens the
@@ -19,7 +19,7 @@ const CANVAS_H = 92;
 const MAX_ROUNDS = 25;
 const TIME_LIMIT_MS = 55_000;
 
-// The window she gives him, and how fast it closes as he keeps up.
+// The window she gives Makoto, and how fast it closes as the pet keeps up.
 const START_WINDOW_MS = 1900;
 const WINDOW_STEP_MS = 55;
 const MIN_WINDOW_MS = 700;
@@ -47,7 +47,7 @@ export default function DontGetSausaged({ sheet, reportScore, finish }: GameProp
   const windowRef = useRef(START_WINDOW_MS);
   const finishedRef = useRef(false);
   const timeoutsRef = useRef<Set<number>>(new Set());
-  // The window's own timer, cancelled the moment he obeys.
+  // The window's own timer, cancelled the moment Makoto obeys.
   const windowTimerRef = useRef(0);
 
   const schedule = useCallback((fn: () => void, ms: number): number => {
@@ -135,7 +135,7 @@ export default function DontGetSausaged({ sheet, reportScore, finish }: GameProp
     drawFrameAnchored(ctx, sheet, sausaged ? "natsumiGrin" : "natsumiWatch", 214, CANVAS_H - 6, 74);
 
     if (sausaged) {
-      // He is on a plate now. The party will never know.
+      // Makoto is on a plate now. The party will never know.
       drawFrame(ctx, sheet, "partyPlate", 52, CANVAS_H - 30, 34, 26);
     } else {
       drawFrameAnchored(ctx, sheet, pose, 66, CANVAS_H - 6, 42);

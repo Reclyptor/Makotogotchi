@@ -237,17 +237,17 @@ describe("rendering a pet that was just petted", () => {
 
 // The gravestone came up with its letters backwards. A stroll to the right
 // mirrors the art, the facing outlives the stroll, and the one frame that
-// carries text inherited it when she died mid-wander.
+// carries text inherited it when the pet died mid-wander.
 describe("the gravestone", () => {
   it("is one still frame, not a cycle through the round alternate design", () => {
     expect(BASE_CLIPS.dead.frames).toEqual(["dead1"]);
   });
 
-  it("keeps its letters readable whichever way she was last walking", () => {
+  it("keeps its letters readable whichever way the pet was last walking", () => {
     vi.useFakeTimers();
     try {
       // The stroll picks its destination from Date.now() in nine-second
-      // slots; walk the slots until one sends her right of where she stands.
+      // slots; walk the slots until one sends the pet right of where it stands.
       const strolledRight = (): ReturnType<typeof contentedRoom> => {
         for (let slot = 0; slot < 64; slot++) {
           vi.setSystemTime(slot * 9000);
@@ -369,7 +369,7 @@ describe("a hat on the head", () => {
   });
 
   // An adult, drawn at full scale so canvas pixels are frame pixels. Reduced
-  // motion pins her to the first idle frame, so the crown's band can be
+  // motion pins the pet to the first idle frame, so the crown's band can be
   // checked against that frame's art: it must span exactly the dip between
   // the ears, sitting on the head outline at its floor.
   const crowned = () => {
@@ -422,7 +422,7 @@ describe("a hat on the head", () => {
     expect(mourning.drawn.map((entry) => entry.x1 - entry.x0)).toEqual([SPRITE_FRAMES.dead1.w]);
   });
 
-  it("mirrors the hat with her when she faces right", () => {
+  it("mirrors the hat with the pet when it faces right", () => {
     vi.useFakeTimers();
     try {
       for (let slot = 0; slot < 64; slot++) {

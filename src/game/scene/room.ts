@@ -438,14 +438,14 @@ export class Room {
       const scale = this.petScale;
       // The art faces left; strolling right mirrors it around the anchor. The
       // facing outlives the stroll, and the gravestone must not inherit it:
-      // its letters have to read whichever way she was last walking.
+      // its letters have to read whichever way the pet was last walking.
       const mirrored = this.facingRight && this.machine.baseKey !== "dead";
       layer(ctx, () => {
         ctx.translate(x, 0);
         if (mirrored) ctx.scale(-1, 1);
         this.atlas.draw(ctx, frame, 0, PET_Y, scale);
         // Whatever the head wears is drawn in the same transform, so it
-        // mirrors with her and finds the head wherever this frame put it.
+        // mirrors with the pet and finds the head wherever this frame put it.
         this.renderHead(ctx, frame, scale);
       });
     }
