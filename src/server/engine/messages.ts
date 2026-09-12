@@ -9,6 +9,7 @@ import type { SpectacleMood } from "@/sim/secret";
 import type { RecordScope } from "../records";
 import type { Purse } from "../purse";
 import type { RoomView } from "../shop";
+import type { FarewellView } from "../farewells";
 
 export type CareMessage = {
   type: "care";
@@ -146,7 +147,15 @@ export type SecretMessage = {
   mood: SpectacleMood;
 };
 
+/** The farewells left for the generation in mourning, whole, after one lands (SPEC §2.10). */
+export type FarewellMessage = {
+  type: "farewell";
+  generationId: string;
+  farewells: FarewellView[];
+};
+
 export type EngineMessage =
+  | FarewellMessage
   | CareMessage
   | MilestoneMessage
   | SnapshotMessage

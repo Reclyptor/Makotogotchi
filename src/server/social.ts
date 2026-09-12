@@ -57,7 +57,7 @@ export const resetSocialIndexCache = (): void => ensureSocialIndexes.reset();
 
 // A tiny screen, not a moderation system: this is a toy for friends. Extend
 // the list before extending the audience.
-const NICKNAME_BLOCKLIST = ["admin", "makoto", "system", "server", "moderator"];
+export const NICKNAME_BLOCKLIST = ["admin", "makoto", "system", "server", "moderator"];
 
 export type NicknameResult =
   | { ok: true; nickname: string }

@@ -32,8 +32,16 @@ export type GenerationDoc = {
      * on generations sealed before titles existed — no backfill.
      */
     titles?: { titleId: string; caretakerId: string; name: string; value: number }[];
+    /**
+     * What caretakers said goodbye with during mourning (SPEC §2.10), one
+     * line each, already validated to the farewell alphabet. Absent on
+     * generations sealed before farewells existed.
+     */
+    farewells?: FarewellDoc[];
   } | null;
 };
+
+export type FarewellDoc = { caretakerId: string; name: string; text: string; at: Date };
 
 /**
  * Denormalized fields the fold does not need but the read paths do

@@ -29,6 +29,7 @@ describe("deliverableTo", () => {
         type: "room",
         room: { decor: [], activeCosmetic: null, cosmetics: [], activeTheme: "cozy", themes: ["cozy"], ballots: [], ancestors: [] },
       },
+      { type: "farewell", generationId: "gen-1", farewells: [{ caretakerId: "ct-b", name: "Bo", text: "Sleep well", at: 0 }] },
     ];
     for (const message of room) {
       expect(deliverableTo(message, "ct-a")).toBe(true);

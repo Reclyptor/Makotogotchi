@@ -15,6 +15,7 @@ import type { PetState, PhaseSchedule, ProjectionContext } from "@/sim/model";
 import type { CareAction } from "@/sim/tuning";
 import type { SnapshotPayload } from "@/server/snapshot";
 import type { RoomView } from "@/server/shop";
+import type { FarewellView } from "@/server/farewells";
 import type { Purse } from "@/server/purse";
 import type {
   CareMessage,
@@ -30,8 +31,7 @@ import type {
   SecretMessage,
   SnapshotMessage,
   TitleMessage,
-  WantMessage,
-} from "@/server/engine/messages";
+  WantMessage, FarewellMessage, } from "@/server/engine/messages";
 
 type Authoritative = {
   state: PetState;
@@ -92,6 +92,8 @@ export type PetStream = {
   crownedId: string | null;
   /** Communal room decoration (SPEC §13.2), from the latest snapshot. */
   room: RoomView | null;
+  /** The farewells left for the generation in mourning (SPEC §2.10), whole, as they land. */
+  farewells: FarewellView[];
   /**
    * This caretaker's own coins and pack (SPEC §13.1) — the one part of the
    * stream that is theirs alone. Opens with `hello` and is replaced whenever
@@ -130,6 +132,7 @@ export const usePetStream = (): PetStream => {
   const reactListeners = useRef(new Set<(notice: ReactNotice) => void>());
   const secretListeners = useRef(new Set<(notice: SecretNotice) => void>());
   const [room, setRoom] = useState<RoomView | null>(null);
+  const [farewells, setFarewells] = useState<FarewellView[]>([]);
   const [purse, setPurse] = useState<Purse | null>(null);
   const [timeZone, setTimeZone] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
@@ -272,6 +275,12 @@ export const usePetStream = (): PetStream => {
       const message = JSON.parse((event as MessageEvent<string>).data) as RoomMessage;
       setRoom(message.room);
     });
+    // The whole list every time, like the room: this and a fetch can never
+    // hold different farewells.
+    source.addEventListener("farewell", (event) => {
+      const message = JSON.parse((event as MessageEvent<string>).data) as FarewellMessage;
+      setFarewells(message.farewells);
+    });
     // Only this caretaker's purse ever arrives here — the server drops the
     // rest before they reach the socket (SPEC §7.2).
     source.addEventListener("purse", (event) => {
@@ -369,6 +378,7 @@ export const usePetStream = (): PetStream => {
     presenceCaretakers,
     crownedId,
     room,
+    farewells,
     purse,
     timeZone,
     projectNow,

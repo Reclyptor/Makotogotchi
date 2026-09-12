@@ -17,6 +17,7 @@ import Meters from "@/app/components/Meters";
 import ActionBar from "@/app/components/ActionBar";
 import FeedLog, { type FeedEntry } from "@/app/components/FeedLog";
 import VotePanel from "@/app/components/VotePanel";
+import FarewellPanel from "@/app/components/FarewellPanel";
 import NicknameEditor from "@/app/components/NicknameEditor";
 import PushToggle from "@/app/components/PushToggle";
 import ShopPanel from "@/app/components/ShopPanel";
@@ -63,6 +64,7 @@ const MILESTONE_ICONS: Record<string, string> = {
   WOKE: "☀️",
   DIED: "🪦",
   CRITICAL: "⚠️",
+  FADING: "🍂",
 };
 
 const actionFeedText = (petName: string): Record<CareAction, string> => ({
@@ -144,6 +146,7 @@ const milestoneFeedText = (petName: string): Record<string, string> => ({
   DIED: `${petName} has died.`,
   EVOLVED: `${petName} evolved!`,
   CRITICAL: "A need is critically low!",
+  FADING: `${petName} is fading — old age is catching up. Keep every need high.`,
 });
 
 /** One feed line for a milestone, or null when it has nothing to say. */
@@ -639,6 +642,7 @@ export default function GameView() {
         <WantBanner want={ui.state.wantOpen ?? null} nowTickExact={ui.nowTickExact} petName={petName} />
       )}
       {isEgg && <VotePanel />}
+      {ui && isDead && <FarewellPanel petName={petName} caretakerId={caretakerId} farewells={stream.farewells} />}
       {ui && !isEgg && !isDead && ctx && caretakerId && (
         <ActionBar
           state={ui.state}

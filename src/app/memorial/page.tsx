@@ -55,6 +55,16 @@ export default async function MemorialPage() {
                 {doc.died!.at.toLocaleDateString()}
               </p>
               {quirks && <p className="text-sm italic text-muted">{quirks}</p>}
+              {doc.memorial?.farewells !== undefined && doc.memorial.farewells.length > 0 && (
+                <ul aria-label="Farewells" className="flex flex-col gap-0.5 border-l-2 border-white/10 pl-3 text-sm">
+                  {doc.memorial.farewells.map((farewell) => (
+                    <li key={farewell.caretakerId}>
+                      <span className="text-muted">{farewell.name}: </span>
+                      <span className="italic">{farewell.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {doc.memorial?.titles !== undefined && doc.memorial.titles.length > 0 && (
                 <p className="text-sm text-muted">
                   {doc.memorial.titles

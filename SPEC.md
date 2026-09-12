@@ -131,10 +131,30 @@ formula is pure integer arithmetic with no division anywhere:
 ```
 drainPerTick = HEALTH_DRAIN_PER_NEED × Σ max(0, CRITICAL_THRESHOLD − value)   over hunger, energy, hygiene, joy
              + HEALTH_DRAIN_SICK        if the SICK ailment is untreated
-             + HEALTH_DRAIN_AGE         if stage is ELDER (unconditional)
-regenPerTick = HEALTH_REGEN             if no need is below CRITICAL_THRESHOLD
-                                        (never for ELDER)
+             + HEALTH_DRAIN_AGE × (1 − vigour)   if stage is ELDER
+regenPerTick = HEALTH_REGEN             if no need is below CRITICAL_THRESHOLD (not ELDER)
+             = HEALTH_REGEN_ELDER       if ELDER, no need is below CRITICAL_THRESHOLD, and vigour = 1
+
+vigour (ELDER only) = clamp((mean(needs) − CRITICAL_THRESHOLD) / (ELDER_HOLD_MEAN − CRITICAL_THRESHOLD), 0, 1)
+                      computed in per-mille integer arithmetic; ELDER_HOLD_MEAN = 600_000 (60%)
 ```
+
+**Old age is held off by care, not by a clock.** The first generation died of
+age at 26 days under attentive care from ten people, and the community said
+so: a death nobody could have prevented is not a stake, it is the game
+killing the pet. The age drain therefore scales with how well the elder is
+kept. With the four needs averaging 60% or better, `vigour` is 1: age drains
+nothing and the elder regains health slowly (`HEALTH_REGEN_ELDER`, a quarter
+of the adult rate — about four days from empty to full). At a 40% average it
+fades at half the age rate; at a 20% average, or below, at the full rate
+(about ten days from full), and any need below critical adds the ordinary
+neglect drain on top. The rule reads the *mean* on purpose: an elder loses
+close to half its hunger overnight at ten caretakers, so any bar applied to
+the instantaneous needs is crossed every night, and the elder would fade
+regardless. Averaged, the night is paid for by the day, a lapse shows as a
+slow decline, and a rally reverses it. An elder is still more work than an
+adult — its needs decay ×1.2 — and two caretakers cannot hold one (§16.2);
+that is the group's job, which is the point.
 
 `causeOfDeath` is the largest drain source at the moment of death — the need
 with the deepest deficit, sickness, or age — with a deterministic tie order
@@ -363,6 +383,29 @@ On death:
 
 Death is a **feature**, and it is the single best re-engagement event the
 game has. It should feel like an occasion.
+
+**Twilight.** An elder that is fading should be seen fading, with time to
+act. When an elder's health crosses below `FADING_THRESHOLD` (50%) on the
+way down, projection emits a `FADING` milestone — a crossing, like
+`CRITICAL`, so it fires once per descent. It is a push trigger (§12) and a
+feed line, and while an elder's health is below the threshold and its needs
+average under `ELDER_HOLD_MEAN`, the status line (§11.7) reads
+"Makoto is fading. A little more care each day brings it back." rather than
+anything about doing fine. Once the group lifts the average past the line
+the drift turns and the line says so ("is recovering").
+
+**Farewells.** During mourning any caretaker may leave one farewell for the
+generation that has just died. It is one line — 2 to 80 characters, letters,
+digits, spaces and ordinary punctuation, NFKC-normalised, screened word by
+word against the nickname blocklist (§8.5) save the pet's own name — sent to
+`POST /api/farewell`, stored once per
+caretaker per generation on the sealed memorial record (a repeat replaces
+the earlier one), and rendered only as text nodes. Farewells show under the
+gravestone caption on the game screen while mourning lasts, and stay on the
+memorial page beside the name, the cause, and the ranking. This is a bounded
+exception to §1.3's no-free-text rule, not a chat: one line, once, attached
+to a memorial, moderated by the same blocklist as names. If it draws abuse it
+becomes a fixed list of phrases.
 
 ### 2.11 Social Systems
 
@@ -638,7 +681,7 @@ decay per tick, awake, PUP..ADULT (need units):
 multipliers (inputs to the precomputed integer rate table, §4.2):
   asleep: hunger, joy   = ×0.4 ; hygiene ×1.0 ; energy decays 0
   energy asleep         = +300/tick recovery (0 → ~97% over a 9h night)
-  stage: HATCHLING ×0.6 ; PUP/JUVENILE/ADULT ×1.0 ; ELDER ×1.4
+  stage: HATCHLING ×0.6 ; PUP/JUVENILE/ADULT ×1.0 ; ELDER ×1.2
   form:  THRIVING ×0.9  ; STEADY ×1.0 ; FRAIL ×1.15
 
 health (raw units; HEALTH_MAX = 10¹²):
@@ -648,10 +691,15 @@ health (raw units; HEALTH_MAX = 10¹²):
   HEALTH_DRAIN_SICK     = 120_000_000 ; per tick untreated (~23h to kill from full —
                                       ; an overnight onset leaves the day shift a
                                       ; real chance to answer the push alert)
-  HEALTH_DRAIN_AGE      = 12_000_000  ; per tick, ELDER only, unconditional
-                                      ; (~9.6 elder days from full under perfect care)
+  HEALTH_DRAIN_AGE      = 12_000_000  ; per tick, ELDER only, × (1 − vigour):
+                                      ; zero with needs averaging ≥ 60%, full below 20%
+                                      ; (~9.6 elder days from full when fully neglected)
+  ELDER_HOLD_MEAN       = 600_000     ; the mean of needs at which age drains nothing
   HEALTH_REGEN          = 120_000_000 ; per tick, only when nothing is critical
-                                      ; (~23h from zero to full); disabled for ELDER
+                                      ; (~23h from zero to full); adults only
+  HEALTH_REGEN_ELDER    =  30_000_000 ; per tick, ELDER with vigour 1 and nothing critical
+                                      ; (~4 days from zero to full)
+  FADING_THRESHOLD      = 50% health  ; an ELDER crossing below it is fading (§2.10)
 
 action base magnitudes (need units):
   FEED                  = 250_000     ; 25%
@@ -1012,6 +1060,7 @@ All request bodies are zod-validated. All responses are typed.
 | `POST` | `/api/konami` | Empty body → broadcasts the §26 spectacle to the whole room, every time. `200 { mood }`; only the shared rate limiter can refuse it. |
 | `GET` | `/api/leaderboard` | `?window=today|week|all|generation` |
 | `GET` | `/api/memorial` | Paginated past generations. |
+| `GET`/`POST` | `/api/farewell` | The farewells left for the generation in mourning; `{ text }` leaves or replaces the caller's own (§2.10). `409` outside mourning. |
 | `POST` | `/api/nickname` | `{ nickname }` → sets or changes it. |
 | `POST` | `/api/name-vote` | `{ propose? , voteFor? }` → naming vote during incubation. |
 | `GET` | `/api/push` | VAPID public key + this caretaker's subscription status. |
@@ -1346,7 +1395,8 @@ Tuesday and the people who care get told.
 - Subscriptions stored per caretaker; a `410 Gone` from the push service
   prunes the subscription.
 - **Triggers:** `BECAME_SICK`, any need crossing `CRITICAL_THRESHOLD`
-  downward, `health < 25%`, `DIED`, `HATCHED`, `EVOLVED`.
+  downward, `health < 25%`, `FADING` (an elder's health below 50%, re-arming
+  past 55% — §2.10), `DIED`, `HATCHED`, `EVOLVED`.
 - **Throttling:** at most one push per caretaker per 30 minutes, and each
   trigger uses hysteresis: after firing, it re-arms only once the underlying
   value has recovered past `CRITICAL_THRESHOLD + 5000` and stayed there for
@@ -1714,6 +1764,10 @@ a lone caretaker can rescue:
 a lone caretaker cannot sustain:
     the same bot, alone, cannot keep the mean of needs ≥ 50% across
     pet-days 2–8 of a generation
+old age is held off by care:
+    an ELDER whose needs are held at a 60% mean keeps ≥ 90% health across
+    30 elder-days; one held at a 30% mean, nothing ever critical, dies of
+    age within 11–14 days
 ```
 
 The last three encode §1.2's design goals as executable assertions — with the
@@ -2668,7 +2722,7 @@ never mid-day. It only ever falls that way, so no one can be stranded by it. Nee
 by:
 
 ```
-careMultiplier(P) = clamp( (max(P, 2) / 2) ^ 0.75 , 1 , 3 )
+careMultiplier(P) = clamp( (max(P, 2) / 2) ^ 0.75 , 1 , 4 )
 ```
 
 These are the measured consequences, taken from the §16.2 abandonment
@@ -2681,7 +2735,9 @@ scenario rather than estimated:
 | 4 | 1.68× | ~15h | ~30h |
 | 6 | 2.28× | ~11h | ~23h |
 | 8 | 2.83× | ~9h | ~20h |
-| ≥ 9 | 3.00× | ~8h | ~19h |
+| 9 | 3.09× | ~8h | ~19h |
+| 10 | 3.34× | ~7h | ~18h |
+| ≥ 13 | 4.00× | ~6h | ~17h |
 
 Death compresses less than decay does, and deliberately so: once the needs
 bottom out, health drains at a rate set by the size of the deficit, not by
@@ -2695,9 +2751,10 @@ Three properties are deliberate:
 - **A floor of 1×.** A shrinking community never gets an *easier* pet than
   the baseline. §2.5's premise — that one person cannot carry a week alone —
   survives at every population.
-- **A ceiling of 3×.** Past nine active caretakers the pet stops getting
+- **A ceiling of 4×.** Past thirteen active caretakers the pet stops getting
   harder. Without a cap, a popular week would demand literal round-the-clock
-  cover and punish the very success that produced it.
+  cover and punish the very success that produced it. (The cap was 3×, met
+  at nine; the first community of ten sat on it and asked for more.)
 - **A sub-linear curve.** Holding the two-caretaker tension exactly would
   mean scaling decay linearly with P; the 0.75 exponent keeps real pressure
   while leaving a margin that a distributed group can actually cover.
