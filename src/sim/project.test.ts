@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { project } from "./project";
-import { stageAt } from "./model";
+import { stageAt, type PetState } from "./model";
 import { genesis } from "./genesis";
 import { hatchedState, projectImmortal, TEST_GENERATION, testCtx } from "./testkit";
 import {
@@ -158,17 +158,77 @@ describe("project", () => {
     expect(soon.healthRaw).toBe(HEALTH_MAX);
   });
 
-  it("drains ELDER health unconditionally — old age is always fatal", () => {
-    const state = hatchedState(ctx);
-    const atElder = projectImmortal(state, 21 * TICKS_PER_DAY, ctx);
-    const elder = {
-      ...atElder,
-      needs: { hunger: NEED_MAX, energy: NEED_MAX, hygiene: NEED_MAX, joy: NEED_MAX },
-      sick: false,
-      sickSinceTick: null,
-      healthRaw: HEALTH_MAX,
+  // Old age is held off by care (SPEC §2.3, §16.2): the age drain scales
+  // with the elder's vigour, the mean of its needs between the critical
+  // line and the hold line.
+  describe("old age", () => {
+    const elderAt = (level: number): PetState => {
+      const atElder = projectImmortal(hatchedState(ctx), 21 * TICKS_PER_DAY, ctx);
+      return {
+        ...atElder,
+        needs: { hunger: level, energy: level, hygiene: level, joy: level },
+        sick: false,
+        sickSinceTick: null,
+        asleep: false,
+        sleepReason: null,
+        healthRaw: HEALTH_MAX,
+      };
     };
-    const later = project(elder, elder.tick + 100, ctx).state;
-    expect(later.healthRaw).toBeLessThan(HEALTH_MAX);
+    /** Project in short steps, pinning every need back to `level` each step — a group holding the line. */
+    const held = (level: number, ticks: number, onStep?: (state: PetState) => void): PetState => {
+      let state = elderAt(level);
+      const end = state.tick + ticks;
+      while (state.tick < end && state.diedAtTick === null) {
+        state = project(state, Math.min(state.tick + 30, end), ctx).state;
+        onStep?.(state);
+        if (state.diedAtTick === null) state = { ...state, needs: { hunger: level, energy: level, hygiene: level, joy: level }, sick: false, sickSinceTick: null };
+      }
+      return state;
+    };
+
+    it("drains nothing, and regains, at the hold line", () => {
+      const full = elderAt(NEED_MAX);
+      expect(project({ ...full, healthRaw: HEALTH_MAX / 2 }, full.tick + 100, ctx).state.healthRaw).toBeGreaterThan(HEALTH_MAX / 2);
+      expect(project(full, full.tick + 100, ctx).state.healthRaw).toBe(HEALTH_MAX);
+    });
+
+    it("fades at half speed halfway to the hold line, and near full speed just above critical", () => {
+      // One tick of decay moves the needs a hair, so the drain is read to
+      // within a fraction of a percent rather than to the unit.
+      const halfway = elderAt(400_000);
+      const nearCritical = elderAt(CRITICAL_THRESHOLD + 10_000);
+      const lostHalfway = HEALTH_MAX - project(halfway, halfway.tick + 1, ctx).state.healthRaw;
+      const lostNearCritical = HEALTH_MAX - project(nearCritical, nearCritical.tick + 1, ctx).state.healthRaw;
+      expect(lostHalfway).toBeCloseTo(6_000_000, -5);
+      expect(lostNearCritical).toBeCloseTo(11_700_000, -5);
+    });
+
+    it("keeps an elder held at a 60% mean above 90% health across thirty days", () => {
+      const state = held(600_000, 30 * TICKS_PER_DAY);
+      expect(state.diedAtTick).toBeNull();
+      expect(state.healthRaw).toBeGreaterThanOrEqual(HEALTH_MAX * 0.9);
+    });
+
+    it("lets an elder held at a 30% mean, nothing ever critical, die of age within 11–14 days", () => {
+      const start = elderAt(300_000).tick;
+      const state = held(300_000, 14 * TICKS_PER_DAY);
+      expect(state.diedAtTick).not.toBeNull();
+      expect(state.causeOfDeath).toBe("age");
+      const days = (state.diedAtTick! - start) / TICKS_PER_DAY;
+      expect(days).toBeGreaterThanOrEqual(11);
+      expect(days).toBeLessThanOrEqual(14);
+    });
+
+    it("announces the twilight once, on the way down through half health", () => {
+      const seen: number[] = [];
+      let state = elderAt(300_000);
+      const end = state.tick + 14 * TICKS_PER_DAY;
+      while (state.tick < end && state.diedAtTick === null) {
+        const result = project(state, Math.min(state.tick + 30, end), ctx);
+        for (const milestone of result.milestones) if (milestone.kind === "FADING") seen.push(milestone.tick);
+        state = { ...result.state, needs: { hunger: 300_000, energy: 300_000, hygiene: 300_000, joy: 300_000 }, sick: false, sickSinceTick: null };
+      }
+      expect(seen).toHaveLength(1);
+    });
   });
 });

@@ -33,6 +33,20 @@ export const HEALTH_DRAIN_SICK = 120_000_000;
 // ELDER-only unconditional drain: ~9.65 elder days from full under perfect
 // care. This is what makes old-age mortality a theorem (SPEC §2.3).
 export const HEALTH_DRAIN_AGE = 12_000_000;
+// Old age is held off by care (SPEC §2.3): the age drain is scaled by the
+// elder's vigour — how far the mean of its needs sits between the critical
+// line and this hold line, in per-mille. At the hold line age drains nothing.
+export const ELDER_HOLD_MEAN = 600_000;
+export const elderVigourPermille = (needs: Record<NeedKey, number>): number => {
+  const mean = Math.floor((needs.hunger + needs.energy + needs.hygiene + needs.joy) / 4);
+  const span = ELDER_HOLD_MEAN - CRITICAL_THRESHOLD;
+  return Math.min(1000, Math.max(0, Math.floor(((mean - CRITICAL_THRESHOLD) * 1000) / span)));
+};
+// An elder held at full vigour regains health at a quarter of the adult rate:
+// about four days from empty to full.
+export const HEALTH_REGEN_ELDER = 30_000_000;
+// An elder crossing below this on the way down is fading (SPEC §2.10).
+export const FADING_THRESHOLD = HEALTH_MAX / 2;
 // Regeneration when no need is critical (never for ELDER): zero to full in
 // ~8333 ticks (~23h).
 export const HEALTH_REGEN = 120_000_000;
@@ -72,7 +86,7 @@ const STAGE_MULTIPLIER: Record<Exclude<LifeStage, "EGG">, number> = {
   PUP: 1,
   JUVENILE: 1,
   ADULT: 1,
-  ELDER: 1.4,
+  ELDER: 1.2,
 };
 const FORM_MULTIPLIER: Record<AdultForm, number> = { THRIVING: 0.9, STEADY: 1, FRAIL: 1.15 };
 

@@ -30,7 +30,15 @@ describe("the status line", () => {
   it("says fine only when health agrees", () => {
     expect(line(adult)).toBe("Makoto is doing fine.");
     expect(line(nearDeath)).toBe("Makoto is recovering.");
-    expect(line({ ...elder, healthRaw: HEALTH_MAX / 100 })).toBe("Makoto is dangerously weak.");
+    expect(line({ ...elder, healthRaw: HEALTH_MAX / 100 })).toBe("Makoto is recovering.");
+    const thin = { hunger: 300_000, energy: 300_000, hygiene: 300_000, joy: 300_000 };
+    expect(line({ ...elder, healthRaw: HEALTH_MAX / 100, needs: thin })).toBe("Makoto is dangerously weak.");
+    expect(line({ ...elder, healthRaw: HEALTH_MAX * 0.4, needs: thin })).toBe(
+      "Makoto is fading. A little more care each day brings it back.",
+    );
+    expect(line({ ...elder, healthRaw: HEALTH_MAX * 0.4, needs: thin, asleep: true, sleepReason: "NIGHT" })).toBe(
+      "Makoto is asleep for the night. Health is fading with age.",
+    );
   });
 
   it("names the death the way the memorial does", () => {

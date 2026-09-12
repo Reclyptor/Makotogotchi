@@ -10,7 +10,7 @@ import { NEED_KEYS } from "./tuning";
 describe("the care multiplier", () => {
   it("matches the table published in the spec", () => {
     const expected: Record<number, number> = {
-      0: 1, 1: 1, 2: 1, 3: 1.355, 4: 1.682, 5: 1.988, 6: 2.28, 7: 2.559, 8: 2.828, 9: 3,
+      0: 1, 1: 1, 2: 1, 3: 1.355, 4: 1.682, 5: 1.988, 6: 2.28, 7: 2.559, 8: 2.828, 9: 3.09, 10: 3.344, 11: 3.591, 12: 3.834, 13: 4,
     };
     for (const [population, multiplier] of Object.entries(expected)) {
       expect(careMultiplier(Number(population))).toBeCloseTo(multiplier, 3);
@@ -22,8 +22,8 @@ describe("the care multiplier", () => {
     for (const population of [0, 1, 2]) expect(careMultiplier(population)).toBe(1);
   });
 
-  it("stops climbing at three times, however large", () => {
-    for (const population of [9, 20, 500, 1_000_000]) expect(careMultiplier(population)).toBe(3);
+  it("stops climbing at four times, however large", () => {
+    for (const population of [13, 20, 500, 1_000_000]) expect(careMultiplier(population)).toBe(4);
   });
 
   it("rises monotonically with the community", () => {
@@ -43,7 +43,7 @@ describe("recording thresholds", () => {
   it("records a move of a tenth or more, and ignores smaller ones", () => {
     expect(worthRecording(2, 3)).toBe(true); // 1.00× → 1.355×
     expect(worthRecording(2, 2)).toBe(false);
-    expect(worthRecording(9, 40)).toBe(false); // both capped at 3×
+    expect(worthRecording(13, 40)).toBe(false); // both capped at 4×
     expect(worthRecording(undefined, 2)).toBe(false); // baseline is already assumed
     expect(worthRecording(undefined, 5)).toBe(true);
   });

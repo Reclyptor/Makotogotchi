@@ -14,6 +14,7 @@ export const SLIPPING_BELOW = NEED_MAX / 2;
 
 const HEALTH_TAIL: Record<Vitality, string> = {
   well: "",
+  fading: " Health is fading with age.",
   recovering: " Health is coming back.",
   frail: " Health is dangerously low.",
 };
@@ -95,6 +96,7 @@ export const statusLine = (petName: string, state: PetState, derived: DerivedSta
   if (state.asleep) return `${petName} ${sleeping(state)}${tail}`;
   const ailment = ailing(state, derived);
   if (ailment) return `${petName} ${ailment}${tail}`;
+  if (derived.vitality === "fading") return `${petName} is fading. A little more care each day brings it back.`;
   if (derived.vitality === "recovering") return `${petName} is recovering.`;
   if (derived.vitality === "frail") return `${petName} is dangerously weak.`;
   const low = slipping(state);

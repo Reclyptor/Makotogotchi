@@ -33,6 +33,7 @@ const MILESTONE_LABELS: Record<string, string> = {
   RECOVERED: "All better!",
   SLEPT: "zzz…",
   WOKE: "Good morning!",
+  FADING: "fading…",
   DIED: "Makoto has died.",
   EVOLVED: "Makoto evolved!",
 };

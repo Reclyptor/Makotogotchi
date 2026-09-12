@@ -26,11 +26,14 @@ import {
   EXHAUSTED_THRESHOLD,
   FORM_STEADY_AT,
   FORM_THRIVING_AT,
+  elderVigourPermille,
+  FADING_THRESHOLD,
   HEALTH_DRAIN_AGE,
   HEALTH_DRAIN_PER_NEED,
   HEALTH_DRAIN_SICK,
   HEALTH_MAX,
   HEALTH_REGEN,
+  HEALTH_REGEN_ELDER,
   NAP_WAKE_THRESHOLD,
   NEED_KEYS,
   NEED_MAX,
@@ -179,9 +182,17 @@ export const project = (input: PetState, toTick: number, ctx: ProjectionContext)
     }
     const drainNeeds = HEALTH_DRAIN_PER_NEED * deficitDrain;
     const drainSick = state.sick ? HEALTH_DRAIN_SICK : 0;
-    const drainAge = stage === "ELDER" ? HEALTH_DRAIN_AGE : 0;
-    const regen = deficitDrain === 0 && stage !== "ELDER" ? HEALTH_REGEN : 0;
+    // Old age is held off by care (SPEC §2.3): the age drain scales with the
+    // elder's vigour, and an elder at full vigour regains health slowly.
+    const vigour = stage === "ELDER" ? elderVigourPermille(state.needs) : 1000;
+    const drainAge = stage === "ELDER" ? Math.floor((HEALTH_DRAIN_AGE * (1000 - vigour)) / 1000) : 0;
+    const regen = deficitDrain !== 0 ? 0 : stage === "ELDER" ? (vigour === 1000 ? HEALTH_REGEN_ELDER : 0) : HEALTH_REGEN;
+    const healthBefore = state.healthRaw;
     state.healthRaw = clampNeed(state.healthRaw - drainNeeds - drainSick - drainAge + regen, HEALTH_MAX);
+    // An elder crossing below the fading line, once per descent (SPEC §2.10).
+    if (stage === "ELDER" && healthBefore >= FADING_THRESHOLD && state.healthRaw < FADING_THRESHOLD) {
+      milestones.push({ kind: "FADING", tick });
+    }
 
     if (state.healthRaw === 0) {
       // Cause: the largest drain source at the moment of death, with a

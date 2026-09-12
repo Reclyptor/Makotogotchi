@@ -53,6 +53,7 @@ export const MILESTONE_KINDS = [
   "BECAME_SICK",
   "RECOVERED",
   "CRITICAL",
+  "FADING", // an elder's health crossed below FADING_THRESHOLD (SPEC §2.10)
   "DIED",
   "AMBIENT", // detail carries the shared rare event's name (SPEC §21.5)
   "QUEST_DONE", // detail carries the completed quest's id (SPEC §21.7)

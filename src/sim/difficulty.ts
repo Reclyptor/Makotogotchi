@@ -14,7 +14,7 @@ export const DIFFICULTY_STEP_PERMILLE = 100;
 
 /**
  * Multiplier per active caretaker count, in per-mille, following
- * `clamp((max(P, 2) / 2) ^ 0.75, 1, 3)`.
+ * `clamp((max(P, 2) / 2) ^ 0.75, 1, 4)`.
  *
  * It is a table rather than a call to `Math.pow` on purpose: ECMA-262 leaves
  * `Math.pow` implementation-approximated, and a one-ULP disagreement between
@@ -31,7 +31,11 @@ const MULTIPLIER_PERMILLE: readonly number[] = [
   2280, // 6
   2559, // 7
   2828, // 8
-  3000, // 9 and beyond — the ceiling
+  3090, // 9
+  3344, // 10
+  3591, // 11
+  3834, // 12
+  4000, // 13 and beyond — the ceiling
 ];
 
 /** The decay multiplier for a population, in per-mille (1000 = 1.00×). */

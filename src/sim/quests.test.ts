@@ -85,10 +85,10 @@ describe("the bar the room's size sets (SPEC §21.7)", () => {
   it("grows the count quests by the §23 care multiplier", () => {
     expect(questTarget(QUESTS["feast-day"], 2)).toBe(10);
     expect(questTarget(QUESTS["feast-day"], 4)).toBe(17);
-    expect(questTarget(QUESTS["feast-day"], 9)).toBe(30);
+    expect(questTarget(QUESTS["feast-day"], 13)).toBe(40);
     expect(questTarget(QUESTS["game-night"], 2)).toBe(40);
     expect(questTarget(QUESTS["game-night"], 4)).toBe(67);
-    expect(questTarget(QUESTS["game-night"], 9)).toBe(120);
+    expect(questTarget(QUESTS["game-night"], 13)).toBe(160);
   });
 
   it("leaves the meter percentage alone — there is nothing to multiply", () => {
@@ -127,10 +127,10 @@ describe("a goal one caretaker could finish alone", () => {
   });
 
   it("finishes the moment the room turns up", () => {
-    const room = facts({ caretakers: 5, feeds: 30, minigameScore: 120, population: 9 });
+    const room = facts({ caretakers: 5, feeds: 40, minigameScore: 160, population: 13 });
     expect(questProgress(QUESTS["feast-day"], room)).toEqual({
-      current: 30,
-      target: 30,
+      current: 40,
+      target: 40,
       hands: 5,
       handsTarget: 5,
       complete: true,

@@ -18,7 +18,7 @@
 import type { Db } from "mongodb";
 import type Redis from "ioredis";
 import { stageAt, type PetState, type WantOpen } from "@/sim/model";
-import { CRITICAL_THRESHOLD, HEALTH_MAX, NEED_KEYS, STAGE_STARTS, type NeedKey } from "@/sim/tuning";
+import { CRITICAL_THRESHOLD, FADING_THRESHOLD, HEALTH_MAX, NEED_KEYS, STAGE_STARTS, type NeedKey } from "@/sim/tuning";
 import { WANT_PUSH_THROTTLE_MS } from "@/sim/wants";
 import { foodItem } from "@/sim/economy";
 import { isMinigameId, MINIGAMES } from "@/sim/minigames";
@@ -107,6 +107,18 @@ export class PushDispatcher {
       } else if (value >= CRITICAL_THRESHOLD + NEED_REARM_MARGIN) {
         await this.observeRecovery(generationId, `critical:${need}`);
       }
+    }
+
+    // An elder in its twilight (SPEC §2.10): fading is reversible, and this
+    // is the alert that says so while there is still time.
+    if (stage === "ELDER" && state.healthRaw < FADING_THRESHOLD) {
+      await this.hysteresisTrigger(generationId, "fading", {
+        title: `${name} is fading 🍂`,
+        body: "Old age is catching up. Keeping every need high brings health back.",
+        tag: "fading",
+      });
+    } else if (state.healthRaw >= FADING_THRESHOLD + HEALTH_REARM_MARGIN) {
+      await this.observeRecovery(generationId, "fading");
     }
 
     if (state.healthRaw < HEALTH_LOW_THRESHOLD) {

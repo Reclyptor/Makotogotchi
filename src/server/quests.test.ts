@@ -120,7 +120,7 @@ describe("the bar the room's size sets", () => {
     const state = stateAt(generation, day.fromTick + 100);
     expect(await questView(database, generation, state, TIME_ZONE, DAY_ONE_MS)).toMatchObject({
       current: 40,
-      target: 30,
+      target: 31, // ten meals at the 3.09× nine caretakers ask for
       hands: 1,
       handsTarget: 5,
       complete: false,

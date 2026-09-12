@@ -38,11 +38,28 @@ describe("vitality", () => {
     expect(healthAfterOneTick(state)).toBeGreaterThan(state.healthRaw);
   });
 
-  it("calls an elder frail: age never gives health back", () => {
-    const state = nearDeath(elder);
-    expect(derive(state).stage).toBe("ELDER");
-    expect(derive(state).vitality).toBe("frail");
-    expect(healthAfterOneTick(state)).toBeLessThan(state.healthRaw);
+  it("lets a well-kept elder recover, and calls a neglected one frail", () => {
+    const kept = nearDeath(elder);
+    expect(derive(kept).stage).toBe("ELDER");
+    expect(derive(kept).vitality).toBe("recovering");
+    expect(healthAfterOneTick(kept)).toBeGreaterThan(kept.healthRaw);
+
+    const thin = { ...kept, needs: { hunger: 300_000, energy: 300_000, hygiene: 300_000, joy: 300_000 } };
+    expect(derive(thin).ailments).toEqual([]);
+    expect(derive(thin).vitality).toBe("frail");
+    expect(healthAfterOneTick(thin)).toBeLessThan(thin.healthRaw);
+  });
+
+  it("calls an elder fading below half health while its needs sit short of the hold line", () => {
+    const thin = { ...elder, healthRaw: HEALTH_MAX * 0.4, needs: { hunger: 500_000, energy: 500_000, hygiene: 500_000, joy: 500_000 } };
+    expect(derive(thin).vitality).toBe("fading");
+    expect(healthAfterOneTick(thin)).toBeLessThan(thin.healthRaw);
+    // Lift the mean past the hold line and the same health reads as well, climbing.
+    const held = { ...thin, needs: { hunger: 650_000, energy: 650_000, hygiene: 650_000, joy: 650_000 } };
+    expect(derive(held).vitality).toBe("well");
+    expect(healthAfterOneTick(held)).toBeGreaterThan(held.healthRaw);
+    // An adult at the same health and needs is simply well.
+    expect(derive({ ...adult, healthRaw: HEALTH_MAX * 0.4, needs: thin.needs }).vitality).toBe("well");
   });
 
   it("calls a sick pet frail: the sickness drains exactly what regen restores", () => {
