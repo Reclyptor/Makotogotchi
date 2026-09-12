@@ -107,7 +107,7 @@ describe("shop tabs", () => {
       availability: { ok: true },
     });
     expect(rowNamed(tab(tabs, "pack"), "Onigiri").action).toMatchObject({ availability: { ok: false, note: "Makoto is asleep" } });
-    expect(rowNamed(tab(tabs, "pack"), "Energy Drink").icon).toBe("🥤");
+    expect(rowNamed(tab(tabs, "pack"), "Energy Drink").icon).toBe("🥫");
     expect(rowNamed(tab(tabs, "food"), "Energy Drink").detail).toBe("+25% energy · wakes from a nap");
   });
 

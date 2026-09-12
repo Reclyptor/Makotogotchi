@@ -115,7 +115,7 @@ const ITEM_ICONS: Record<string, string> = {
   onigiri: "🍙",
   fish_feast: "🍣",
   super_medicine: "💊",
-  energy_drink: "🥤",
+  energy_drink: "🥫",
   teeter: "🛝",
   wheel: "🛞",
   bow: "🎀",

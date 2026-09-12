@@ -145,7 +145,7 @@ export default function PetCanvas({ stream, localSecret = null }: PetCanvasProps
       const amount = notice.applied >= 1000 ? `+${(notice.applied / 10_000).toFixed(1)}% ` : "";
       const taste = notice.action === "FEED" ? tasteOf(notice.itemId) : undefined;
       // A drink is fed, but it is not a meal (SPEC §13.2).
-      const emoji = notice.action === "FEED" && drinkItem(notice.itemId) ? "🥤" : ACTION_EMOJI[notice.action];
+      const emoji = notice.action === "FEED" && drinkItem(notice.itemId) ? "🥫" : ACTION_EMOJI[notice.action];
       room.onCare(notice.action, `${amount}${emoji} ${who}`, performance.now(), taste);
     });
     const offMilestone = onMilestone((notice) => {
