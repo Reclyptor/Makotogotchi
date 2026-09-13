@@ -12,9 +12,12 @@ export const COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
 const sign = (caretakerId: string): string =>
   createHmac("sha256", env().CARETAKER_SECRET).update(caretakerId).digest("base64url");
 
+/** The signed cookie value for an existing caretaker — what a linked device receives (SPEC §8.1). */
+export const cookieFor = (caretakerId: string): string => `${caretakerId}.${sign(caretakerId)}`;
+
 export const mintCaretaker = (): { caretakerId: string; cookieValue: string } => {
   const caretakerId = randomUUID();
-  return { caretakerId, cookieValue: `${caretakerId}.${sign(caretakerId)}` };
+  return { caretakerId, cookieValue: cookieFor(caretakerId) };
 };
 
 export const verifyCaretaker = (cookieValue: string | undefined): string | null => {

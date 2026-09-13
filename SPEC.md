@@ -960,6 +960,26 @@ totals, cooldowns, and streaks cannot be spoofed by editing a cookie.
 The `caretakers` document is designed so an Authentik `sub` can be attached
 later as an optional field, with a verified badge — additive, not a rewrite.
 
+**Linking a device.** A caretaker is a cookie, and a person has several
+devices. A **named** caretaker (§8.5) may mint a link code — `POST
+/api/link` — six characters from an alphabet without look-alikes, stored in
+Redis against the caretaker id for ten minutes, single use. Entered on
+another device — `POST /api/link/claim` — the code is consumed and that
+device's cookie is replaced with the signed cookie of the linked caretaker,
+so both devices are one person from then on: one nickname, one purse, one
+streak, one budget, one vote. The device's previous cookie is simply
+abandoned; whatever it did stays attributed to the anonymous id it had.
+
+This keeps all three things true at once. Reuse: any device joins in
+seconds. No impersonation: the code exists only on a device already caring
+as that person, and dies in ten minutes or on first use, so knowing a
+nickname claims nothing. Anonymity: no email, password or account is
+involved, and the cookie stays HttpOnly and signed, so a code never becomes
+a credential anyone keeps. Only named caretakers can mint — theirs is the
+only identity worth carrying across, and it keeps the feature out of idle
+hands. The per-address rate limit (§8.2) and the code space (31⁶) make
+guessing one impractical inside its lifetime.
+
 ### 8.2 Rate Limiting
 
 Redis token buckets, checked in order, cheapest first:
@@ -1060,6 +1080,8 @@ All request bodies are zod-validated. All responses are typed.
 | `POST` | `/api/konami` | Empty body → broadcasts the §26 spectacle to the whole room, every time. `200 { mood }`; only the shared rate limiter can refuse it. |
 | `GET` | `/api/leaderboard` | `?window=today|week|all|generation` |
 | `GET` | `/api/memorial` | Paginated past generations. |
+| `POST` | `/api/link` | Mint a ten-minute, single-use device link code for the caller (§8.1). `403` unless the caller is named. |
+| `POST` | `/api/link/claim` | `{ code }` → consumes the code and sets this device's cookie to the linked caretaker (§8.1). `404` for an unknown or spent code. |
 | `GET`/`POST` | `/api/farewell` | The farewells left for the generation in mourning; `{ text }` leaves or replaces the caller's own (§2.10). `409` outside mourning. |
 | `POST` | `/api/nickname` | `{ nickname }` → sets or changes it. |
 | `POST` | `/api/name-vote` | `{ propose? , voteFor? }` → naming vote during incubation. |

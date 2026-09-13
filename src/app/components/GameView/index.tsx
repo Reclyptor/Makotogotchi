@@ -19,6 +19,7 @@ import FeedLog, { type FeedEntry } from "@/app/components/FeedLog";
 import VotePanel from "@/app/components/VotePanel";
 import FarewellPanel from "@/app/components/FarewellPanel";
 import NicknameEditor from "@/app/components/NicknameEditor";
+import LinkDevices from "@/app/components/LinkDevices";
 import PushToggle from "@/app/components/PushToggle";
 import ShopPanel from "@/app/components/ShopPanel";
 import QuestBanner from "@/app/components/QuestBanner";
@@ -707,6 +708,7 @@ export default function GameView() {
 
       <footer className="flex w-full flex-wrap items-center justify-between gap-2 px-1 pt-1 text-sm">
         <NicknameEditor key={profile?.nickname ?? ""} current={profile?.nickname ?? null} />
+        <LinkDevices named={(profile?.nickname ?? null) !== null} />
         <PushToggle />
         <nav className="flex gap-4 text-muted">
           <a href="/leaderboard" className="transition-colors hover:text-foreground">
