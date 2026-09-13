@@ -20,7 +20,7 @@ const CRITICAL_PERCENT = 20;
 
 export type MetersProps = {
   percentages: DerivedState["percentages"];
-  /** How many caretakers the difficulty is set for (SPEC §23.3). */
+  /** How many named caretakers the difficulty is set for (SPEC §23.1, §23.3). */
   population: number;
   /** What that community multiplies need decay by. */
   careMultiplier: number;
@@ -29,7 +29,7 @@ export type MetersProps = {
 
 export default function Meters({ percentages, population, careMultiplier, petName }: MetersProps) {
   // A needier pet should read as a bigger community, never as a silent nerf.
-  const crowd = `${population} caretaker${population === 1 ? "" : "s"} this week`;
+  const crowd = `${population} named caretaker${population === 1 ? "" : "s"} this week`;
   const demand = careMultiplier > 1 ? ` · ${petName} needs ${careMultiplier.toFixed(1)}× the care` : "";
   return (
     <ul className="panel flex w-full flex-col gap-2 px-4 py-3">

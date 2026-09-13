@@ -2706,9 +2706,16 @@ caring for the pet.
 
 ### 23.1 The Rule
 
-Let **P** be the number of distinct caretakers who performed at least one
-care action within the last `BUDGET_WINDOW_DAYS` (7) pet-days, because the
-people who supply care are exactly the people who should set the demand.
+Let **P** be the number of distinct **named** caretakers who performed at
+least one care action within the last `BUDGET_WINDOW_DAYS` (7) pet-days,
+because the people who supply care are exactly the people who should set
+the demand. Named, because a caretaker is a cookie (§8.1) and every device,
+browser and private window mints a new one: the first community of ten
+people read as fifty-three caretakers and carried a pet tuned for
+fifty-three. A nickname (§8.5) is set once per person and is unique, so it
+is the closest thing the game has to a person. Anonymous caretakers still
+care and still score; they just do not raise the bar. The meter says
+"named caretakers" so the rule is visible where the number is.
 
 That window is **bucketed by pet-day rather than continuous**: it holds seven
 day buckets and advances one at each pet-midnight, so the effective lookback

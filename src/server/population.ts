@@ -17,13 +17,20 @@
 import type { Db } from "mongodb";
 import { petDay } from "@/sim/score";
 import { BUDGET_WINDOW_DAYS } from "@/sim/tuning";
-import { contributions } from "./social";
+import { caretakers, contributions } from "./social";
 
-/** Distinct caretakers who cared in the seven day-buckets ending at `tick`. */
+/**
+ * Distinct named caretakers who cared in the seven day-buckets ending at
+ * `tick`. Named, because a caretaker is a cookie and a person has several:
+ * ten people once read as fifty-three. A nickname is unique and set once
+ * per person, so it is the count of people the game can actually make
+ * (SPEC §23.1).
+ */
 export const activeCaretakers = async (db: Db, tick: number): Promise<number> => {
   const since = petDay(tick) - (BUDGET_WINDOW_DAYS - 1);
   // Contributions are indexed by day, so this is a bounded scan of one week
   // however long the generation has run.
   const ids = await contributions(db).distinct("caretakerId", { day: { $gte: since } });
-  return ids.length;
+  if (ids.length === 0) return 0;
+  return caretakers(db).countDocuments({ _id: { $in: ids }, nickname: { $ne: null } });
 };
