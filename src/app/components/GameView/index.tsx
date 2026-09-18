@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { derive, type DerivedState } from "@/sim/derive";
 import { stageAt, type PetState } from "@/sim/model";
+import { allowanceRemaining } from "@/sim/score";
 import { TICKS_PER_DAY, TICKS_PER_HOUR, type CareAction } from "@/sim/tuning";
 import { GameAudio } from "@/game/audio";
 import PetCanvas from "@/app/components/PetCanvas";
@@ -635,6 +636,7 @@ export default function GameView() {
           percentages={ui.derived.percentages}
           population={ui.derived.population}
           careMultiplier={ui.derived.careMultiplier}
+          allowance={caretakerId ? allowanceRemaining(ui.state, caretakerId, ui.state.tick) : null}
           petName={petName}
         />
       )}

@@ -144,6 +144,19 @@ export const ACTION_MAGNITUDE = {
   PET: 40_000, // joy
 } as const;
 
+/** Diminishing returns (SPEC §2.6) — integer round-half-up, no float division. */
+export const diminishedMagnitude = (base: number, current: number): number =>
+  Math.floor((base * (NEED_MAX - current) + NEED_MAX / 2) / NEED_MAX);
+
+/** Magnitude-shaped actions and the need each restores (MEDICATE is flat). */
+export const MAGNITUDE_ACTIONS: Partial<Record<CareAction, { need: NeedKey; base: number }>> = {
+  FEED: { need: "hunger", base: ACTION_MAGNITUDE.FEED },
+  PLAY: { need: "joy", base: ACTION_MAGNITUDE.PLAY },
+  CLEAN: { need: "hygiene", base: ACTION_MAGNITUDE.CLEAN },
+  LULLABY: { need: "energy", base: ACTION_MAGNITUDE.LULLABY },
+  PET: { need: "joy", base: ACTION_MAGNITUDE.PET },
+};
+
 export const PLAY_ENERGY_COST = 60_000; // paid by the pet (SPEC §2.5)
 export const MEDICATE_HEALTH_RESTORE = 50_000_000_000; // +5% health, flat
 

@@ -7,17 +7,15 @@ import { phaseAt, type PetState, type ProjectionContext } from "./model";
 import { project } from "./project";
 import { drinkItem, foodItem, toysPlayBonusPercent } from "./economy";
 import { quirkFoodPercent } from "./quirks";
-import { caretakerRecord, pruneCaretakers, recordApplied } from "./score";
+import { budgetRemaining, caretakerRecord, pruneCaretakers, recordApplied } from "./score";
 import {
-  ACTION_MAGNITUDE,
+  diminishedMagnitude,
   HEALTH_MAX,
+  MAGNITUDE_ACTIONS,
   MEDICATE_HEALTH_RESTORE,
   NEED_MAX,
   PLAY_ENERGY_COST,
-  type CareAction,
-  type NeedKey,
 } from "./tuning";
-import { budgetRemaining } from "./score";
 import { WANT_BONUS_PERCENT, WANT_EXPIRY_JOY_DEBIT, WANT_FULFILLING_ACTION, windowIndexAt } from "./wants";
 import type { Milestone, PetEvent } from "./events";
 
@@ -28,20 +26,7 @@ export type ReduceResult = {
   applied: number;
 };
 
-/** Diminishing returns (SPEC §2.6) — integer round-half-up, no float division. */
-export const diminishedMagnitude = (base: number, current: number): number =>
-  Math.floor((base * (NEED_MAX - current) + NEED_MAX / 2) / NEED_MAX);
-
 const clamp = (value: number, max: number): number => (value < 0 ? 0 : value > max ? max : value);
-
-/** Magnitude-shaped actions and the need each restores (MEDICATE is flat). */
-const MAGNITUDE_ACTIONS: Partial<Record<CareAction, { need: NeedKey; base: number }>> = {
-  FEED: { need: "hunger", base: ACTION_MAGNITUDE.FEED },
-  PLAY: { need: "joy", base: ACTION_MAGNITUDE.PLAY },
-  CLEAN: { need: "hygiene", base: ACTION_MAGNITUDE.CLEAN },
-  LULLABY: { need: "energy", base: ACTION_MAGNITUDE.LULLABY },
-  PET: { need: "joy", base: ACTION_MAGNITUDE.PET },
-};
 
 export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext): ReduceResult => {
   if (event.tick < input.tick) {

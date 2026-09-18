@@ -9,9 +9,10 @@
 
 import { useCallback, useState } from "react";
 import { canPerform } from "@/sim/validate";
+import { zeroApplyReason, type ZeroApplyReason } from "@/sim/score";
 import { CARE_ACTIONS, TICK_SECONDS, type CareAction } from "@/sim/tuning";
 import type { PetState, ProjectionContext } from "@/sim/model";
-import { isLockReason, REASON_GLYPH, REASON_SHORT, rejectionText } from "./copy";
+import { isLockReason, REASON_GLYPH, REASON_SHORT, rejectionText, zeroApplyText, ZERO_APPLY_GLYPH, ZERO_APPLY_SHORT } from "./copy";
 
 const ACTION_META: Record<CareAction, { label: string; emoji: string }> = {
   FEED: { label: "Feed", emoji: "🍖" },
@@ -64,8 +65,11 @@ export type ActionBarProps = {
 export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExact, onPlay }: ActionBarProps) {
   const [notice, setNotice] = useState<string | null>(null);
 
+  // `outlook` is read off the same state the tile rendered from, before the
+  // action moves it: an applied-nothing result has to be explained by the
+  // world as it was when the button was pressed, not as it is afterwards.
   const act = useCallback(
-    async (action: CareAction) => {
+    async (action: CareAction, outlook: ZeroApplyReason | null) => {
       setNotice(null);
       const response = await fetch("/api/care", {
         method: "POST",
@@ -84,7 +88,9 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExa
         setNotice(isLockReason(reason) ? `${rejectionText(petName)[reason]}.` : `${petName} can't do that right now.`);
       } else if (response.ok) {
         const body = (await response.json().catch(() => null)) as { applied?: number } | null;
-        if (body && body.applied === 0) setNotice(`${petName} wants someone else's attention.`);
+        if (body && body.applied === 0) {
+          setNotice(outlook ? zeroApplyText(petName, action, outlook) : `${petName} didn't need that just now.`);
+        }
       }
     },
     [petName],
@@ -97,6 +103,11 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExa
       <div role="group" aria-label="Care actions" className="grid w-full grid-cols-3 gap-2 sm:grid-cols-6">
         {CARE_ACTIONS.map((action) => {
           const verdict = canPerform(state, action, caretakerId, ctx);
+          // Allowed is not the same as worth doing. An action whose need is
+          // full, or whose weekly allowance is spent, still passes every gate
+          // and still costs a cooldown — so it says so on the tile rather than
+          // only in the notice that follows the press.
+          const outlook = verdict.ok ? zeroApplyReason(state, action, caretakerId, state.tick) : null;
           const meta = ACTION_META[action];
           // Two registers for one reason: the sentence goes in the accessible
           // name and the tooltip, the short form on the tile itself, which is
@@ -116,6 +127,10 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExa
             } else {
               glyph = REASON_GLYPH[verdict.reason];
             }
+          } else if (outlook) {
+            hint = zeroApplyText(petName, action, outlook);
+            label = ZERO_APPLY_SHORT[outlook];
+            glyph = ZERO_APPLY_GLYPH[outlook];
           }
           return (
             <button
@@ -124,7 +139,7 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExa
               onClick={() => {
                 if (!verdict.ok) return;
                 if (action === "PLAY") onPlay();
-                else void act(action);
+                else void act(action, outlook);
               }}
               aria-disabled={!verdict.ok}
               aria-label={hint ? `${meta.label} — ${hint}` : meta.label}

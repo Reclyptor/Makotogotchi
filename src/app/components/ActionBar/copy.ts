@@ -7,6 +7,8 @@
 // is how "Makoto can't right now (ASLEEP)" ended up in front of a player.
 
 import type { RejectionReason } from "@/sim/validate";
+import type { ZeroApplyReason } from "@/sim/score";
+import type { CareAction } from "@/sim/tuning";
 
 /** Every reason a care control can be locked, including the shop's own. */
 export type LockReason = RejectionReason | "NO_ITEM";
@@ -81,4 +83,52 @@ export const REASON_GLYPH: Partial<Record<LockReason, string>> = {
   NOT_SICK: "❤️",
   NOT_SLEEPY: "☀️",
   NO_ITEM: "📭",
+};
+
+// ── Allowed, but it would restore nothing (SPEC §2.5, §2.6) ─────────────────
+
+/**
+ * An action can be perfectly legal and still apply zero, for two reasons that
+ * could hardly be less alike: this caretaker's weekly allowance for the need
+ * is spent, or the need is already full.
+ *
+ * One line used to cover both — "Makoto wants someone else's attention". It is
+ * a fair description of the first and plainly false about the second, and the
+ * players who met it most were the regulars, who read the false half as the
+ * pet singling them out personally. A shared budget saying "not you, someone
+ * else" is the one thing §2.4 promises the game will never mean.
+ */
+const SPENT_VERB: Record<CareAction, string> = {
+  FEED: "fed",
+  PLAY: "played with",
+  CLEAN: "cleaned",
+  LULLABY: "settled",
+  PET: "fussed over",
+  MEDICATE: "treated",
+};
+
+const SATED_STATE: Record<CareAction, string> = {
+  FEED: "is full up",
+  PLAY: "has had plenty of fun for now",
+  CLEAN: "is already spotless",
+  LULLABY: "is rested",
+  PET: "has had plenty of fuss for now",
+  MEDICATE: "is fine",
+};
+
+export const zeroApplyText = (petName: string, action: CareAction, reason: ZeroApplyReason): string =>
+  reason === "SPENT"
+    ? `You've ${SPENT_VERB[action]} ${petName} all you can this week — some of your allowance returns each night.`
+    : `${petName} ${SATED_STATE[action]}.`;
+
+/** The tile-sized form, under the same width bound as REASON_SHORT. */
+export const ZERO_APPLY_SHORT: Record<ZeroApplyReason, string> = {
+  SPENT: "Spent",
+  SATED: "Not needed",
+};
+
+/** 🎟️ is the allowance; 👌 says the need is already met, not that you are. */
+export const ZERO_APPLY_GLYPH: Record<ZeroApplyReason, string> = {
+  SPENT: "🎟️",
+  SATED: "👌",
 };

@@ -240,9 +240,8 @@ unreachable states. With it, a heavy play day genuinely tires the pet and
 **Caretaker budget.** For each `(caretaker, need)`, the total *applied*
 restoration over any rolling window of 7 pet-days may not exceed
 `CARETAKER_WEEKLY_BUDGET_DAYS × dailyDecay(need)`. Actions beyond the budget
-still validate but apply 0, and the UI explains why ("Makoto wants someone
-else's attention"). `MEDICATE` is exempt — an emergency responder is never
-turned away.
+still validate but apply 0. `MEDICATE` is exempt — an emergency responder is
+never turned away.
 
 This is the structural encoding of §1.2's "a lone caretaker cannot sustain
 it", and it exists because cooldowns alone *cannot* encode it: a burst rescue
@@ -257,6 +256,39 @@ in the same spirit as §2.4's structurally-impossible griefing.
 The budget is folded from the event log like all other state: a 7-slot ring
 of per-pet-day applied totals per active `(caretaker, need)`, pruned when
 stale.
+
+**The budget has to be visible, for the same reason §23.3's multiplier does.**
+An action that applies nothing is indistinguishable from a broken button, and
+for a long time the game answered every one of them with a single line —
+*"Makoto wants someone else's attention"*. That sentence has two failure modes
+and it hit both. It is false whenever the need was simply full, which is most
+of the time; and where it *was* true it reached the committed regulars first,
+because they are the only people who ever spend an allowance, phrased as the
+pet turning them away personally. A shared budget meaning "not you, someone
+else" is precisely what §2.4 promises the game will never say.
+
+So two pure, read-only views of the budget sit in `src/sim/score.ts` and the
+UI reads both rather than keeping a second copy of the arithmetic:
+
+- `allowanceRemaining(state, caretakerId, tick)` — what this caretaker has
+  left of each need's weekly allowance, as whole percentages. It renders under
+  the meters beside the community line, so the panel states demand and supply
+  together: *"👥 9 named caretakers this week · Makoto needs 3.0× the care"*
+  over *"🎟️ Your week's allowance · 🍖 60% · ⚡ 100% · ✨ 25% · 💛 0%"*. A
+  viewer with no caretaker cookie yet has no allowance to report and the line
+  is absent rather than invented.
+- `zeroApplyReason(state, action, caretakerId, tick)` — `SPENT` when this
+  caretaker's allowance for the action's need is gone, `SATED` when the need
+  is full enough that §2.6's curve rounds to nothing, `null` when the action
+  would do something. The allowance is reported first when both are true: a
+  full pet empties on its own, while a spent allowance is the caretaker's own
+  ceiling and is the fact they are missing.
+
+The verdict reaches the player *before* the press, as the care tile's reason
+line (§11.3's locked-control vocabulary, though the tile stays pressable —
+the action is legal, merely pointless), and again after it as the notice.
+`SPENT` says so and says the allowance returns day by day, because a rolling
+seven-day ring is not a thing anyone infers from a dead button.
 
 ### 2.6 Diminishing Returns
 
@@ -1304,6 +1336,8 @@ frame with no anchor gets no tufts either — the gravestone wears nothing.
 │  ✨ Hygiene ████░░░░░░  41%                   │
 │  💛 Joy     ███████░░░  68%                   │
 │  ❤️ Health  ██████████ 100%                   │
+│  👥 7 named caretakers · needs 2.5× the care  │
+│  🎟️ Your week · 🍖 60% ⚡100% ✨ 25% 💛 0%     │
 ├───────────────────────────────────────────────┤
 │  [Feed] [Play] [Clean] [Medicate] [Pet]  😊💛 │
 │   45s      ✓      ✓      n/a       ✓          │
@@ -1313,6 +1347,14 @@ frame with no anchor gets no tufts either — the gravestone wears nothing.
 - Action buttons show live cooldowns and disable with a *reason* on hover and
   in an accessible label: "Makoto is still eating (23s)", "Makoto is asleep",
   "Makoto isn't sick".
+- A tile also carries a reason when the action is *allowed* but would restore
+  nothing — a spent allowance or a full need (§2.5) — and stays pressable,
+  because the action is legal and the game's rules have not changed. Only the
+  player's expectation of it has, which is the entire point: they now know
+  before the press instead of after it.
+- Under the meters sit two lines of the same small print: the community the
+  difficulty is set for (§23.3), and this caretaker's own remaining allowance
+  (§2.5). Demand and supply, in that order, in one panel.
 - An action carries two cooldowns at once (§2.5) — the pet's and the
   caretaker's — but it gets **one** bar, spanning the single window from the
   tick that armed it to the tick it frees up. That window is whichever of the

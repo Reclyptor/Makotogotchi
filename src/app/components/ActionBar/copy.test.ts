@@ -10,7 +10,8 @@
 // A cap of 12 is not a style preference. It is the width of the box.
 
 import { describe, expect, it } from "vitest";
-import { REASON_GLYPH, REASON_SHORT, rejectionText } from "./copy";
+import { REASON_GLYPH, REASON_SHORT, rejectionText, zeroApplyText, ZERO_APPLY_GLYPH, ZERO_APPLY_SHORT } from "./copy";
+import { CARE_ACTIONS } from "@/sim/tuning";
 
 const MAX_TILE_CHARS = 12;
 
@@ -29,6 +30,35 @@ describe("care reason copy", () => {
     expect(Object.values(named).some((text) => text.includes("Bartholomew"))).toBe(true);
     for (const label of Object.values(REASON_SHORT)) {
       expect(label).not.toContain("Bartholomew");
+    }
+  });
+
+  it("keeps the zero-apply labels tile-sized too", () => {
+    // They share the tile with the lock reasons, so they share its width.
+    for (const [reason, label] of Object.entries(ZERO_APPLY_SHORT)) {
+      expect(label.length, `${reason} is too long for a care tile`).toBeLessThanOrEqual(MAX_TILE_CHARS);
+      expect(label.length).toBeGreaterThan(0);
+      expect(ZERO_APPLY_GLYPH).toHaveProperty(reason);
+    }
+  });
+
+  it("says something different, and true, for each reason an action does nothing", () => {
+    for (const action of CARE_ACTIONS) {
+      const spent = zeroApplyText("Makoto", action, "SPENT");
+      const sated = zeroApplyText("Makoto", action, "SATED");
+      expect(spent).not.toBe(sated);
+      // A spent allowance is the caretaker's ceiling and says whose it is,
+      // and that it comes back — the one thing a dead button cannot imply.
+      expect(spent).toMatch(/^You've /);
+      expect(spent).toContain("this week");
+      expect(spent).toContain("each night");
+      // A full need is about the pet, and never about the caretaker.
+      expect(sated.startsWith("Makoto ")).toBe(true);
+      expect(sated).not.toContain("You");
+      for (const text of [spent, sated]) {
+        expect(text).toContain("Makoto");
+        expect(text.endsWith(".")).toBe(true);
+      }
     }
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diminishedMagnitude, reduce } from "./reduce";
+import { reduce } from "./reduce";
 import { canPerform } from "./validate";
 import { project } from "./project";
 import { genesis } from "./genesis";
@@ -11,6 +11,7 @@ import { WANT_BONUS_PERCENT, WANT_EXPIRY_JOY_DEBIT, windowEndTick, windowIndexAt
 import {
   ACTION_MAGNITUDE,
   COOLDOWNS,
+  diminishedMagnitude,
   EXHAUSTED_THRESHOLD,
   HEALTH_MAX,
   LULLABY_ENERGY_GATE,

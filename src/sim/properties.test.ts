@@ -4,10 +4,10 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 import { project } from "./project";
-import { reduce, diminishedMagnitude } from "./reduce";
+import { reduce } from "./reduce";
 import { genesis } from "./genesis";
 import { EventLog, TEST_GENERATION, testCtx } from "./testkit";
-import { ACTION_MAGNITUDE, CARE_ACTIONS, NEED_KEYS, NEED_MAX, TICKS_PER_DAY } from "./tuning";
+import { ACTION_MAGNITUDE, CARE_ACTIONS, diminishedMagnitude, NEED_KEYS, NEED_MAX, TICKS_PER_DAY } from "./tuning";
 import type { PetEvent } from "./events";
 
 const ctx = testCtx();
