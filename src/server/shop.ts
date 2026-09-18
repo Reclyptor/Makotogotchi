@@ -213,16 +213,18 @@ export const catalog = () => ({
 });
 
 export type PurchaseResult =
-  | { ok: true; kind: "consumable" | "toy" | "cosmetic" | "decor" }
+  | { ok: true; kind: "consumable" | "cosmetic" | "decor" }
   | { ok: false; reason: "UNKNOWN_ITEM" | "INSUFFICIENT_COINS" | "ALREADY_OWNED" };
 
-type ItemKind = "consumable" | "toy" | "cosmetic" | "decor";
+type ItemKind = "consumable" | "cosmetic" | "decor";
 
+// Toys are deliberately absent: they are funded together, never bought
+// outright (SPEC §21.8), so `contribute` is their only path in and there is
+// no second one to drift from it.
 const priceOf = (itemId: string): { price: number; kind: ItemKind } | null => {
   if (itemId in FOOD_ITEMS) return { price: FOOD_ITEMS[itemId as keyof typeof FOOD_ITEMS].price, kind: "consumable" };
   if (itemId in DRINK_ITEMS) return { price: DRINK_ITEMS[itemId as keyof typeof DRINK_ITEMS].price, kind: "consumable" };
   if (itemId in MEDICINE_ITEMS) return { price: MEDICINE_ITEMS[itemId as keyof typeof MEDICINE_ITEMS].price, kind: "consumable" };
-  if (itemId in TOY_ITEMS) return { price: TOY_ITEMS[itemId as keyof typeof TOY_ITEMS].price, kind: "toy" };
   if (itemId in COSMETIC_ITEMS) return { price: COSMETIC_ITEMS[itemId as CosmeticId].price, kind: "cosmetic" };
   if (itemId in DECOR_ITEMS) return { price: DECOR_ITEMS[itemId as DecorId].price, kind: "decor" };
   return null;
@@ -244,18 +246,10 @@ export const spendCoins = async (db: Db, caretakerId: string, price: number, als
   return true;
 };
 
-export const purchase = async (
-  db: Db,
-  caretakerId: string,
-  itemId: string,
-  context: { installedToys: readonly string[] },
-): Promise<PurchaseResult> => {
+export const purchase = async (db: Db, caretakerId: string, itemId: string): Promise<PurchaseResult> => {
   const item = priceOf(itemId);
   if (!item) return { ok: false, reason: "UNKNOWN_ITEM" };
 
-  if (item.kind === "toy" && context.installedToys.includes(itemId)) {
-    return { ok: false, reason: "ALREADY_OWNED" };
-  }
   if (item.kind === "cosmetic" || item.kind === "decor") {
     const room = await roomState(db);
     const owned = item.kind === "cosmetic" ? room.cosmetics : room.decor;
@@ -333,19 +327,64 @@ export type FundingDoc = {
 
 const fundingCollection = (db: Db): Collection<FundingDoc> => db.collection("funding");
 
+/** What funding an item actually does, which is the only way they differ. */
+export type FundableGroup = (typeof GRAND_ITEMS)[GrandId]["group"] | "toy";
+
+type Fundable = { price: number; label: string; group: FundableGroup };
+
+/**
+ * Everything the room can club together for (SPEC §21.8). Toys are here as
+ * well as the grand items: a toy is generation-wide, raises `PLAY` for
+ * everybody, and at 900 coins the Running Wheel was priced past what one
+ * caretaker earns — the exact shape of item co-op funding exists for. They
+ * are funded *instead of* bought outright rather than as well, so there is
+ * one path to owning one and no second one to drift from it.
+ */
+export const fundableItem = (itemId: string): Fundable | null => {
+  if (isGrandId(itemId)) {
+    const item = GRAND_ITEMS[itemId];
+    return { price: item.price, label: item.label, group: item.group };
+  }
+  if (itemId in TOY_ITEMS) {
+    const toy = TOY_ITEMS[itemId as keyof typeof TOY_ITEMS];
+    return { price: toy.price, label: toy.label, group: "toy" };
+  }
+  return null;
+};
+
+const FUNDABLE_IDS: readonly string[] = [...Object.keys(GRAND_ITEMS), ...Object.keys(TOY_ITEMS)];
+
+/**
+ * Which document holds an item's pool.
+ *
+ * A grand item is permanent, so one pool serves forever and its key is the
+ * item. A toy lasts one generation (§13.2), so its pool has to end with the
+ * generation that installed it — otherwise the wheel the last Makoto's room
+ * paid for would read as already funded for a pet that does not have it, and
+ * no one could ever fund it again. Contributions to a generation that dies
+ * before its pool fills are lost with it, which is what non-refundable means.
+ */
+const poolKey = (itemId: string, generationId: string): string =>
+  itemId in TOY_ITEMS ? `${generationId}:${itemId}` : itemId;
+
 export type FundingView = { itemId: string; label: string; price: number; pooled: number; funded: boolean };
 
-export const fundingState = async (db: Db): Promise<FundingView[]> => {
-  const pools = await fundingCollection(db).find({}).toArray();
-  return Object.entries(GRAND_ITEMS).map(([itemId, item]) => {
-    const pool = pools.find((candidate) => candidate._id === itemId);
-    return {
-      itemId,
-      label: item.label,
-      price: item.price,
-      pooled: Math.min(pool?.pooled ?? 0, item.price),
-      funded: pool?.fundedAt != null,
-    };
+export const fundingState = async (db: Db, generationId: string): Promise<FundingView[]> => {
+  const keys = FUNDABLE_IDS.map((itemId) => poolKey(itemId, generationId));
+  const pools = await fundingCollection(db).find({ _id: { $in: keys } }).toArray();
+  return FUNDABLE_IDS.flatMap((itemId) => {
+    const item = fundableItem(itemId);
+    if (item === null) return [];
+    const pool = pools.find((candidate) => candidate._id === poolKey(itemId, generationId));
+    return [
+      {
+        itemId,
+        label: item.label,
+        price: item.price,
+        pooled: Math.min(pool?.pooled ?? 0, item.price),
+        funded: pool?.fundedAt != null,
+      },
+    ];
   });
 };
 
@@ -362,7 +401,9 @@ export const fundingOverflow = (pooled: number, price: number): number => Math.m
 export type ContributeResult =
   | {
       ok: true;
-      itemId: GrandId;
+      itemId: string;
+      /** What the funded item is, so the caller knows what to install. */
+      group: FundableGroup;
       label: string;
       spent: number;
       pooled: number;
@@ -379,11 +420,13 @@ export const contribute = async (
   caretakerId: string,
   itemId: string,
   offered: number | "all",
+  generationId: string,
 ): Promise<ContributeResult> => {
-  if (!isGrandId(itemId)) return { ok: false, reason: "UNKNOWN_ITEM" };
-  const item = GRAND_ITEMS[itemId];
+  const item = fundableItem(itemId);
+  if (item === null) return { ok: false, reason: "UNKNOWN_ITEM" };
+  const _id = poolKey(itemId, generationId);
 
-  const pool = await fundingCollection(db).findOne({ _id: itemId });
+  const pool = await fundingCollection(db).findOne({ _id });
   if (pool?.fundedAt != null) return { ok: false, reason: "ALREADY_FUNDED" };
 
   const pooled = pool?.pooled ?? 0;
@@ -395,7 +438,7 @@ export const contribute = async (
   }
 
   const updated = await fundingCollection(db).findOneAndUpdate(
-    { _id: itemId },
+    { _id },
     { $inc: { pooled: spend, [`contributors.${caretakerId}`]: spend }, $setOnInsert: { fundedAt: null } },
     { upsert: true, returnDocument: "after" },
   );
@@ -408,7 +451,7 @@ export const contribute = async (
   if (overflow > 0) {
     await creditCoins(db, caretakerId, overflow);
     const trimmed = await fundingCollection(db).findOneAndUpdate(
-      { _id: itemId },
+      { _id },
       { $inc: { pooled: -overflow, [`contributors.${caretakerId}`]: -overflow } },
       { returnDocument: "after" },
     );
@@ -417,11 +460,13 @@ export const contribute = async (
   }
 
   const claimed = await fundingCollection(db).findOneAndUpdate(
-    { _id: itemId, fundedAt: null, pooled: { $gte: item.price } },
+    { _id, fundedAt: null, pooled: { $gte: item.price } },
     { $set: { fundedAt: new Date() } },
     { returnDocument: "after" },
   );
-  if (claimed) await placeCommunalDecor(db, itemId);
+  // A room item lands in the room from here; a toy is installed by the caller,
+  // because it lives in the fold rather than in a document (SPEC §13.2).
+  if (claimed && item.group !== "toy") await placeCommunalDecor(db, itemId);
 
   const contributors = claimed?.contributors ?? updated?.contributors ?? {};
   const top = Object.entries(contributors)
@@ -429,7 +474,17 @@ export const contribute = async (
     .sort((a, b) => b.amount - a.amount || a.caretakerId.localeCompare(b.caretakerId))
     .slice(0, 3);
 
-  return { ok: true, itemId, label: item.label, spent: landed, pooled: total, price: item.price, funded: claimed !== null, top };
+  return {
+    ok: true,
+    itemId,
+    group: item.group,
+    label: item.label,
+    spent: landed,
+    pooled: total,
+    price: item.price,
+    funded: claimed !== null,
+    top,
+  };
 };
 
 /**

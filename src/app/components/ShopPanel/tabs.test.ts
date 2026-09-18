@@ -42,6 +42,7 @@ const model = (overrides: Partial<ShopModel> = {}): ShopModel => ({
   toys: [],
   petDay: 20_000,
   funding: [
+    { itemId: "teeter", label: "Teeter Toy", price: 400, pooled: 0, funded: false },
     { itemId: "window_seat", label: "Window Seat", price: 500, pooled: 0, funded: false },
     { itemId: "theme_cabin", label: "Log Cabin Walls", price: 900, pooled: 0, funded: false },
     { itemId: "beach", label: "Beach Day", price: 800, pooled: 0, funded: false },
@@ -145,6 +146,38 @@ describe("shop tabs", () => {
       kind: "fund",
       offers: [{ amount: 10, availability: { ok: true } }, { amount: 50, availability: { ok: false } }],
     });
+  });
+
+  it("offers a toy as a pool, because everyone plays with the same pet", () => {
+    const action = rowNamed(tab(shopTabs(model({ coins: 30 }), gate()), "toys"), "Teeter Toy").action;
+    expect(action).toMatchObject({ kind: "fund", itemId: "teeter" });
+    expect(rowNamed(tab(shopTabs(model({ coins: 30 }), gate()), "toys"), "Teeter Toy").pool).toEqual({ pooled: 0, price: 400 });
+  });
+
+  it("lets one caretaker who can afford a whole toy finish it in a single press", () => {
+    // Eighteen taps on +50 is not a payment model. The small offer stays for
+    // everyone else, so the row still has exactly two buttons.
+    const action = rowNamed(tab(shopTabs(model({ coins: 400 }), gate()), "toys"), "Teeter Toy").action;
+    expect(action).toMatchObject({
+      kind: "fund",
+      offers: [
+        { amount: 50, label: "+50", availability: { ok: true } },
+        { amount: "all", label: "Finish it", coins: 400, availability: { ok: true } },
+      ],
+    });
+  });
+
+  it("shows an installed toy as owned, with no pool left to press", () => {
+    const funding = model().funding.map((pool) => (pool.itemId === "teeter" ? { ...pool, pooled: 400, funded: true } : pool));
+    const row = rowNamed(tab(shopTabs(model({ funding, toys: ["teeter"] }), gate()), "toys"), "Teeter Toy");
+    expect(row.action).toMatchObject({ kind: "badge", label: "Owned" });
+    expect(row.pool).toBeUndefined();
+  });
+
+  it("says once, and only while something is open, that toy money is shared", () => {
+    expect(tab(shopTabs(model(), gate()), "toys").footnote).toContain("chip in");
+    const funding = model().funding.map((pool) => (pool.itemId === "teeter" ? { ...pool, pooled: 400, funded: true } : pool));
+    expect(tab(shopTabs(model({ funding, toys: ["teeter"] }), gate()), "toys").footnote).toBeUndefined();
   });
 
   it("gives every venue in the rotation a ballot, free ones included", () => {

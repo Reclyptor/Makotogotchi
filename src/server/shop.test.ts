@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, db } from "./db/client";
 import { closeRedis } from "./redis/client";
 import { clampContribution, contribute, FAMILY_WALL_SLOTS, fundingOverflow, fundingState, GRAND_ITEMS, roomState } from "./shop";
+import { TOY_ITEMS } from "@/sim/economy";
 import { generations, type GenerationDoc } from "./db/collections";
 import { caretakerProfile, creditCoins } from "./social";
 import { startTestInfra, type TestInfra } from "./testsetup";
@@ -41,17 +42,18 @@ describe("contribution arithmetic", () => {
 
 describe("funding a grand item", () => {
   const price = GRAND_ITEMS.window_seat.price;
+  const GEN = "gen-funding-test";
 
   it("pools two caretakers' coins and places the item exactly once", async () => {
     const database = await db();
     await creditCoins(database, "ct-rich", price);
     await creditCoins(database, "ct-poor", 60);
 
-    const first = await contribute(database, "ct-poor", "window_seat", 50);
+    const first = await contribute(database, "ct-poor", "window_seat", 50, GEN);
     expect(first).toMatchObject({ ok: true, spent: 50, pooled: 50, funded: false });
 
     // "all" tops the pool up to the price, never past it.
-    const second = await contribute(database, "ct-rich", "window_seat", "all");
+    const second = await contribute(database, "ct-rich", "window_seat", "all", GEN);
     expect(second).toMatchObject({ ok: true, spent: price - 50, pooled: price, funded: true });
     if (second.ok) {
       expect(second.top[0]).toEqual({ caretakerId: "ct-rich", amount: price - 50 });
@@ -62,13 +64,13 @@ describe("funding a grand item", () => {
     // late contribution finds the pool closed.
     expect((await roomState(database)).decor).toContain("window_seat");
     expect((await caretakerProfile(database, "ct-rich"))?.coins).toBe(50);
-    expect(await contribute(database, "ct-rich", "window_seat", 10)).toMatchObject({ ok: false, reason: "ALREADY_FUNDED" });
+    expect(await contribute(database, "ct-rich", "window_seat", 10, GEN)).toMatchObject({ ok: false, reason: "ALREADY_FUNDED" });
   });
 
   it("refuses the broke and refuses items that are not fundable", async () => {
     const database = await db();
-    expect(await contribute(database, "ct-nobody", "aquarium", 50)).toMatchObject({ ok: false, reason: "INSUFFICIENT_COINS" });
-    expect(await contribute(database, "ct-nobody", "plant", 10)).toMatchObject({ ok: false, reason: "UNKNOWN_ITEM" });
+    expect(await contribute(database, "ct-nobody", "aquarium", 50, GEN)).toMatchObject({ ok: false, reason: "INSUFFICIENT_COINS" });
+    expect(await contribute(database, "ct-nobody", "plant", 10, GEN)).toMatchObject({ ok: false, reason: "UNKNOWN_ITEM" });
   });
 
   it("refunds every coin that overshoots the price, even under a race", async () => {
@@ -79,9 +81,9 @@ describe("funding a grand item", () => {
 
     // Everyone offers everything at once: the pool takes the price, and the
     // rest goes home.
-    await Promise.all(givers.map((giver) => contribute(database, giver, "aquarium", "all")));
+    await Promise.all(givers.map((giver) => contribute(database, giver, "aquarium", "all", GEN)));
 
-    const pool = (await fundingState(database)).find((entry) => entry.itemId === "aquarium");
+    const pool = (await fundingState(database, GEN)).find((entry) => entry.itemId === "aquarium");
     expect(pool?.funded).toBe(true);
     expect(pool?.pooled).toBe(aquarium);
 
@@ -89,6 +91,45 @@ describe("funding a grand item", () => {
     for (const giver of givers) spent += aquarium - ((await caretakerProfile(database, giver))?.coins ?? 0);
     expect(spent).toBe(aquarium);
     expect((await roomState(database)).decor).toContain("aquarium");
+  });
+});
+
+// Toys are funded like grand items and unlike them in one way that matters:
+// they last a generation (SPEC §13.2, §21.8), so their pools do too.
+describe("funding a toy", () => {
+  const price = TOY_ITEMS.teeter.price;
+
+  it("pools coins, reports itself as a toy, and stays out of the room", async () => {
+    const database = await db();
+    await creditCoins(database, "ct-toy", price);
+
+    const result = await contribute(database, "ct-toy", "teeter", "all", "gen-toy-1");
+    expect(result).toMatchObject({ ok: true, group: "toy", spent: price, pooled: price, funded: true });
+    // The caller installs a toy into the fold; nothing about it belongs to the
+    // room document, and a toy standing in the decor list would draw as one.
+    expect((await roomState(database)).decor).not.toContain("teeter");
+  });
+
+  it("gives the next generation its own pool, funded or not", async () => {
+    const database = await db();
+    await creditCoins(database, "ct-gen", price * 2);
+
+    await contribute(database, "ct-gen", "wheel", 50, "gen-a");
+    expect((await fundingState(database, "gen-a")).find((entry) => entry.itemId === "wheel")?.pooled).toBe(50);
+    // A new pet is a new toy box: the last generation's progress does not
+    // carry over, and neither would a finished pool have blocked this one.
+    expect((await fundingState(database, "gen-b")).find((entry) => entry.itemId === "wheel")).toMatchObject({
+      pooled: 0,
+      funded: false,
+    });
+  });
+
+  it("lists toys alongside grand items so one view answers what is open", async () => {
+    const database = await db();
+    const ids = (await fundingState(database, "gen-listing")).map((entry) => entry.itemId);
+    for (const itemId of [...Object.keys(TOY_ITEMS), ...Object.keys(GRAND_ITEMS)]) {
+      expect(ids).toContain(itemId);
+    }
   });
 });
 

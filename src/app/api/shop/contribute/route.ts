@@ -36,16 +36,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!parsed.success) return withCookie(NextResponse.json({ error: "invalid_body" }, { status: 400 }));
 
   const database = await db();
-  const result = await contribute(database, identity.caretakerId, parsed.data.itemId, parsed.data.amount);
+  const { engine, generation } = await runtime();
+  const current = await generation();
+  const result = await contribute(database, identity.caretakerId, parsed.data.itemId, parsed.data.amount, current.id);
   if (!result.ok) {
     return withCookie(NextResponse.json({ error: result.reason }, { status: STATUS[result.reason] ?? 400 }));
   }
 
   if (result.funded) {
+    // A toy is generation state, so it goes into the fold; a room item was
+    // already placed by `contribute`, which owns the room document.
+    if (result.group === "toy") await engine.addToy(current, result.itemId);
     // The durable fact goes in the log so it replays and every room
     // celebrates; the names ride a broadcast, the way records do.
-    const { engine, generation } = await runtime();
-    const current = await generation();
     await engine.milestone(current, "FUNDED", result.itemId);
 
     const names = await nicknameMap(database, result.top.map((entry) => entry.caretakerId));

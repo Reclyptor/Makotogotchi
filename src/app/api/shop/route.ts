@@ -1,6 +1,11 @@
 // The shop (SPEC §13.2). GET: catalog, balance, inventory, room. POST: buy
 // an item ({ buy }), switch the worn cosmetic among owned ones ({ wear }), or
 // change the room's style among the ones it owns ({ theme }, SPEC §22.5).
+//
+// Nothing here touches the simulation: everything POST can buy is a purse
+// entry or a room document. Toys are the exception that proves it — they are
+// generation state, so they are funded through /api/shop/contribute, which is
+// where the engine is (SPEC §21.8).
 
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
@@ -36,7 +41,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     caretakerProfile(database, identity.caretakerId),
     roomState(database),
     engine.view(current),
-    fundingState(database),
+    fundingState(database, current.id),
   ]);
   const response = NextResponse.json({
     catalog: catalog(),
@@ -66,8 +71,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!parsed.success) return withCookie(NextResponse.json({ error: "invalid_body" }, { status: 400 }));
 
   const database = await db();
-  const { engine, generation } = await runtime();
-  const current = await generation();
 
   if ("wear" in parsed.data) {
     const ok = await wearCosmetic(database, parsed.data.wear);
@@ -85,13 +88,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return withCookie(ok ? NextResponse.json({ ok: true }) : NextResponse.json({ error: "NOT_OWNED" }, { status: 404 }));
   }
 
-  const state = await engine.view(current);
-  const result = await purchase(database, identity.caretakerId, parsed.data.buy, { installedToys: state.toys });
+  const result = await purchase(database, identity.caretakerId, parsed.data.buy);
   if (!result.ok) {
     return withCookie(NextResponse.json({ error: result.reason }, { status: STATUS[result.reason] ?? 400 }));
-  }
-  if (result.kind === "toy") {
-    await engine.addToy(current, parsed.data.buy);
   }
   const profile = await caretakerProfile(database, identity.caretakerId);
   return withCookie(NextResponse.json({ ok: true, coins: profile?.coins ?? 0, inventory: profile?.inventory ?? {} }));

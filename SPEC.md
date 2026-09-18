@@ -1503,7 +1503,7 @@ keeping live.
 | Food | Better food restores more hunger and adds a small joy bonus. Consumed on use. Peppers are characters in this world, not ingredients, so they never appear here — the Pepper Treat was legacy and is now Onigiri. |
 | Drinks | Restore energy, not hunger. The lift is flat and bounded by price, so like a food's joy bonus it skips the diminishing curve and the caretaker budget. Drinks are not meals: they live in their own table, outside the taste quirks (§21.4) and the cravings (§25), which index the meal list by position. The Energy Drink (120 coins, +30% energy) is the one consumable Makoto takes while asleep — during a **daytime** sleep, napped into (§2.9) or sung into, never the night's — and it **ends that sleep outright**. Two earlier rules made it a famously dead item, and both are worth recording. It woke Makoto only once the bonus happened to carry energy past the 40% wake line, but a nap begins *below* the 15% exhaustion line and the bonus was exactly the 25-point gap between the two: every nap answered in its first minutes swallowed the can and slept on. And it was refused during a lullaby's sleep, which projection ends at the identical threshold and which a caretaker cannot tell apart from a nap by looking — invisible reasoning, presented as a broken item. The bonus now exceeds the exhaustion line, which is the invariant the unconditional wake rests on: a pet woken by a can is always rested enough to stay awake rather than dropping straight back into the nap it was just lifted out of. Given through `FEED`, so it shares `FEED`'s cooldowns. Consumed. |
 | Medicine | Cures `SICK` instantly with no cooldown. Consumed. |
-| Toys | Raise the `PLAY` base magnitude. Permanent for the generation. |
+| Toys | Raise the `PLAY` base magnitude. Permanent for the generation, and **funded communally** rather than bought outright (§21.8). |
 | Cosmetics | Hats and accessories for the pet. Permanent, cross-generation. |
 | Room decor | Community-funded upgrades to the room, visible to everyone. Permanent. |
 
@@ -2237,6 +2237,35 @@ Grand decor items too expensive for one caretaker, funded communally. New
 shop category `grand` with three items (window seat 500, aquarium 650,
 kotatsu 800 — rendered procedurally in `renderDecor` like existing decor,
 each with one small ambient touch: aquarium bubbles, kotatsu glow).
+
+**Toys fund the same way**, and always should have. A toy is installed for the
+whole generation and raises `PLAY` for everybody who touches the pet, so a
+model where one person pays the entire 900 coins for the Running Wheel and
+everyone else enjoys it was a co-op purchase already — it simply had no way to
+say so, and priced itself past what a single caretaker earns in the process.
+They are funded *instead of* being bought outright, never as well: two ways to
+own the same toy would be two code paths to keep in step and two actions
+competing for one row's fixed-width action slot.
+
+Two consequences follow from a toy lasting one generation where a grand item
+is permanent:
+
+- **A toy's pool is scoped to a generation** (`funding` key
+  `<generationId>:<toyId>`). A pool keyed by the item alone would read as
+  already funded for the next pet — who does not have the toy — and could
+  never be funded again. Coins put toward a toy whose generation dies before
+  the pool fills are lost with it, which is what non-refundable already meant.
+- **Funding a toy installs it through the fold**, not the room document: toys
+  are simulation state (`PetState.toys`), so `/api/shop/contribute` appends
+  the `addToy` event the way a purchase used to. `contribute()` reports the
+  funded item's `group` and the route dispatches on it — a room item lands in
+  the room from inside `contribute`, a toy is handed back for the engine.
+
+The offers on an open pool gain one case: **a caretaker holding the whole
+remainder is offered it in a single press**, so the row reads `+50` and
+`Finish it` rather than `+10` and `+50`. Funding a 900-coin toy single-handed
+was otherwise eighteen taps, which is not a payment model. The slot still
+never holds more than two buttons.
 
 New collection `funding`: `{ itemId, pooled, contributors: { [caretakerId]:
 amount } }`. `POST /api/shop/contribute { itemId, amount }` — amount ∈

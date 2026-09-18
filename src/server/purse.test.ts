@@ -78,7 +78,7 @@ describe("every writer announces the purse it just changed", () => {
   it("spending, and the pack the spend filled", async () => {
     const database = await db();
     await creditCoins(database, "ct-spend", 1000);
-    const result = await purchase(database, "ct-spend", "onigiri", { installedToys: [] });
+    const result = await purchase(database, "ct-spend", "onigiri");
     expect(result.ok).toBe(true);
     // 1000 − 60 for the treat, and the treat itself now in the pack.
     expect(await purseFor("ct-spend", (purse) => purse.coins === 940)).toMatchObject({
@@ -90,7 +90,7 @@ describe("every writer announces the purse it just changed", () => {
   it("using an item out of the pack, and handing it back when the sim refuses", async () => {
     const database = await db();
     await creditCoins(database, "ct-use", 1000);
-    await purchase(database, "ct-use", "onigiri", { installedToys: [] });
+    await purchase(database, "ct-use", "onigiri");
 
     expect(await consumeItem(database, "ct-use", "onigiri")).toBe(true);
     await purseFor("ct-use", (purse) => purse.inventory.onigiri === 0);
@@ -107,7 +107,7 @@ describe("every writer announces the purse it just changed", () => {
     await purseFor("ct-broke", (purse) => purse.coins === 10);
     const before = countFor("ct-broke");
 
-    const result = await purchase(database, "ct-broke", "super_medicine", { installedToys: [] });
+    const result = await purchase(database, "ct-broke", "super_medicine");
     expect(result).toMatchObject({ ok: false, reason: "INSUFFICIENT_COINS" });
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect(countFor("ct-broke")).toBe(before);

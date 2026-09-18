@@ -203,14 +203,20 @@ const badgeRow = (row: ShopRow, label: string, detail: string): ShopRow => ({
 });
 
 /**
- * The offers on an open pool. The last stretch collapses to one button rather
- * than showing a +50 that can only spend the 30 the pool still needs — the
- * server clamps it either way, but a button should say what it does.
+ * The offers on an open pool, never more than two so the action slot keeps
+ * its fixed width (SPEC §21.8).
+ *
+ * The last stretch collapses to one button rather than showing a +50 that can
+ * only spend the 30 the pool still needs — the server clamps it either way,
+ * but a button should say what it does. And anyone holding the whole
+ * remainder is offered it in one press: without that, funding a 900-coin
+ * Running Wheel single-handed was eighteen taps on +50, which is not a
+ * payment model, it is a chore.
  */
 const fundOffers = (remaining: number, coins: number): FundOffer[] => {
-  if (remaining <= 50) {
-    return [{ amount: "all", label: "Finish it", coins: remaining, availability: affordable(coins, remaining) }];
-  }
+  const finish: FundOffer = { amount: "all", label: "Finish it", coins: remaining, availability: affordable(coins, remaining) };
+  if (remaining <= 50) return [finish];
+  if (coins >= remaining) return [{ amount: 50, label: "+50", coins: 50, availability: affordable(coins, 50) }, finish];
   return ([10, 50] as const).map((amount) => ({
     amount,
     label: `+${amount}`,
@@ -239,8 +245,8 @@ const venueLabel = (shopCatalog: ShopCatalog, venueId: string): string =>
   (shopCatalog.grand as Record<string, { label: string } | undefined>)[venueId]?.label ??
   venueSpec(venueId).label.replace(/^the /, "").replace(/^\w/, (first) => first.toUpperCase());
 
-/** A grand item's row, in whichever of its two lives it is currently in. */
-const grandRow = (
+/** A fundable item's row, in whichever of its two lives it is currently in. */
+const fundableRow = (
   itemId: string,
   name: string,
   shop: ShopModel,
@@ -313,19 +319,31 @@ const foodTab = (shop: ShopModel): ShopTab => ({
   ],
 });
 
-const toysTab = (shop: ShopModel): ShopTab => ({
-  id: "toys",
-  label: "Toys",
-  groups: [
-    {
-      id: "toys",
-      rows: Object.entries(shop.catalog.toys).map(([itemId, item]) => {
-        const row = buyRow(itemId, item, `Play restores +${item.playBonusPercent}% more`, shop, CATEGORY_ICONS.toy);
-        return shop.toys.includes(itemId) ? badgeRow(row, "Owned", "Installed for this generation") : row;
-      }),
-    },
-  ],
-});
+/**
+ * Toys are funded together, not bought (SPEC §21.8). Everyone plays with the
+ * same pet, so everyone gets the bonus; the payment model now matches that.
+ * A caretaker who can cover a whole toy still finishes it in one press, so
+ * nothing that used to be one purchase became a committee.
+ */
+const toysTab = (shop: ShopModel): ShopTab => {
+  const rows = Object.entries(shop.catalog.toys).map(([itemId, item]) => {
+    const detail = `Play restores +${item.playBonusPercent}% more`;
+    return shop.toys.includes(itemId)
+      ? { id: itemId, icon: icon(itemId, CATEGORY_ICONS.toy), name: item.label, detail, action: { kind: "badge" as const, label: "Owned" } }
+      : fundableRow(itemId, item.label, shop, CATEGORY_ICONS.toy, {
+          open: detail,
+          funded: detail,
+          fundedBadge: "Owned",
+        });
+  });
+  const coop = rows.some((row) => row.action.kind === "fund");
+  return {
+    id: "toys",
+    label: "Toys",
+    groups: [{ id: "toys", rows }],
+    ...(coop ? { footnote: "Everyone can chip in. A toy lasts this generation; contributions are non-refundable." } : {}),
+  };
+};
 
 const styleTab = (shop: ShopModel): ShopTab => ({
   id: "style",
@@ -359,7 +377,7 @@ const roomTab = (shop: ShopModel): ShopTab => {
     ...grand
       .filter(([, item]) => item.group === "decor")
       .map(([itemId, item]) =>
-        grandRow(itemId, item.label, shop, CATEGORY_ICONS.grand, {
+        fundableRow(itemId, item.label, shop, CATEGORY_ICONS.grand, {
           open: "Everyone chips in — then it's in the room",
           funded: "Everyone paid for this one",
           fundedBadge: "Placed",
@@ -380,7 +398,7 @@ const roomTab = (shop: ShopModel): ShopTab => {
     // Not owned yet, so the row is its pool. It keeps the same id either way,
     // so switching a style on is the same row it was funded through.
     return {
-      ...grandRow(itemId ?? themeId, name, shop, CATEGORY_ICONS.theme, {
+      ...fundableRow(itemId ?? themeId, name, shop, CATEGORY_ICONS.theme, {
         open: "Repaints the room for everyone",
         funded: "Owned by the room",
         fundedBadge: "Owned",
@@ -445,7 +463,7 @@ const roomTab = (shop: ShopModel): ShopTab => {
     ...grand
       .filter(([itemId, item]) => item.group === "venue" && !pool.includes(itemId as VenueId))
       .map(([itemId, item]) =>
-        grandRow(itemId, item.label, shop, CATEGORY_ICONS.venue, {
+        fundableRow(itemId, item.label, shop, CATEGORY_ICONS.venue, {
           open: "Unlock it, then the room can vote to go",
           funded: "Makoto can be voted here",
           fundedBadge: "Unlocked",
