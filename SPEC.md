@@ -341,6 +341,45 @@ This gives the game a daily rhythm and — importantly — means the overnight
 window is the *least* dangerous time, not the most. Nobody is punished for
 sleeping.
 
+**Energy is exempt from §23's community multiplier**, and it is the only need
+that is. The multiplier's premise is that a bigger community can supply more
+care and should therefore be asked for more. That is true of hunger, hygiene
+and joy. It is simply false of energy: `LULLABY` is the only care action that
+touches it, it is gated below 25%, and it puts the pet *to sleep* rather than
+waking it — so fifty caretakers supply no more rest than two. A player worked
+this out unaided and said so before the code did: *"the modifier on care
+needed — that doesn't apply to sleep, right? Since you can't actually have
+multiple people make him sleep more."*
+
+Scaling it anyway did not merely make energy harder; past about 2.65× it made
+it **unsatisfiable**, and then took the rest of the game down with it. A
+waking day costs `70 × m × 5,400` energy against a bar of 1,000,000, so above
+that point the day cost more than the pet could hold and no night, however
+generous, could cover it. The pet made up the shortfall the only way it can,
+by napping — roughly five extra hours a day at the 4× cap. And `FEED`,
+`PLAY`, `CLEAN` and `LULLABY` are all refused to a sleeping pet, so **the
+multiplier raised for a bigger community spent that community's own care
+windows**: the fuller the room, the less of the day anybody could reach the
+pet at all. The three needs a crowd *can* supply kept climbing while the
+hours available to supply them shrank.
+
+Two alternatives were considered and rejected:
+
+- **Scaling sleep recovery to match.** It holds the night-to-day ratio, but
+  the ceiling is the bar, not the night: at 4× a waking day costs 1,512,000
+  against a 1,000,000 bar, so the pet still cannot stay awake through it
+  however perfect the night was. It treats the symptom.
+- **Ending the night when the pet is rested rather than at `WAKE_HOUR`** —
+  which would also have answered the players' observation that chinchillas
+  are crepuscular. It breaks the invariant this section exists to state: a pet
+  that wakes at 3am spends the small hours decaying at the full waking rate
+  with nobody awake to answer it, and "nobody is punished for sleeping" is
+  worth more than the realism. The fixed window stays.
+
+Energy remains a live mechanic without the multiplier, because `PLAY` costs
+the pet a flat `PLAY_ENERGY_COST` (§2.5) at every community size — which is
+the tradeoff that was always doing the work.
+
 ### 2.8 Life Stages
 
 | Stage | Begins at | Behaviour |
@@ -2911,10 +2950,13 @@ Three properties are deliberate:
   mean scaling decay linearly with P; the 0.75 exponent keeps real pressure
   while leaving a margin that a distributed group can actually cover.
 
-The multiplier scales **need decay only**. Energy recovery during sleep,
-health regeneration, and each caretaker's weekly budget are untouched — the
-budget must stay fixed per person, because a larger community supplying more
-total care is the entire point.
+The multiplier scales the decay of **hunger, hygiene and joy** — the needs a
+larger community can actually supply more of (`MULTIPLIED_NEEDS` in
+`tuning.ts`). **Energy is exempt**: §2.7 has the reasoning and the failure
+that made it necessary. Energy recovery during sleep, health regeneration, and
+each caretaker's weekly budget are untouched too — the budget must stay fixed
+per person, because a larger community supplying more total care is the entire
+point.
 
 ### 23.2 Determinism
 

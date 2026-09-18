@@ -93,6 +93,50 @@ describe("community difficulty (SPEC §23)", () => {
     expect(hours(crowded)).toBeLessThanOrEqual(23);
   });
 
+  /**
+   * The bug this pins (SPEC §2.7): energy used to scale with the crowd, so a
+   * waking day at 4× cost more energy than the bar holds and the pet napped
+   * through the afternoon to make up the difference. A sleeping pet refuses
+   * FEED, PLAY and CLEAN — so the multiplier raised for a bigger community
+   * spent that community's own care windows, and the fuller the room the
+   * less of the day it could reach the pet at all.
+   */
+  it("tires a pet at the same rate however big the room is", () => {
+    const halfADay = 12 * TICKS_PER_HOUR;
+    const run = (population: number) => {
+      const start = { ...fullPup(withSeed(QUIET_SEED)), population };
+      const { state, milestones } = project(start, start.tick + halfADay, ctx);
+      return {
+        energy: state.needs.energy,
+        asleep: state.asleep,
+        sleeps: milestones.filter((m) => m.kind === "SLEPT" || m.kind === "WOKE").map((m) => `${m.kind}@${m.tick}`),
+      };
+    };
+    const quiet = run(2);
+    // Every other need is harder in a crowd; energy is nobody's to supply, so
+    // it is identical, transition for transition.
+    for (const population of [4, 9, 13, 40]) expect(run(population)).toEqual(quiet);
+    // And an untended pet still gets tired — the exemption must not have
+    // turned energy off, only decoupled it from the crowd.
+    expect(quiet.energy).toBeLessThan(NEED_MAX);
+  });
+
+  it("never lets a crowd cost the pet a waking hour it would otherwise have had", () => {
+    // Counted where it is felt: ticks awake during the day, when care lands.
+    const awakeTicks = (population: number): number => {
+      const start: PetState = { ...fullPup(withSeed(QUIET_SEED)), population };
+      let state: PetState = start;
+      let awake = 0;
+      for (let step = 0; step < 15 * TICKS_PER_HOUR; step += TICKS_PER_HOUR / 6) {
+        state = project(state, start.tick + step, ctx).state;
+        if (!state.asleep) awake += 1;
+      }
+      return awake;
+    };
+    const quiet = awakeTicks(2);
+    for (const population of [9, 13]) expect(awakeTicks(population)).toBe(quiet);
+  });
+
   it("leaves histories with no recorded population exactly as they were", () => {
     // The guarantee that lets §23 ship over a live generation: an old log,
     // which carries no POPULATION event, must project byte-identically.

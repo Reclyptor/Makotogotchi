@@ -92,6 +92,32 @@ const FORM_MULTIPLIER: Record<AdultForm, number> = { THRIVING: 0.9, STEADY: 1, F
 
 export const ENERGY_SLEEP_RECOVERY = 300; // per tick: zero to ~97% over a 9h night
 
+/**
+ * The one need the community multiplier does not touch (SPEC §2.7, §23).
+ *
+ * §23's premise is that a bigger community can supply more care, so it should
+ * be asked for more. That premise holds for hunger, hygiene and joy, and it is
+ * simply false for energy: nobody can make a pet sleep harder. `LULLABY` is
+ * gated below 25% energy, puts the pet *to sleep* rather than waking it, and
+ * is the only care action that touches energy at all — so a room of fifty
+ * supplies no more rest than a room of two.
+ *
+ * Scaling it anyway broke the energy economy above about 2.65×. A waking day
+ * cost `70 × m × 5,400` and the bar is only 1,000,000, so past that point the
+ * day cost more energy than the pet could hold: no night, however generous,
+ * could cover it, and the pet made up the shortfall the only way it could —
+ * by napping through the afternoon. `FEED`, `PLAY`, `CLEAN` and `LULLABY` are
+ * all refused to a sleeping pet (§2.5), so the crowd multiplier spent its own
+ * caretakers' care windows. At the 4× cap that was roughly five extra hours
+ * asleep a day, and a pet that read as permanently exhausted however many
+ * people turned up.
+ *
+ * Energy stays a live mechanic without the multiplier, because `PLAY` still
+ * costs the pet a flat `PLAY_ENERGY_COST` (§2.5): a heavy play day tires it
+ * at any community size, which is the tradeoff that was always doing the work.
+ */
+export const MULTIPLIED_NEEDS: readonly NeedKey[] = NEED_KEYS.filter((need) => need !== "energy");
+
 export type DecayRates = Record<NeedKey, number>;
 
 const decayFor = (stage: Exclude<LifeStage, "EGG">, form: AdultForm | null, phase: SleepPhase): DecayRates => {
@@ -124,9 +150,9 @@ export const decayRates = (
   if (!rates) throw new Error(`no decay rates for ${stage}/${form}/${phase}`);
   if (multiplierPermille === 1000) return rates;
   // Integer arithmetic throughout, so a scaled rate is as exactly reproducible
-  // as the table it came from.
-  const scaled = {} as DecayRates;
-  for (const need of NEED_KEYS) scaled[need] = Math.round((rates[need] * multiplierPermille) / 1000);
+  // as the table it came from. Energy is exempt: see MULTIPLIED_NEEDS.
+  const scaled = { ...rates } as DecayRates;
+  for (const need of MULTIPLIED_NEEDS) scaled[need] = Math.round((rates[need] * multiplierPermille) / 1000);
   return scaled;
 };
 

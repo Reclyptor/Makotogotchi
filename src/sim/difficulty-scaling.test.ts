@@ -14,8 +14,17 @@ import {
   PRESENCE_SCALE,
   worthRecording,
 } from "./difficulty";
-import { decayRates } from "./tuning";
-import { NEED_KEYS } from "./tuning";
+import {
+  decayRates,
+  ENERGY_SLEEP_RECOVERY,
+  MULTIPLIED_NEEDS,
+  NEED_KEYS,
+  NEED_MAX,
+  SLEEP_HOUR,
+  TICKS_PER_DAY,
+  TICKS_PER_HOUR,
+  WAKE_HOUR,
+} from "./tuning";
 
 const whole = (caretakers: number): number => caretakers * PRESENCE_SCALE;
 
@@ -108,10 +117,41 @@ describe("decay scaling", () => {
     expect(decayRates("PUP", null, "WAKE", 1000)).toEqual(decayRates("PUP", null, "WAKE"));
   });
 
-  it("scales every need in proportion", () => {
+  it("scales every need a crowd can actually supply, in proportion", () => {
     const base = decayRates("PUP", null, "WAKE");
     const doubled = decayRates("PUP", null, "WAKE", 2000);
-    for (const need of NEED_KEYS) expect(doubled[need]).toBe(Math.round(base[need] * 2));
+    for (const need of MULTIPLIED_NEEDS) expect(doubled[need]).toBe(Math.round(base[need] * 2));
+  });
+
+  it("leaves energy alone, because nobody can make a pet sleep harder", () => {
+    // SPEC §2.7: LULLABY is the only care action that touches energy, it is
+    // gated below 25%, and it puts the pet to sleep rather than waking it —
+    // so a room of fifty supplies no more rest than a room of two.
+    const base = decayRates("PUP", null, "WAKE");
+    for (const permille of [1355, 2280, 2828, 4000]) {
+      expect(decayRates("PUP", null, "WAKE", permille).energy).toBe(base.energy);
+    }
+    expect(MULTIPLIED_NEEDS).not.toContain("energy");
+    expect([...MULTIPLIED_NEEDS].sort()).toEqual(NEED_KEYS.filter((need) => need !== "energy").sort());
+  });
+
+  /**
+   * The invariant the exemption exists to protect, stated as arithmetic
+   * rather than as a scenario: a waking day must never cost more energy than
+   * the pet can hold, or it has to nap whatever the night was worth — and a
+   * sleeping pet refuses FEED, PLAY and CLEAN (§2.5), so a forced nap spends
+   * the very care windows the crowd multiplier was raised to fill.
+   */
+  it("never lets a waking day cost more energy than a pet can hold", () => {
+    const awakeTicks = (SLEEP_HOUR - WAKE_HOUR) * TICKS_PER_HOUR;
+    const nightTicks = TICKS_PER_DAY - awakeTicks;
+    for (const permille of [1000, 1682, 2559, 2828, 3344, 4000]) {
+      const spent = decayRates("PUP", null, "WAKE", permille).energy * awakeTicks;
+      expect(spent).toBeLessThanOrEqual(NEED_MAX);
+      // And a night must repay a whole day of it, at every community size.
+      const repaid = ENERGY_SLEEP_RECOVERY * nightTicks - decayRates("PUP", null, "SLEEP", permille).energy * nightTicks;
+      expect(repaid).toBeGreaterThan(spent);
+    }
   });
 
   it("never scales sleep's energy recovery, which is not decay", () => {
