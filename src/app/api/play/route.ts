@@ -1,8 +1,10 @@
 // The spectated minigame (SPEC §13.3). One run at a time — the spectacle is
 // the point. The client plays locally and reports; the server validates a
-// per-game plausibility envelope rather than simulating the game: real
-// elapsed time, a hard score rate, and an input floor per point. The result
-// feeds PLAY through the ordinary care path with a performance multiplier.
+// per-game plausibility envelope rather than simulating the game: a hard score
+// rate measured against real play time, an absolute ceiling, and an input floor
+// per point. How *long* a run took bounds only this session's lifetime, never
+// the result. The result feeds PLAY through the ordinary care path with a
+// performance multiplier.
 // Which game is being played is fixed at start and stored server-side, so a
 // client cannot start a cheap envelope and finish an expensive one.
 
@@ -84,8 +86,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const game = MINIGAMES[parsed.data.game];
     const session: Session = { caretakerId: identity.caretakerId, startedAtMs: Date.now(), game: game.id };
     // The session has to outlive the pre-roll as well as the run itself
-    // (SPEC §13.3.1), or a slow game would expire before its own result.
-    const sessionTtlMs = MINIGAME_COUNTDOWN_MS + game.maxDurationMs + SESSION_SLACK_MS;
+    // (SPEC §13.3.1), or a slow game would expire before its own result — and
+    // since the envelope no longer judges duration, this TTL is the only thing
+    // a long honest run can still fall foul of. It is sized to outlast one.
+    const sessionTtlMs = MINIGAME_COUNTDOWN_MS + game.sessionLifetimeMs + SESSION_SLACK_MS;
     const claimed = await redis().set(sessionKey, JSON.stringify(session), "PX", sessionTtlMs, "NX");
     if (claimed !== "OK") {
       // A duplicate start from the same caretaker for the same game (a

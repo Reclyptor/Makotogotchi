@@ -9,27 +9,39 @@ const wall = (playMs: number): number => playMs + MINIGAME_COUNTDOWN_MS;
 describe("minigame envelopes", () => {
   it("accepts an honest middling run in every game", () => {
     for (const game of Object.values(MINIGAMES)) {
-      const playMs = Math.min(20_000, game.maxDurationMs - 1000);
+      const playMs = Math.min(20_000, game.sessionLifetimeMs - 1000);
       const score = Math.min(game.maxScore, Math.floor(((playMs / 1000) * game.maxScorePerSecond) / 2));
       const inputs = Math.ceil(score * game.inputsPerPoint) + 5;
       expect(plausibleRun(game, wall(playMs), score, inputs)).toBe(true);
     }
   });
 
-  it("rejects impossible score rates, ceilings, idle runs, and absurd durations", () => {
+  it("rejects impossible score rates, ceilings, and idle runs", () => {
     for (const game of Object.values(MINIGAMES)) {
       // Faster than the game can be played.
       expect(plausibleRun(game, wall(2000), Math.ceil(2 * game.maxScorePerSecond) + 1, 1000)).toBe(false);
       // Above the absolute ceiling even over the full duration.
-      expect(plausibleRun(game, wall(game.maxDurationMs), game.maxScore + 1, 2000)).toBe(false);
+      expect(plausibleRun(game, wall(game.sessionLifetimeMs), game.maxScore + 1, 2000)).toBe(false);
       // Scoring without touching anything.
       if (game.inputsPerPoint >= 1) {
-        expect(plausibleRun(game, wall(game.maxDurationMs), Math.min(10, game.maxScore), 0)).toBe(false);
+        expect(plausibleRun(game, wall(game.sessionLifetimeMs), Math.min(10, game.maxScore), 0)).toBe(false);
       }
-      // Longer than the game exists.
-      expect(plausibleRun(game, wall(game.maxDurationMs + 1000), 1, 10)).toBe(false);
       // Sub-second flicker.
       expect(plausibleRun(game, wall(500), 0, 0)).toBe(false);
+    }
+  });
+
+  // A perfect run is the longest run a game can produce, and the client clock
+  // that stops it undercounts the wall clock the server measures. Judging
+  // length therefore rejected the best honest runs and nothing else — the rate
+  // ceiling and the score ceiling are what actually bound a result.
+  it("accepts a slow run on its merits, however long it took", () => {
+    for (const game of Object.values(MINIGAMES)) {
+      const dawdled = game.sessionLifetimeMs * 4;
+      const inputs = Math.ceil(game.maxScore * game.inputsPerPoint) + 5;
+      expect(plausibleRun(game, wall(dawdled), game.maxScore, inputs)).toBe(true);
+      // Still bounded by the ceiling, no matter how much time is claimed.
+      expect(plausibleRun(game, wall(dawdled), game.maxScore + 1, inputs)).toBe(false);
     }
   });
 

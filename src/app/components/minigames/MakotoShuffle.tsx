@@ -10,7 +10,7 @@ import type { FrameName } from "@/game/atlas.generated";
 import { drawFrameAnchored, drawFrameFlipped, GAME_H, GAME_W, startGameLoop } from "./engine";
 import type { GameProps } from "./types";
 
-const RUN_MS = 80_000; // hard stop, comfortably inside the 90s envelope
+const RUN_MS = 80_000; // hard stop, comfortably inside the session's lifetime
 const MAX_ROUNDS = 12;
 
 const SLOT_X = [62, 130, 198] as const;

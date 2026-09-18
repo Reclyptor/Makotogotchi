@@ -1641,15 +1641,34 @@ Makoto into a sausage on a plate, which ends the run. It is Simon Squeaks' pads
 with the memory replaced by pure reaction, and the roster's best fail state.
 
 Each game is scored client-side but validated server-side against a
-**per-game plausibility envelope** (`src/sim/minigames.ts`: max duration, max
-score, max score per second, minimum inputs per point), because a fully
-authoritative implementation is disproportionate for a friends' toy while an
-unbounded client score is not acceptable either. The envelope judges *play*
-time: the server measures wall time from `start` and deducts the pre-roll
-(§13.3.1) before applying the duration and rate ceilings. The chosen game is
-fixed at `start` and stored in the server's session, so a client cannot start
-a cheap envelope and finish an expensive one; per-game curves translate the
-score into the `PLAY` performance multiplier (50–150) and the coin payout.
+**per-game plausibility envelope** (`src/sim/minigames.ts`: max score, max
+score per second, minimum inputs per point), because a fully authoritative
+implementation is disproportionate for a friends' toy while an unbounded
+client score is not acceptable either. The envelope judges *play* time: the
+server measures wall time from `start` and deducts the pre-roll (§13.3.1)
+before applying the rate ceiling. The chosen game is fixed at `start` and
+stored in the server's session, so a client cannot start a cheap envelope and
+finish an expensive one; per-game curves translate the score into the `PLAY`
+performance multiplier (50–150) and the coin payout.
+
+**How long a run took is not part of the verdict**, and the omission is
+deliberate. Length was never evidence of cheating — the rate ceiling divides
+by play time, so every extra second *lowers* the score a run may claim, and
+`maxScore` bounds the total however much time is asserted. What a duration
+ceiling did catch was the opposite of a cheat: the client clock that stops a
+run undercounts the wall clock the server measures, because the shared loop
+clamps each frame's delta and `requestAnimationFrame` stalls outright in a
+backgrounded tab. The gap grows with the length of the run, and the longest
+run a game can produce is a *perfect* one — so the check rejected flawless
+play and essentially nothing else. Makoto Shuffle, whose twelve rounds are
+the roster's longest, rejected them reliably enough that its players learned
+to expect it.
+
+Run length survives as `sessionLifetimeMs`: the TTL on the room's single game
+session, which is a bound on how long a crashed run may hold the slot and has
+no bearing on a result. It is therefore sized to comfortably outlast an honest
+run of each game rather than to sit just above one — generously so for the
+round-based games, whose length the player, not a timer, decides.
 
 ---
 

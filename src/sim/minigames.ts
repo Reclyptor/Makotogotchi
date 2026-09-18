@@ -29,8 +29,9 @@ export type MinigameDef = {
   id: MinigameId;
   title: string;
   emoji: string;
-  /** A run longer than this is implausible (and bounds the session TTL). */
-  maxDurationMs: number;
+  /** How long this game's server-side session may live. A bound on the room's
+   *  single run slot, never a verdict on the result — see `plausibleRun`. */
+  sessionLifetimeMs: number;
   /** Hard ceiling on legitimate scoring rate. */
   maxScorePerSecond: number;
   /** Absolute score ceiling for a perfect run. */
@@ -50,7 +51,7 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
     id: "dustdash",
     title: "Dust Dash",
     emoji: "🏃",
-    maxDurationMs: 45_000,
+    sessionLifetimeMs: 45_000,
     maxScorePerSecond: 2,
     maxScore: 90,
     inputsPerPoint: 1,
@@ -61,7 +62,7 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
     id: "snackcatch",
     title: "Snack Catch",
     emoji: "🍙",
-    maxDurationMs: 40_000,
+    sessionLifetimeMs: 40_000,
     maxScorePerSecond: 1.5,
     maxScore: 40,
     // Catching is positioning, not tapping — a held pointer drag counts few
@@ -74,7 +75,7 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
     id: "bubblepop",
     title: "Bubble Bath Pop",
     emoji: "🫧",
-    maxDurationMs: 40_000,
+    sessionLifetimeMs: 40_000,
     maxScorePerSecond: 3,
     maxScore: 60,
     inputsPerPoint: 1,
@@ -85,9 +86,9 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
     id: "simon",
     title: "Simon Squeaks",
     emoji: "🎵",
-    // Rounds grow, so late rounds are slow — the duration cap is generous
-    // and the score-rate cap is what bounds farming.
-    maxDurationMs: 120_000,
+    // Rounds grow, so late rounds are slow — the session is generous and the
+    // score-rate cap is what bounds farming.
+    sessionLifetimeMs: 120_000,
     maxScorePerSecond: 0.5,
     maxScore: 20,
     inputsPerPoint: 1,
@@ -98,7 +99,7 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
     id: "wheelsprint",
     title: "Wheel Sprint",
     emoji: "🎡",
-    maxDurationMs: 45_000,
+    sessionLifetimeMs: 45_000,
     maxScorePerSecond: 2,
     maxScore: 60,
     inputsPerPoint: 1,
@@ -110,9 +111,10 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
     title: "Makoto Shuffle",
     emoji: "🥣",
     // A round is a peek, a run of swaps, and a pick, and the swaps multiply as
-    // the rounds climb — so the duration cap is generous and the rate cap is
-    // what bounds farming, exactly as in Simon.
-    maxDurationMs: 90_000,
+    // the rounds climb, so a perfect twelve rounds is the roster's longest run
+    // by some way: the session has to outlast one comfortably, and the rate cap
+    // is what bounds farming, exactly as in Simon.
+    sessionLifetimeMs: 120_000,
     maxScorePerSecond: 0.4,
     maxScore: 12,
     inputsPerPoint: 1,
@@ -125,7 +127,7 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
     emoji: "👀",
     // Crossing the desk takes two seconds of clear running, and being caught
     // costs every inch of it, so points come slowly by design.
-    maxDurationMs: 50_000,
+    sessionLifetimeMs: 50_000,
     maxScorePerSecond: 0.5,
     maxScore: 10,
     inputsPerPoint: 1,
@@ -136,7 +138,7 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
     id: "coffeerun",
     title: "Coffee Run",
     emoji: "☕",
-    maxDurationMs: 45_000,
+    sessionLifetimeMs: 45_000,
     // Her shortest round trip is 5.5s and the pot caps at five cups, so a
     // flawless thirty seconds is about 27 — the envelope has to sit above
     // what perfect play produces, not at it.
@@ -152,7 +154,7 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
     id: "sausageparty",
     title: "Sausage Party",
     emoji: "🥳",
-    maxDurationMs: 50_000,
+    sessionLifetimeMs: 50_000,
     // The tray reloads between dishes, which is what paces the game: about
     // one serve a second flat out, over a 35s run.
     maxScorePerSecond: 1.4,
@@ -165,9 +167,9 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
     id: "sausaged",
     title: "Don't Get Sausaged",
     emoji: "🌭",
-    // One miss ends it, so a long run is a good run: the duration cap is
-    // generous and the rate cap is what bounds farming.
-    maxDurationMs: 60_000,
+    // One miss ends it, so a long run is a good run: the session is generous
+    // and the rate cap is what bounds farming.
+    sessionLifetimeMs: 90_000,
     // Twenty-five rounds is the run's own ceiling, so the payout is bounded
     // by maxScore no matter how fast it is played — which lets the rate cap
     // sit well above a hot streak instead of rejecting one.
@@ -185,12 +187,20 @@ export const isMinigameId = (value: unknown): value is MinigameId =>
 /** The envelope check the server applies at finish (SPEC §13.3). `elapsedMs`
  *  is wall time since `start`, which opens with the pre-roll nobody can play
  *  through — the count comes off first, so every ceiling below still bounds
- *  play time and only play time. */
+ *  play time and only play time.
+ *
+ *  A *long* run is deliberately not judged. Length is not a cheat signal: the
+ *  rate ceiling divides by play time, so every extra second lowers the score a
+ *  run may claim, and `maxScore` caps the total regardless. Only the client's
+ *  clock is bounded (each game's own hard stop), and it undercounts wall time
+ *  by design — a frame-delta clamp, and a throttled `requestAnimationFrame` in
+ *  a backgrounded tab, both stop it while the wall clock runs on. Judging
+ *  duration therefore rejected exactly the honest runs that lasted longest:
+ *  the perfect ones. */
 export const plausibleRun = (game: MinigameDef, elapsedMs: number, score: number, inputs: number): boolean => {
   const playMs = elapsedMs - MINIGAME_COUNTDOWN_MS;
   return (
     playMs >= 1_000 &&
-    playMs <= game.maxDurationMs &&
     score <= game.maxScore &&
     score <= Math.ceil((playMs / 1000) * game.maxScorePerSecond) &&
     inputs >= Math.ceil(score * game.inputsPerPoint)
