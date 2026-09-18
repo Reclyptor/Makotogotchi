@@ -42,8 +42,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const { engine, generation } = await runtime();
   const current = await generation();
 
-  // A consumable must be owned and is consumed up front; a rejected action
-  // refunds it (SPEC §13.2).
+  // A consumable must be owned and is consumed up front — the reservation is
+  // what stops two requests spending the same last one — and it is handed
+  // back if the action does not happen or does nothing (SPEC §13.2).
   const { itemId } = parsed.data;
   if (itemId !== undefined && !(await consumeItem(await db(), identity.caretakerId, itemId))) {
     return withCookie(NextResponse.json({ error: "not_now", reason: "NO_ITEM" }, { status: 409 }));
@@ -66,6 +67,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       ),
     );
   }
+
+  // An accepted action that moved nothing did not use the item up. A pet with
+  // a full belly still takes the joy off a Fish Feast, so this is not
+  // "applied === 0" — it is the sim reporting that nothing about the pet
+  // changed, in which case the caretaker keeps what they paid for.
+  const wasted = itemId !== undefined && !outcome.changed;
+  if (wasted) await refundItem(await db(), identity.caretakerId, itemId);
 
   // Roll the accepted action into the social ledgers (SPEC §2.11, §13.1).
   const ledger = await recordContribution(await db(), {
@@ -101,6 +109,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       score: ledger.score,
       coins: ledger.coins + wantCoins,
       streakDays: ledger.streakDays,
+      // So the shop can say the item is still in the pack rather than
+      // claiming it was used (SPEC §13.2).
+      ...(wasted ? { itemKept: true } : {}),
     }),
   );
 }

@@ -13,6 +13,7 @@ import {
   HEALTH_MAX,
   MAGNITUDE_ACTIONS,
   MEDICATE_HEALTH_RESTORE,
+  NEED_KEYS,
   NEED_MAX,
   PLAY_ENERGY_COST,
 } from "./tuning";
@@ -24,7 +25,30 @@ export type ReduceResult = {
   milestones: Milestone[];
   /** Need units actually restored by a care action (post-curve, post-budget). */
   applied: number;
+  /**
+   * Whether a `CARE` event moved the pet at all — any need, its health, its
+   * sleep, or its sickness.
+   *
+   * `applied` alone cannot answer that, and the write path needs it answered:
+   * a consumable is spent before the sim runs (SPEC §13.2) and has to be
+   * handed back if it accomplished nothing. A Fish Feast eaten by a pet whose
+   * hunger is full still lands its budget-exempt joy bonus, so `applied` is
+   * zero and the food was *not* wasted; the same food given when joy is full
+   * too did nothing, and the caretaker should keep it. Comparing the pet
+   * rather than reasoning per item means a consumable added later is judged
+   * correctly without this rule being revisited.
+   *
+   * Every other event reports `true`: only a care action can carry a
+   * consumable, so there is nothing else for this to be false about.
+   */
+  changed: boolean;
 };
+
+/** The fields a care action can move. Bookkeeping like `lastActionTick` is
+ *  deliberately absent — it marks that something was attempted, not that it
+ *  had an effect. */
+const petMark = (state: PetState): string =>
+  [...NEED_KEYS.map((need) => state.needs[need]), state.healthRaw, state.asleep, state.sick].join(":");
 
 const clamp = (value: number, max: number): number => (value < 0 ? 0 : value > max ? max : value);
 
@@ -39,7 +63,7 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
   switch (event.type) {
     case "MILESTONE":
       // A record of what projection already determined — no state effect.
-      return { state, milestones, applied: 0 };
+      return { state, milestones, applied: 0, changed: true };
 
     case "POPULATION": {
       // Difficulty changes from this tick forward; the ticks already
@@ -49,7 +73,7 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       // from before presence weighting leaves the field absent rather than
       // undefined, so an old log folds to the state it always folded to.
       if (event.presencePermille !== undefined) state.populationPermille = event.presencePermille;
-      return { state, milestones, applied: 0 };
+      return { state, milestones, applied: 0, changed: true };
     }
 
     case "WANT_OPENED": {
@@ -69,7 +93,7 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
           ...(event.want.itemId !== undefined ? { itemId: event.want.itemId } : {}),
         };
       }
-      return { state, milestones, applied: 0 };
+      return { state, milestones, applied: 0, changed: true };
     }
 
     case "WANT_EXPIRED": {
@@ -79,7 +103,7 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
         // Explicit null, never undefined or delete (SPEC §25.2).
         state.wantOpen = null;
       }
-      return { state, milestones, applied: 0 };
+      return { state, milestones, applied: 0, changed: true };
     }
 
     case "TOY_ADDED": {
@@ -87,7 +111,7 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
         state.toys.push(event.itemId);
         state.toys.sort(); // canonical order for replay determinism
       }
-      return { state, milestones, applied: 0 };
+      return { state, milestones, applied: 0, changed: true };
     }
 
     case "HATCHED": {
@@ -98,7 +122,7 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       state.asleep = false;
       state.sleepReason = null;
       milestones.push({ kind: "HATCHED", tick: event.tick, detail: event.name });
-      return { state, milestones, applied: 0 };
+      return { state, milestones, applied: 0, changed: true };
     }
 
     case "CARE": {
@@ -106,6 +130,9 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       // reduce applies what the log says happened. This keeps replay total:
       // a log written by an older ruleset still folds.
       const record = caretakerRecord(state, event.caretakerId);
+      // Taken after projection and before the event, so what it measures is
+      // this action's doing and never the ticks that led up to it.
+      const before = petMark(state);
       let applied = 0;
 
       // The open want, granted iff the action matches its kind (and item,
@@ -197,7 +224,7 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       state.lastActionTick[event.action] = event.tick;
       record.lastActionTick[event.action] = event.tick;
       pruneCaretakers(state, event.tick);
-      return { state, milestones, applied };
+      return { state, milestones, applied, changed: petMark(state) !== before };
     }
   }
 };

@@ -7,9 +7,11 @@ import { budgetRemaining, caretakerRecord } from "./score";
 import { quirks } from "./quirks";
 import { DRINK_ITEMS, FOOD_ITEMS, QUIRK_DISLIKED_PERCENT, QUIRK_FAVORITE_PERCENT, type FoodItemId } from "./economy";
 import { EventLog, hatchedState, replay, TEST_GENERATION, testCtx } from "./testkit";
+import type { PetState } from "./model";
 import { WANT_BONUS_PERCENT, WANT_EXPIRY_JOY_DEBIT, windowEndTick, windowIndexAt, type Want } from "./wants";
 import {
   ACTION_MAGNITUDE,
+  type CareAction,
   COOLDOWNS,
   diminishedMagnitude,
   EXHAUSTED_THRESHOLD,
@@ -18,6 +20,7 @@ import {
   MEDICATE_HEALTH_RESTORE,
   NEED_MAX,
   PLAY_ENERGY_COST,
+  type NeedKey,
   TICKS_PER_HOUR,
   WEEKLY_BUDGET,
 } from "./tuning";
@@ -551,5 +554,73 @@ describe("an energy drink", () => {
     const { state } = reduce(night, { ...log.care(1, "FEED", "a"), tick, itemId: "energy_drink" }, ctx);
     expect(state.asleep).toBe(true);
     expect(state.sleepReason).toBe("NIGHT");
+  });
+});
+
+// Whether an action moved the pet at all (SPEC §13.2). A consumable is spent
+// before the sim runs, so this is what decides whether it is handed back —
+// and it cannot be `applied === 0`, because half the ways an item helps
+// bypass the budget and the curve entirely.
+describe("reporting whether care changed anything", () => {
+  const log = new EventLog();
+  const base = project(hatchedState(ctx), 1000, ctx).state;
+  const at = (overrides: Partial<PetState["needs"]>, spentOn?: NeedKey): PetState => {
+    const state: PetState = { ...base, needs: { ...base.needs, ...overrides } };
+    if (spentOn) {
+      const record = caretakerRecord(state, "a");
+      record.budget[spentOn] = [{ day: 0, applied: WEEKLY_BUDGET[spentOn] }];
+    }
+    return state;
+  };
+  const give = (state: PetState, action: CareAction, itemId?: string) =>
+    reduce(state, { ...log.care(1, action, "a"), tick: 1000, ...(itemId ? { itemId } : {}) }, ctx);
+
+  it("says so when the action restores something", () => {
+    expect(give(at({ hunger: 0 }), "FEED").changed).toBe(true);
+    expect(give(at({ hunger: 0 }), "FEED", "fish_feast").changed).toBe(true);
+  });
+
+  it("says so when only the budget-exempt half of an item lands", () => {
+    // Hunger is full and the allowance is gone, so `applied` is zero — but a
+    // Fish Feast still carries joy, and a caretaker who got that has not been
+    // robbed of anything.
+    const fed = give(at({ hunger: NEED_MAX, joy: NEED_MAX - 50_000 }, "hunger"), "FEED", "fish_feast");
+    expect(fed.applied).toBe(0);
+    expect(fed.state.needs.joy).toBeGreaterThan(NEED_MAX - 50_000);
+    expect(fed.changed).toBe(true);
+  });
+
+  it("says nothing changed when every part of an item lands nothing", () => {
+    // Full belly, spent allowance, and no room for the joy either: the food
+    // did not happen, and the pack keeps it.
+    const fed = give(at({ hunger: NEED_MAX, joy: NEED_MAX }, "hunger"), "FEED", "fish_feast");
+    expect(fed.applied).toBe(0);
+    expect(fed.changed).toBe(false);
+  });
+
+  it("judges a drink by its energy and by the sleep it ends", () => {
+    const rested = give(at({ energy: NEED_MAX }), "FEED", "energy_drink");
+    expect(rested.changed).toBe(false);
+
+    // The same full-energy can, given to a napping pet, still wakes it.
+    const napping: PetState = { ...at({ energy: NEED_MAX }), asleep: true, sleepReason: "NAP" };
+    const woken = give(napping, "FEED", "energy_drink");
+    expect(woken.applied).toBe(0);
+    expect(woken.state.asleep).toBe(false);
+    expect(woken.changed).toBe(true);
+  });
+
+  it("counts a bare action honestly too, though nothing rides on it", () => {
+    expect(give(at({ joy: NEED_MAX }), "PET").changed).toBe(false);
+    expect(give(at({ joy: NEED_MAX - 10_000 }), "PET").changed).toBe(true);
+    // LULLABY moves the pet by putting it down, whatever its energy says.
+    expect(give(at({ energy: NEED_MAX }), "LULLABY").changed).toBe(true);
+  });
+
+  it("never reports a no-op for an event that is not care", () => {
+    // Only a care action can carry a consumable, so there is nothing else for
+    // the flag to be false about, and a false here would refund nothing.
+    const fresh = new EventLog();
+    expect(reduce(genesis(TEST_GENERATION), fresh.hatched(180, "Makoto"), ctx).changed).toBe(true);
   });
 });

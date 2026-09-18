@@ -59,6 +59,9 @@ export type CareOutcome =
   | {
       ok: true;
       applied: number;
+      /** Whether the action moved the pet at all — what decides whether a
+       *  consumable spent on it is handed back (SPEC §13.2). */
+      changed: boolean;
       state: PetState;
       /** Milestones the reducer emitted applying this action (WANT_FULFILLED,
        *  RECOVERED, SLEPT) — the write path pays coins and counts titles off
@@ -94,6 +97,8 @@ type Prepared =
 type AdvanceResult = {
   state: PetState;
   applied: number;
+  /** Whether the input event moved the pet; true when there was no event. */
+  changed: boolean;
   rejected: Exclude<ValidationResult, { ok: true }> | null;
   /** Milestones the reducer emitted applying the input event, if any. */
   eventMilestones: Milestone[];
@@ -204,10 +209,11 @@ export class PetEngine {
 
       const prepared = prepare(state, ctx);
       let applied = 0;
+      let changed = true;
       let inputEvent: PetEvent | null = null;
       const eventMilestones: Milestone[] = [];
       if (prepared.kind === "reject") {
-        return { state, applied: 0, rejected: prepared.rejection, eventMilestones };
+        return { state, applied: 0, changed: false, rejected: prepared.rejection, eventMilestones };
       }
       if (prepared.kind === "event") {
         seq += 1;
@@ -215,6 +221,7 @@ export class PetEngine {
         const reduced = reduce(state, inputEvent, ctx);
         state = reduced.state;
         applied = reduced.applied;
+        changed = reduced.changed;
         toAppend.push({ event: inputEvent, extras: { applied, ...prepared.extras } });
         // Milestones produced by applying the event (RECOVERED, lullaby
         // SLEPT, WANT_FULFILLED) share its tick and fold cleanly after it.
@@ -308,7 +315,7 @@ export class PetEngine {
         await this.deps.redis.set(this.deps.key("snapshot-tick"), String(state.tick));
       }
 
-      return { state, applied, rejected: null, eventMilestones };
+      return { state, applied, changed, rejected: null, eventMilestones };
     });
   }
 
@@ -346,7 +353,7 @@ export class PetEngine {
       };
     });
     if (result.rejected) return { ok: false, rejection: result.rejected };
-    return { ok: true, applied: result.applied, state: result.state, milestones: result.eventMilestones };
+    return { ok: true, applied: result.applied, changed: result.changed, state: result.state, milestones: result.eventMilestones };
   }
 
   /** Install a communal toy for this generation (SPEC §13.2). */

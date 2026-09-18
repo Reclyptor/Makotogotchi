@@ -38,6 +38,10 @@ const post = async (url: string, body: unknown): Promise<{ status: number; body:
   return { status: response.status, body: await response.json().catch(() => null) };
 };
 
+/** The server's word that a consumable was handed back (SPEC §13.2). */
+const itemKept = (body: unknown): boolean =>
+  typeof body === "object" && body !== null && "itemKept" in body && body.itemKept === true;
+
 const errorOf = (body: unknown): string | undefined =>
   typeof body === "object" && body !== null && "error" in body && typeof body.error === "string" ? body.error : undefined;
 
@@ -110,7 +114,10 @@ export const useShop = (petName: string, onFunded: (listener: () => void) => () 
       const result = await post("/api/care", { action: care, itemId });
       if (!result) return;
       if (result.status === 200) {
-        setNotice("Used it — look at the room!");
+        // The server hands an item back when the action moved nothing, so the
+        // panel must not claim it was used — the pack still holds it, and the
+        // refresh below is about to show that.
+        setNotice(itemKept(result.body) ? `${petName} didn't need it — it's still in your pack.` : "Used it — look at the room!");
       } else {
         const reason = reasonOf(result.body);
         setNotice(isLockReason(reason) ? `${rejectionText(petName)[reason]}.` : `${petName} can't right now.`);
