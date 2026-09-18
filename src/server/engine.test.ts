@@ -173,20 +173,22 @@ describe("PetEngine", () => {
   });
 
   it("records the community's size so a cold restart keeps the same difficulty (SPEC §23.2)", async () => {
-    const before = await engine.population(generation, 7);
-    expect(before.population).toBe(7);
+    const before = await engine.population(generation, { named: 9, presencePermille: 7_000 });
+    expect(before.population).toBe(9);
+    expect(before.populationPermille).toBe(7_000);
 
     const log = await eventsSince(await db(), generation.id, -1);
     const recorded = log.filter((event) => event.type === "POPULATION");
     expect(recorded).toHaveLength(1);
-    expect(recorded[0]).toMatchObject({ type: "POPULATION", count: 7 });
+    expect(recorded[0]).toMatchObject({ type: "POPULATION", count: 9, presencePermille: 7_000 });
 
     // Difficulty must survive the loss of the hot state: a pet that got
     // harder because eight people showed up cannot quietly get easy again
     // when a pod restarts.
     await redis().flushall();
     const recovered = await engine.recover(generation);
-    expect(recovered.state.population).toBe(7);
+    expect(recovered.state.population).toBe(9);
+    expect(recovered.state.populationPermille).toBe(7_000);
     const ctx = { schedule: scheduleFor(generation.genesisEpochMs, recovered.state.tick, before.tick + 8640, "America/Chicago") };
     expect(project(recovered.state, before.tick, ctx).state).toEqual(before);
   });

@@ -94,7 +94,14 @@ export const QUESTS: Record<QuestId, QuestDef> = {
 export const questFor = (seed: number, dayIndex: number): QuestDef =>
   QUESTS[QUEST_IDS[draw32(seed, dayIndex, RNG_PURPOSE.questPick) % QUEST_IDS.length]!];
 
-/** How many distinct caretakers any of today's goals wants (SPEC §21.7). */
+/**
+ * How many distinct caretakers any of today's goals wants (SPEC §21.7).
+ *
+ * This one reads the head count rather than §23.1's presence weighting, and
+ * deliberately: a quest that wants five different people to help wants five
+ * people, and how much of last week each of them was around says nothing
+ * about how many are reachable today.
+ */
 export const questHands = (population?: number): number => {
   const active =
     population === undefined || !Number.isFinite(population) ? DIFFICULTY_BASELINE : Math.max(0, Math.floor(population));
@@ -102,12 +109,13 @@ export const questHands = (population?: number): number => {
 };
 
 /** Today's bar for a quest, at the community size the day opened with. */
-export const questTarget = (quest: QuestDef, population?: number): number => {
+export const questTarget = (quest: QuestDef, population: number | undefined, presencePermille: number | undefined): number => {
   switch (quest.growth) {
     case "care":
-      // The integer arithmetic decayRates uses, for the reason §23.2 gives:
-      // two engines must agree on the bar to the unit, forever.
-      return Math.round((quest.base * careMultiplierPermille(population)) / 1000);
+      // A care bar rises with the care the pet demands, so it reads exactly
+      // what decay reads. The integer arithmetic decayRates uses, for the
+      // reason §23.2 gives: two engines must agree on the bar to the unit.
+      return Math.round((quest.base * careMultiplierPermille(presencePermille)) / 1000);
     case "hands":
       return questHands(population);
     case "none":
@@ -127,8 +135,10 @@ export type QuestFacts = {
   lowestMeterPercent: number;
   /** True once the day has reached its evening check. */
   eveningReached: boolean;
-  /** Active caretakers as of pet-midnight; unrecorded reads as the baseline. */
+  /** Named caretakers as of pet-midnight; unrecorded reads as the baseline. */
   population: number | undefined;
+  /** Their presence-weighted total in thousandths (SPEC §23.1), if recorded. */
+  presencePermille: number | undefined;
 };
 
 export type QuestStatus = {
@@ -152,7 +162,7 @@ export const questProgress = (quest: QuestDef, facts: QuestFacts): QuestStatus =
         : quest.id === "many-hands"
           ? facts.caretakers
           : facts.feeds;
-  const target = questTarget(quest, facts.population);
+  const target = questTarget(quest, facts.population, facts.presencePermille);
   const handsTarget = questHands(facts.population);
   const reached = current >= target && facts.caretakers >= handsTarget;
   return {

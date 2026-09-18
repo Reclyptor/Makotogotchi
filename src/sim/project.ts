@@ -17,7 +17,7 @@
 //   8. health drain / regeneration, death check
 
 import { isAlive, stageAt, type CauseOfDeath, type PetState, type ProjectionContext } from "./model";
-import { careMultiplierPermille } from "./difficulty";
+import { careMultiplierPermille, presencePermilleOf } from "./difficulty";
 import { draw32, RNG_PURPOSE } from "./rng";
 import {
   CRITICAL_THRESHOLD,
@@ -75,7 +75,7 @@ export const project = (input: PetState, toTick: number, ctx: ProjectionContext)
   // How hard the community has made the pet (SPEC §23). It is fixed for the
   // whole projection: only a POPULATION event changes it, and events are
   // folded between projections, never during one.
-  const difficultyPermille = careMultiplierPermille(state.population);
+  const difficultyPermille = careMultiplierPermille(presencePermilleOf(state));
 
   for (let tick = state.tick + 1; tick <= toTick; tick++) {
     // 1. Stage evolution.

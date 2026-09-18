@@ -76,7 +76,15 @@ export const milestoneEventSchema = z.object({
 export const populationEventSchema = z.object({
   ...eventBase,
   type: z.literal("POPULATION"),
+  /** Named caretakers who acted in the window — the figure the UI names. */
   count: z.number().int().min(0).max(1_000_000),
+  /**
+   * The same community weighted by how much of the window each person was
+   * actually present for, in thousandths of a caretaker (SPEC §23.1). This is
+   * what sets difficulty. Absent in events recorded before presence weighting,
+   * where `count` stood for both and every caretaker counted as a full week.
+   */
+  presencePermille: z.number().int().min(0).max(1_000_000_000).optional(),
 });
 
 /**

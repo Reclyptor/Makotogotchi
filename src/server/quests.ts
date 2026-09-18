@@ -49,12 +49,17 @@ type DayWindow = { dayIndex: number; fromTick: number; toTick: number; eveningTi
  * the day's first tick is exactly the number the day began with; a generation
  * older than the first such event reads as the baseline everywhere else too.
  */
-const dayOpeningPopulation = async (db: Db, generationId: string, fromTick: number): Promise<number | undefined> => {
+const dayOpeningPopulation = async (
+  db: Db,
+  generationId: string,
+  fromTick: number,
+): Promise<{ population: number | undefined; presencePermille: number | undefined }> => {
   const doc = await events(db).findOne(
     { generationId, type: "POPULATION", tick: { $lt: fromTick } },
     { sort: { tick: -1 } },
   );
-  return doc?.type === "POPULATION" ? doc.count : undefined;
+  if (doc?.type !== "POPULATION") return { population: undefined, presencePermille: undefined };
+  return { population: doc.count, presencePermille: doc.presencePermille };
 };
 
 export const questDay = (generation: Generation, nowMs: number, timeZone: string): DayWindow => {
@@ -93,8 +98,9 @@ export const questView = async (
     caretakers: contributors.length,
     minigameScore: care.reduce((total, doc) => total + (doc.minigameScore ?? 0), 0),
     lowestMeterPercent: Math.min(...NEED_KEYS.map((need) => percentages[need])),
+    presencePermille: population.presencePermille,
     eveningReached: state.tick >= day.eveningTick,
-    population,
+    population: population.population,
   });
 
   return { ...status, dayIndex: day.dayIndex, quest, contributors };

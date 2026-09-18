@@ -20,7 +20,7 @@ import { PushDispatcher } from "./push/dispatcher";
 import { pushConfigured, webPushSender } from "./push/sender";
 import { TICK_SECONDS, TICKS_PER_HOUR } from "@/sim/tuning";
 import { ambientAt } from "@/sim/ambient";
-import { worthRecording } from "@/sim/difficulty";
+import { presencePermilleOf, worthRecording } from "@/sim/difficulty";
 import { activeCaretakers } from "./population";
 import { subscribeToEvents } from "./stream/hub";
 import { primeRoomCache } from "./snapshot";
@@ -149,7 +149,11 @@ const boot = async (): Promise<Runtime> => {
       if (!successor && isAlive(state) && state.tick - lastPopulationTick >= TICKS_PER_HOUR) {
         lastPopulationTick = state.tick;
         const measured = await activeCaretakers(database, state.tick);
-        if (worthRecording(state.population, measured)) await engine.population(current, measured);
+        // Difficulty follows presence, so presence is what decides whether the
+        // measurement is worth a log entry (SPEC §23.2).
+        if (worthRecording(presencePermilleOf(state), measured.presencePermille)) {
+          await engine.population(current, measured);
+        }
       }
       await dispatcher?.observe(state);
       await lease.renew();

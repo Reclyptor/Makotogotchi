@@ -45,6 +45,10 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       // Difficulty changes from this tick forward; the ticks already
       // projected above kept the rate they were lived at.
       state.population = event.count;
+      // Explicit null-free assignment, the `sickSinceTick` idiom: an event
+      // from before presence weighting leaves the field absent rather than
+      // undefined, so an old log folds to the state it always folded to.
+      if (event.presencePermille !== undefined) state.populationPermille = event.presencePermille;
       return { state, milestones, applied: 0 };
     }
 

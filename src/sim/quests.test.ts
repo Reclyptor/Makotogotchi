@@ -9,17 +9,32 @@ import {
   type QuestFacts,
 } from "./quests";
 
+import { PRESENCE_SCALE } from "./difficulty";
+
 const SEED = 0xc0ffee;
 
-const facts = (overrides: Partial<QuestFacts> = {}): QuestFacts => ({
-  feeds: 0,
-  caretakers: 0,
-  minigameScore: 0,
-  lowestMeterPercent: 0,
-  eveningReached: false,
-  population: undefined,
-  ...overrides,
-});
+/**
+ * A day's facts. `population` is a head count and presence follows from it,
+ * as though everyone named had been there all week — which is what the room
+ * sizes below mean, and which keeps every published target in this file the
+ * number it was before §23.1 started weighting presence. A test that cares
+ * about the difference passes `presencePermille` itself.
+ */
+const facts = (overrides: Partial<QuestFacts> = {}): QuestFacts => {
+  const base = {
+    feeds: 0,
+    caretakers: 0,
+    minigameScore: 0,
+    lowestMeterPercent: 0,
+    eveningReached: false,
+    population: undefined,
+    ...overrides,
+  };
+  return {
+    ...base,
+    presencePermille: overrides.presencePermille ?? (base.population === undefined ? undefined : base.population * PRESENCE_SCALE),
+  };
+};
 
 /** A baseline room: two caretakers, which is exactly what a quiet day asks. */
 const quietDay = (overrides: Partial<QuestFacts> = {}): QuestFacts =>
@@ -83,16 +98,16 @@ describe("the daily communal quest (SPEC §21.7)", () => {
 
 describe("the bar the room's size sets (SPEC §21.7)", () => {
   it("grows the count quests by the §23 care multiplier", () => {
-    expect(questTarget(QUESTS["feast-day"], 2)).toBe(10);
-    expect(questTarget(QUESTS["feast-day"], 4)).toBe(17);
-    expect(questTarget(QUESTS["feast-day"], 13)).toBe(40);
-    expect(questTarget(QUESTS["game-night"], 2)).toBe(40);
-    expect(questTarget(QUESTS["game-night"], 4)).toBe(67);
-    expect(questTarget(QUESTS["game-night"], 13)).toBe(160);
+    expect(questTarget(QUESTS["feast-day"], 2, 2000)).toBe(10);
+    expect(questTarget(QUESTS["feast-day"], 4, 4000)).toBe(17);
+    expect(questTarget(QUESTS["feast-day"], 13, 13000)).toBe(40);
+    expect(questTarget(QUESTS["game-night"], 2, 2000)).toBe(40);
+    expect(questTarget(QUESTS["game-night"], 4, 4000)).toBe(67);
+    expect(questTarget(QUESTS["game-night"], 13, 13000)).toBe(160);
   });
 
   it("leaves the meter percentage alone — there is nothing to multiply", () => {
-    for (const population of [2, 4, 9, 30]) expect(questTarget(QUESTS["full-bellies"], population)).toBe(70);
+    for (const population of [2, 4, 9, 30]) expect(questTarget(QUESTS["full-bellies"], population, population * 1000)).toBe(70);
   });
 
   it("asks half the room for hands, between two and five", () => {
@@ -101,8 +116,8 @@ describe("the bar the room's size sets (SPEC §21.7)", () => {
   });
 
   it("reads an unrecorded population as the baseline, so quiet rooms keep today's numbers", () => {
-    expect(questTarget(QUESTS["feast-day"], undefined)).toBe(10);
-    expect(questTarget(QUESTS["game-night"], undefined)).toBe(40);
+    expect(questTarget(QUESTS["feast-day"], undefined, undefined)).toBe(10);
+    expect(questTarget(QUESTS["game-night"], undefined, undefined)).toBe(40);
     expect(questHands(undefined)).toBe(2);
     expect(questHands(Number.NaN)).toBe(2);
   });

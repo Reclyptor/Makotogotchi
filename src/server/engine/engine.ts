@@ -394,7 +394,7 @@ export class PetEngine {
    * read a live count at projection time without breaking replay, so it
    * enters the log the way everything else does.
    */
-  async population(generation: Generation, count: number): Promise<PetState> {
+  async population(generation: Generation, measured: { named: number; presencePermille: number }): Promise<PetState> {
     const result = await this.advance(generation, () => ({
       kind: "event",
       event: (seq, current): PetEvent => ({
@@ -402,7 +402,8 @@ export class PetEngine {
         generationId: generation.id,
         seq,
         tick: current.tick,
-        count,
+        count: measured.named,
+        presencePermille: measured.presencePermille,
       }),
     }));
     return result.state;

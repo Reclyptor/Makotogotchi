@@ -72,11 +72,19 @@ export type PetState = {
   /** Communal toys installed this generation, sorted (SPEC §13.2). */
   toys: string[];
   /**
-   * Active caretakers as last recorded by a POPULATION event, which sets how
-   * fast needs decay (SPEC §23). Absent in histories written before that
-   * section, where it reads as the baseline and replays unchanged.
+   * Named caretakers who acted this week, as last recorded by a POPULATION
+   * event (SPEC §23). Absent in histories written before that section, where
+   * it reads as the baseline and replays unchanged. This is the number the UI
+   * names; it is not what difficulty reads.
    */
   population?: number;
+  /**
+   * The same community weighted by presence, in thousandths of a caretaker
+   * (SPEC §23.1) — what need decay actually scales by. Absent in histories
+   * recorded before presence weighting, where `population` converts straight
+   * across because that rule counted every caretaker as a whole week.
+   */
+  populationPermille?: number;
   /**
    * The want currently open, set by WANT_OPENED and cleared to explicit null
    * on settlement — never undefined, which the hot-state JSON round trip and

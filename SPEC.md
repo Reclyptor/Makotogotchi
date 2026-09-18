@@ -2818,16 +2818,38 @@ caring for the pet.
 
 ### 23.1 The Rule
 
-Let **P** be the number of distinct **named** caretakers who performed at
-least one care action within the last `BUDGET_WINDOW_DAYS` (7) pet-days,
-because the people who supply care are exactly the people who should set
-the demand. Named, because a caretaker is a cookie (§8.1) and every device,
-browser and private window mints a new one: the first community of ten
-people read as fifty-three caretakers and carried a pet tuned for
-fifty-three. A nickname (§8.5) is set once per person and is unique, so it
-is the closest thing the game has to a person. Anonymous caretakers still
-care and still score; they just do not raise the bar. The meter says
-"named caretakers" so the rule is visible where the number is.
+Let **P** be the **presence-weighted** number of **named** caretakers over
+the last `BUDGET_WINDOW_DAYS` (7) pet-days: each named caretaker contributes
+the fraction of those days on which they performed at least one care action,
+so someone here every day counts as one and someone who looked in once counts
+as a seventh of one. The people who supply care are exactly the people who
+should set the demand, and *how much* they supply is how much of the week
+they are there for.
+
+Named, because a caretaker is a cookie (§8.1) and every device, browser and
+private window mints a new one: the first community of ten people read as
+fifty-three caretakers and carried a pet tuned for fifty-three. A nickname
+(§8.5) is set once per person and is unique, so it is the closest thing the
+game has to a person. Anonymous caretakers still care and still score; they
+just do not raise the bar.
+
+**Weighted, because attendance is not supply.** The rule this replaces asked
+only whether someone had acted at all in the window, which credited a single
+Monday visit with the entire following week. A link shared somewhere, a wave
+of curiosity, fifty people looking in once — and the bar stayed at 4× for six
+days after every one of them had gone, carried by the handful who stayed. The
+same players who were hardest hit were the ones who had not left. Presence
+answers the question difficulty is really asking — *how many caretakers'
+worth of week does this pet have?* — and it is not a penalty on newcomers:
+a visitor who keeps visiting becomes a whole caretaker at exactly the rate
+they become one.
+
+The figure is carried in **thousandths of a caretaker** (`presencePermille`),
+because a seventh of a caretaker is the smallest step it can take and §4.2
+forbids the sim carrying it as a fraction. The whole-caretaker head count is
+still measured and still recorded — it is what the meter names (§23.3) — but
+it no longer sets the multiplier. They are two different facts about the same
+week: how many people helped, and how much week they add up to.
 
 That window is **bucketed by pet-day rather than continuous**: it holds seven
 day buckets and advances one at each pet-midnight, so the effective lookback
@@ -2844,8 +2866,19 @@ by:
 careMultiplier(P) = clamp( (max(P, 2) / 2) ^ 0.75 , 1 , 4 )
 ```
 
+**Between whole caretakers the published table is interpolated**, in
+integers. Without that, presence would be pointless: a seventh of a caretaker
+at a time, floored to whole people, throws away six sevenths of every
+measurement. Interpolation is linear between neighbouring entries and every
+whole-caretaker input still lands exactly on its own entry — which is also
+what lets a history recorded before this rule replay to the multiplier it was
+lived at, since that rule credited every caretaker with a whole week and
+converts straight across (§23.2).
+
 These are the measured consequences, taken from the §16.2 abandonment
-scenario rather than estimated:
+scenario rather than estimated. Read the first column as *caretakers' worth
+of week*, not as a head count — thirteen people who each turn up one day a
+week are 1.9, not 13:
 
 | Caretakers | Decay | Full → first critical need | Abandoned → dead |
 | --- | --- | --- | --- |
@@ -2891,26 +2924,50 @@ same log tomorrow would find a different number of caretakers and produce a
 different pet. So the population enters the simulation the only way anything
 does — **as an event**.
 
-- `PetState.population` holds the figure the simulation is currently using.
-  It is absent in histories recorded before this section and reads as the
-  baseline (2), so every existing generation replays byte-identically.
-- The leader re-evaluates the active-caretaker count **hourly** and appends a
-  `POPULATION` event only when the resulting multiplier moves by at least
-  `DIFFICULTY_STEP` (0.1×). The log records *changes in difficulty*, not a
-  heartbeat.
+- `PetState.populationPermille` holds the figure the simulation is currently
+  using, and `PetState.population` the head count beside it. Three eras of
+  history therefore have to fold correctly, and do:
+  - Before §23 — neither field. Reads as the baseline (2), as it always did.
+  - Before §23.1's presence weighting — `population` only. That rule counted
+    every caretaker as present for the whole window, so `population × 1000`
+    *is* its presence figure, and the interpolated table lands exactly on the
+    same entry it did. Byte-identical.
+  - Now — both, with `presencePermille` on the event.
+
+  `POPULATION` events that predate presence weighting therefore need no
+  backfill and no migration, and none has been done.
+- The leader re-evaluates the community **hourly** and appends a `POPULATION`
+  event only when the resulting multiplier moves by at least
+  `DIFFICULTY_STEP` (0.1×) — measured on presence, since presence is what
+  the multiplier reads. The log records *changes in difficulty*, not a
+  heartbeat. This matters more than it did: presence moves in sevenths, so a
+  rule that recorded every change would write an event most hours.
 - `careMultiplier` is a **hardcoded integer table** in per-mille, not a call
   to `Math.pow` at runtime: ECMA-262 leaves `Math.pow` implementation
   approximated, and a one-ULP difference between engines is exactly the kind
   of drift §4.4 exists to forbid. Decay scales by integer arithmetic
-  (`round(rate × permille / 1000)`).
+  (`round(rate × permille / 1000)`), and the interpolation between table
+  entries is integer arithmetic for the same reason — presence is measured in
+  thousandths precisely so that no fraction of a caretaker ever becomes a
+  float in `src/sim` (§4.2).
 
 ### 23.3 Visibility
 
 Rising difficulty must never feel like a silent nerf. The derived state
 exposes both the population and the multiplier, and the UI states them
-plainly beneath the meters — *"9 caretakers this week · Makoto needs 3.0× the
-care"* — so a needier pet reads as a bigger community rather than a bug.
-When the multiplier is 1.00× the line simply names the community size.
+plainly beneath the meters — *"9 named caretakers this week · Makoto needs
+3.0× the care"* — so a needier pet reads as a bigger community rather than a
+bug. When the multiplier is 1.00× the line simply names the community size.
+
+The number on that line is the **head count**, not §23.1's presence weighting,
+and that is the right choice even though it is not the number the multiplier
+reads. "Nine named caretakers this week" is a true and legible fact about the
+room. "6.4 caretakers' worth of week" is neither, and a line that has to be
+explained before it can be read is worse than one that states a little less.
+The multiplier beside it is the part players act on, and it is exact.
+
+Directly beneath sits the other half of the same picture — this caretaker's
+own remaining allowance (§2.5). Demand, then supply.
 
 
 ---

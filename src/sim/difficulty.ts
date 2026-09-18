@@ -6,11 +6,18 @@
 // two committed people sit just above water. Ten people supply forty days
 // against the same seven and the pet never leaves 100% — the stakes, and with
 // them the point, disappear. Demand therefore follows supply.
+//
+// Supply is measured in caretakers *present*, not caretakers seen: a person
+// who looked in once on Monday supplies a seventh of a week, and setting the
+// bar as though they were there all seven was how one crowded afternoon
+// pinned a pet at 4× for the following week (§23.1).
 
 /** The community size the original balance was tuned for. */
 export const DIFFICULTY_BASELINE = 2;
 /** How far the multiplier must move before the leader records it (§23.2). */
 export const DIFFICULTY_STEP_PERMILLE = 100;
+/** Presence is carried in thousandths of a caretaker, so it stays integral. */
+export const PRESENCE_SCALE = 1000;
 
 /**
  * Multiplier per active caretaker count, in per-mille, following
@@ -38,16 +45,45 @@ const MULTIPLIER_PERMILLE: readonly number[] = [
   4000, // 13 and beyond — the ceiling
 ];
 
-/** The decay multiplier for a population, in per-mille (1000 = 1.00×). */
-export const careMultiplierPermille = (population: number | undefined): number => {
-  if (population === undefined || !Number.isFinite(population)) return 1000;
-  const count = Math.max(0, Math.floor(population));
-  return MULTIPLIER_PERMILLE[Math.min(count, MULTIPLIER_PERMILLE.length - 1)]!;
+/**
+ * The decay multiplier for a presence-weighted population, in per-mille
+ * (1000 = 1.00×). The argument is in thousandths of a caretaker, so 9_000 is
+ * the nine caretakers the table above was written for.
+ *
+ * Between two whole caretakers the table is interpolated, in integers, which
+ * is what makes a fractional population mean anything: presence is a seventh
+ * of a caretaker at a time (§23.1), and flooring it would throw away six
+ * sevenths of every measurement. Every whole-caretaker input still lands
+ * exactly on its table entry, so a history recorded before presence weighting
+ * replays to the identical multiplier.
+ */
+export const careMultiplierPermille = (presencePermille: number | undefined): number => {
+  if (presencePermille === undefined || !Number.isFinite(presencePermille)) return 1000;
+  const milli = Math.max(0, Math.floor(presencePermille));
+  const last = MULTIPLIER_PERMILLE.length - 1;
+  const whole = Math.floor(milli / PRESENCE_SCALE);
+  if (whole >= last) return MULTIPLIER_PERMILLE[last]!;
+  const from = MULTIPLIER_PERMILLE[whole]!;
+  const to = MULTIPLIER_PERMILLE[whole + 1]!;
+  return from + Math.floor(((to - from) * (milli % PRESENCE_SCALE)) / PRESENCE_SCALE);
 };
 
-/** The same multiplier as a number, for display (SPEC §23.3). */
-export const careMultiplier = (population: number | undefined): number => careMultiplierPermille(population) / 1000;
+/**
+ * The presence figure a state's difficulty is set by, in thousandths.
+ *
+ * A history written before §23.1's presence rule carries only a whole-
+ * caretaker `population`, which read as a caretaker who was there all week —
+ * exactly what that rule assumed — so it converts straight across and replays
+ * byte-identically. A history written before §23 has neither and reads as the
+ * baseline, as it always did.
+ */
+export const presencePermilleOf = (state: { population?: number; populationPermille?: number }): number =>
+  state.populationPermille ?? (state.population ?? DIFFICULTY_BASELINE) * PRESENCE_SCALE;
 
-/** Whether a newly measured population is worth recording as an event. */
+/** The same multiplier as a number, for display (SPEC §23.3). */
+export const careMultiplier = (presencePermille: number | undefined): number =>
+  careMultiplierPermille(presencePermille) / 1000;
+
+/** Whether a newly measured presence is worth recording as an event. */
 export const worthRecording = (recorded: number | undefined, measured: number): boolean =>
   Math.abs(careMultiplierPermille(measured) - careMultiplierPermille(recorded)) >= DIFFICULTY_STEP_PERMILLE;

@@ -12,6 +12,7 @@ import { startTestInfra, type TestInfra } from "./testsetup";
 import { genesis } from "@/sim/genesis";
 import { questFor, QUEST_REWARD_COINS, type QuestId } from "@/sim/quests";
 import { TICKS_PER_HOUR } from "@/sim/tuning";
+import { PRESENCE_SCALE } from "@/sim/difficulty";
 import type { Generation, PetState } from "@/sim/model";
 
 const TIME_ZONE = "America/Chicago";
@@ -49,10 +50,21 @@ const care = async (
   );
 };
 
-/** The leader's record of how big the caring community is (SPEC §23.2). */
+/**
+ * The leader's record of how big the caring community is (SPEC §23.2).
+ * `count` is the head count and presence follows from it, as though everyone
+ * had been there all week — the shape these cases are written in.
+ */
 const population = async (generation: Generation, tick: number, count: number): Promise<void> => {
   seq += 1;
-  await appendEvent(await db(), { type: "POPULATION", generationId: generation.id, seq, tick, count });
+  await appendEvent(await db(), {
+    type: "POPULATION",
+    generationId: generation.id,
+    seq,
+    tick,
+    count,
+    presencePermille: count * PRESENCE_SCALE,
+  });
 };
 
 beforeAll(async () => {
