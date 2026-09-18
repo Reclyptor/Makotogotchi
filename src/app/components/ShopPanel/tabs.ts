@@ -303,7 +303,7 @@ const foodTab = (shop: ShopModel): ShopTab => ({
           ),
         ),
         ...Object.entries(shop.catalog.drinks).map(([itemId, item]) =>
-          buyRow(itemId, item, `+${item.energyBonus / 10_000}% energy · wakes from a nap`, shop, CATEGORY_ICONS.drink),
+          buyRow(itemId, item, `+${item.energyBonus / 10_000}% energy · wakes him from a daytime sleep`, shop, CATEGORY_ICONS.drink),
         ),
         ...Object.entries(shop.catalog.medicine).map(([itemId, item]) =>
           buyRow(itemId, item, "Cures instantly, no cooldown", shop, CATEGORY_ICONS.medicine),

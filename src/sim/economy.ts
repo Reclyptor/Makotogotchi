@@ -20,6 +20,8 @@ export type DrinkItem = {
   /**
    * Flat energy, bounded by purchase price like a food's joy bonus, so it
    * skips the diminishing curve and the caretaker budget — never the clamp.
+   * Must exceed EXHAUSTED_THRESHOLD, or a drink could end a nap and leave the
+   * pet tired enough to fall straight back into one.
    */
   energyBonus: number;
 };
@@ -50,10 +52,10 @@ export const FOOD_ITEMS = {
 // Drinks are not meals: they restore energy, not hunger, and they stay out of
 // FOOD_ITEMS so the taste quirks and the cravings that index that list by
 // position (SPEC §21.4, §25) are untouched by their arrival. An energy drink
-// is the one consumable Makoto takes while asleep — during an exhaustion nap
-// — and it wakes Makoto once energy clears the wake line (SPEC §13.2).
+// is the one consumable Makoto takes while asleep — during a daytime sleep,
+// napped into or sung into — and it ends that sleep outright (SPEC §13.2).
 export const DRINK_ITEMS = {
-  energy_drink: { kind: "drink", label: "Energy Drink", price: 120, energyBonus: 250_000 },
+  energy_drink: { kind: "drink", label: "Energy Drink", price: 120, energyBonus: 300_000 },
 } as const satisfies Record<string, DrinkItem>;
 
 export const MEDICINE_ITEMS = {

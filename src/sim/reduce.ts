@@ -12,7 +12,6 @@ import {
   ACTION_MAGNITUDE,
   HEALTH_MAX,
   MEDICATE_HEALTH_RESTORE,
-  NAP_WAKE_THRESHOLD,
   NEED_MAX,
   PLAY_ENERGY_COST,
   type CareAction,
@@ -143,13 +142,15 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       } else if (drink) {
         // A drink feeds nothing; its energy is flat and bounded by purchases,
         // so like a food's joy bonus it bypasses the curve and the caretaker
-        // budget but never the clamp (SPEC §13.2). Given during an
-        // exhaustion nap, it ends the nap the way rest would: once energy
-        // clears the wake line.
+        // budget but never the clamp (SPEC §13.2). Given during a daytime
+        // sleep it ends that sleep outright — not once energy happens to clear
+        // the wake line, which is the promise the item makes and the one it
+        // used to break. The bonus exceeds EXHAUSTED_THRESHOLD, so a pet woken
+        // this way is always awake enough to stay awake.
         const before = state.needs.energy;
         state.needs.energy = clamp(state.needs.energy + drink.energyBonus, NEED_MAX);
         applied = state.needs.energy - before;
-        if (state.asleep && state.sleepReason === "NAP" && state.needs.energy >= NAP_WAKE_THRESHOLD) {
+        if (state.asleep && state.sleepReason !== "NIGHT") {
           state.asleep = false;
           state.sleepReason = null;
           milestones.push({ kind: "WOKE", tick: event.tick });

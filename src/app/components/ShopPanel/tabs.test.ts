@@ -12,7 +12,7 @@ import type { RoomView } from "@/server/shop";
 
 const CATALOG = {
   food: { onigiri: { kind: "food", label: "Onigiri", price: 60, scalePercent: 120, joyBonus: 15_000 } },
-  drinks: { energy_drink: { kind: "drink", label: "Energy Drink", price: 120, energyBonus: 250_000 } },
+  drinks: { energy_drink: { kind: "drink", label: "Energy Drink", price: 120, energyBonus: 300_000 } },
   medicine: { super_medicine: { kind: "medicine", label: "Super Medicine", price: 250, bypassCooldowns: true } },
   toys: { teeter: { kind: "toy", label: "Teeter Toy", price: 400, playBonusPercent: 15 } },
   cosmetics: { bow: { kind: "cosmetic", price: 300, label: "Ribbon Bow" } },
@@ -98,7 +98,7 @@ describe("shop tabs", () => {
     });
   });
 
-  it("unlocks the energy drink during an exhaustion nap, and only the drink", () => {
+  it("unlocks the energy drink during a daytime sleep, and only the drink", () => {
     const napping = { ...awake, asleep: true, sleepReason: "NAP" as const, needs: { ...awake.needs, energy: 100_000 } };
     const tabs = shopTabs(model({ inventory: { onigiri: 1, energy_drink: 1 } }), gate(napping));
     expect(rowNamed(tab(tabs, "pack"), "Energy Drink").action).toMatchObject({
@@ -108,7 +108,7 @@ describe("shop tabs", () => {
     });
     expect(rowNamed(tab(tabs, "pack"), "Onigiri").action).toMatchObject({ availability: { ok: false, note: "Makoto is asleep" } });
     expect(rowNamed(tab(tabs, "pack"), "Energy Drink").icon).toBe("🥫");
-    expect(rowNamed(tab(tabs, "food"), "Energy Drink").detail).toBe("+25% energy · wakes from a nap");
+    expect(rowNamed(tab(tabs, "food"), "Energy Drink").detail).toBe("+30% energy · wakes him from a daytime sleep");
   });
 
   it("locks pack medicine when there is nothing to cure", () => {

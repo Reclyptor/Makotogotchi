@@ -82,9 +82,13 @@ export const canPerform = (
   switch (action) {
     case "FEED":
       if (!state.asleep) return { ok: true };
-      // A drink is the one thing Makoto takes while asleep — and only during
-      // an exhaustion nap, never the night's sleep or a lullaby's (SPEC §13.2).
-      return drinkItem(itemId) && state.sleepReason === "NAP" ? { ok: true } : reject("ASLEEP");
+      // A drink is the one thing Makoto takes while asleep — during a daytime
+      // sleep, never the night's (SPEC §13.2). Napped into or sung into is a
+      // distinction without a difference here: projection ends both the same
+      // way, at NAP_WAKE_THRESHOLD, and a caretaker looking at a sleeping pet
+      // cannot tell which one they are looking at. Refusing the can on one of
+      // them was invisible reasoning and read as a broken item.
+      return drinkItem(itemId) && state.sleepReason !== "NIGHT" ? { ok: true } : reject("ASLEEP");
     case "CLEAN":
       return state.asleep ? reject("ASLEEP") : { ok: true };
     case "PLAY":

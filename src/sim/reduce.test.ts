@@ -11,6 +11,7 @@ import { WANT_BONUS_PERCENT, WANT_EXPIRY_JOY_DEBIT, windowEndTick, windowIndexAt
 import {
   ACTION_MAGNITUDE,
   COOLDOWNS,
+  EXHAUSTED_THRESHOLD,
   HEALTH_MAX,
   LULLABY_ENERGY_GATE,
   MEDICATE_HEALTH_RESTORE,
@@ -480,8 +481,8 @@ describe("want fulfillment (SPEC §25.3)", () => {
 });
 
 // The energy drink (SPEC §13.2): energy, not hunger, flat and budget-exempt,
-// and the one thing Makoto takes while asleep — during an exhaustion nap —
-// which it ends once energy clears the wake line.
+// and the one thing Makoto takes while asleep — during a daytime sleep, which
+// it ends outright.
 describe("an energy drink", () => {
   const drink = DRINK_ITEMS.energy_drink;
   const log = new EventLog();
@@ -494,12 +495,13 @@ describe("an energy drink", () => {
   });
   const sip = (state: typeof awake) => reduce(state, { ...log.care(1, "FEED", "a"), tick: 1000, itemId: "energy_drink" }, ctx);
 
-  it("may be given during an exhaustion nap, and nothing else may", () => {
+  it("may be given during any daytime sleep, and nothing else may", () => {
     const state = napping(100_000);
     expect(canPerform(state, "FEED", "a", ctx, "energy_drink")).toMatchObject({ ok: true });
     expect(canPerform(state, "FEED", "a", ctx)).toMatchObject({ ok: false, reason: "ASLEEP" });
     expect(canPerform(state, "FEED", "a", ctx, "onigiri")).toMatchObject({ ok: false, reason: "ASLEEP" });
-    expect(canPerform({ ...state, sleepReason: "LULLABY" }, "FEED", "a", ctx, "energy_drink")).toMatchObject({ ok: false, reason: "ASLEEP" });
+    // A lullaby's sleep is the same state by another name, and takes the can.
+    expect(canPerform({ ...state, sleepReason: "LULLABY" }, "FEED", "a", ctx, "energy_drink")).toMatchObject({ ok: true });
     const night = project(hatchedState(ctx), 16 * TICKS_PER_HOUR, ctx).state;
     expect(night.sleepReason).toBe("NIGHT");
     expect(canPerform(night, "FEED", "a", ctx, "energy_drink")).toMatchObject({ ok: false, reason: "ASLEEP" });
@@ -520,16 +522,33 @@ describe("an energy drink", () => {
     expect(applied).toBe(10_000);
   });
 
-  it("ends a nap only once energy clears the wake line", () => {
-    const still = sip(napping(100_000));
-    expect(still.state.needs.energy).toBe(350_000);
-    expect(still.state.asleep).toBe(true);
-    expect(still.milestones.map((m) => m.kind)).not.toContain("WOKE");
+  // The old rule woke the pet only once the drink happened to carry energy
+  // past NAP_WAKE_THRESHOLD. A nap begins below EXHAUSTED_THRESHOLD and the
+  // bonus was exactly the width of the gap between the two, so every nap
+  // caught in its first minutes swallowed the can and slept on.
+  it("ends a daytime sleep outright, from however low it began", () => {
+    for (const energy of [0, 1, 100_000, EXHAUSTED_THRESHOLD - 1]) {
+      for (const reason of ["NAP", "LULLABY"] as const) {
+        const { state, milestones } = sip({ ...napping(energy), sleepReason: reason });
+        expect(state.asleep).toBe(false);
+        expect(state.sleepReason).toBeNull();
+        expect(milestones.map((m) => m.kind)).toContain("WOKE");
+        // And awake enough to stay awake: another tick must not re-nap it.
+        expect(state.needs.energy).toBeGreaterThan(EXHAUSTED_THRESHOLD);
+      }
+    }
+  });
 
-    const woken = sip(napping(200_000));
-    expect(woken.state.needs.energy).toBe(450_000);
-    expect(woken.state.asleep).toBe(false);
-    expect(woken.state.sleepReason).toBeNull();
-    expect(woken.milestones.map((m) => m.kind)).toContain("WOKE");
+  // The invariant the wake rests on, pinned where the number lives.
+  it("carries more energy than the line a nap begins below", () => {
+    expect(drink.energyBonus).toBeGreaterThan(EXHAUSTED_THRESHOLD);
+  });
+
+  it("leaves the night's sleep alone", () => {
+    const night = project(hatchedState(ctx), 16 * TICKS_PER_HOUR, ctx).state;
+    const tick = night.tick;
+    const { state } = reduce(night, { ...log.care(1, "FEED", "a"), tick, itemId: "energy_drink" }, ctx);
+    expect(state.asleep).toBe(true);
+    expect(state.sleepReason).toBe("NIGHT");
   });
 });
