@@ -253,6 +253,32 @@ pet requires 7 — arithmetically impossible alone, barely possible for two,
 comfortable for three. The constant *is* the minimum viable community size,
 in the same spirit as §2.4's structurally-impossible griefing.
 
+**The allowance scales with the care multiplier**, because the demand it is
+measured against does (§23). It is denominated in days of *nominal* decay, so
+leaving it flat while decay climbed made the ratio above — the one the whole
+design rests on — quietly tighten as a community grew:
+
+| Multiplier | A week of demand | One allowance | Caretakers a week needs |
+| --- | --- | --- | --- |
+| 1.00× | 7.0 nominal days | 4 | 1.75 |
+| 1.68× | 11.8 | 4 | 2.94 |
+| 2.83× | 19.8 | 4 | 4.95 |
+| 4.00× | 28.0 | 4 | **7.00** |
+
+"Barely possible for two" was only ever true at the baseline. At the cap the
+same rule quietly demanded seven people spending every point of every
+allowance perfectly, on all four needs, every week — and the people who met
+that wall first were the regulars, because they are the only ones who ever
+spend an allowance to the end. They read it as the pet refusing them
+personally, which is exactly what §2.4 promises the game never means.
+
+Scaling holds the ratio at 1.75 everywhere. Total supply still rises with
+headcount — §23's actual premise, and untouched — but the share of a week any
+one person is asked to carry no longer rises with the size of the room. A
+property test pins the ratio across the multiplier's whole range, and a second
+pins `CARETAKER_WEEKLY_BUDGET_DAYS < BUDGET_WINDOW_DAYS`, which is the line
+between this game and a single-player one.
+
 The budget is folded from the event log like all other state: a 7-slot ring
 of per-pet-day applied totals per active `(caretaker, need)`, pruned when
 stale.
@@ -2992,10 +3018,16 @@ Three properties are deliberate:
 The multiplier scales the decay of **hunger, hygiene and joy** — the needs a
 larger community can actually supply more of (`MULTIPLIED_NEEDS` in
 `tuning.ts`). **Energy is exempt**: §2.7 has the reasoning and the failure
-that made it necessary. Energy recovery during sleep, health regeneration, and
-each caretaker's weekly budget are untouched too — the budget must stay fixed
-per person, because a larger community supplying more total care is the entire
-point.
+that made it necessary. Energy recovery during sleep and health regeneration
+are untouched.
+
+Each caretaker's weekly budget, however, **scales with it** (§2.5). An earlier
+draft of this section held the budget fixed per person on the grounds that "a
+larger community supplying more total care is the entire point" — which is
+true, and is about headcount, not about each person's cap. Holding the cap
+fixed while demand scaled meant the design's central ratio drifted from 1.75
+caretakers to 7.00 across this table's range. Total supply still rises with
+headcount; what no longer rises is the share of a week one person must carry.
 
 ### 23.2 Determinism
 

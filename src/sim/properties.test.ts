@@ -7,7 +7,19 @@ import { project } from "./project";
 import { reduce } from "./reduce";
 import { genesis } from "./genesis";
 import { EventLog, TEST_GENERATION, testCtx } from "./testkit";
-import { ACTION_MAGNITUDE, CARE_ACTIONS, diminishedMagnitude, NEED_KEYS, NEED_MAX, TICKS_PER_DAY } from "./tuning";
+import {
+  ACTION_MAGNITUDE,
+  BUDGET_WINDOW_DAYS,
+  CARE_ACTIONS,
+  CARETAKER_WEEKLY_BUDGET_DAYS,
+  DAILY_DECAY,
+  diminishedMagnitude,
+  NEED_KEYS,
+  NEED_MAX,
+  TICKS_PER_DAY,
+  weeklyBudget,
+  WEEKLY_BUDGET,
+} from "./tuning";
 import type { PetEvent } from "./events";
 
 const ctx = testCtx();
@@ -121,5 +133,46 @@ describe("simulation invariants", () => {
       ),
       { numRuns: 300 },
     );
+  });
+});
+
+// The budget's one structural bound (SPEC §1.2, §2.5). Everything else about
+// it is tuning; this is the premise.
+describe("the caretaker budget cannot let one person carry the pet", () => {
+  it("caps a week's allowance below a week of decay", () => {
+    expect(CARETAKER_WEEKLY_BUDGET_DAYS).toBeLessThan(BUDGET_WINDOW_DAYS);
+  });
+
+  it("leaves a lone caretaker short however perfectly they spend it", () => {
+    // A week of nominal decay against everything one person is allowed to
+    // restore in that week, need by need. Short on every one of them, or the
+    // game has no reason to be multiplayer.
+    for (const need of NEED_KEYS) {
+      expect(WEEKLY_BUDGET[need]).toBeLessThan(BUDGET_WINDOW_DAYS * DAILY_DECAY[need]);
+    }
+  });
+
+  it("stays short by the same margin at every community size", () => {
+    // The allowance scales with the multiplier because the demand it covers
+    // does (SPEC §2.5). Without that, the caretakers a week needs ran from
+    // 1.75 at the baseline to 7.00 at the cap — the design's central ratio
+    // quietly tightening as a community grew, felt first by the regulars.
+    for (const permille of [1000, 1682, 2828, 4000]) {
+      for (const need of NEED_KEYS) {
+        const weekOfDecay = BUDGET_WINDOW_DAYS * Math.round((DAILY_DECAY[need] * permille) / 1000);
+        const allowance = weeklyBudget(need, permille);
+        expect(allowance).toBeLessThan(weekOfDecay);
+        // Same ratio as the baseline, to within integer rounding.
+        expect(weekOfDecay / allowance).toBeCloseTo(BUDGET_WINDOW_DAYS / CARETAKER_WEEKLY_BUDGET_DAYS, 2);
+      }
+    }
+  });
+
+  it("still lets one person burst-rescue a starving pet", () => {
+    // The other half of §2.5: the budget must not be so tight that a single
+    // caretaker cannot answer an emergency. One day's decay is the rescue.
+    for (const need of NEED_KEYS) {
+      expect(WEEKLY_BUDGET[need]).toBeGreaterThan(DAILY_DECAY[need]);
+    }
   });
 });

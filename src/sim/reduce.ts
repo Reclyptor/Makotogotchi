@@ -8,6 +8,7 @@ import { project } from "./project";
 import { drinkItem, foodItem, toysPlayBonusPercent } from "./economy";
 import { quirkFoodPercent } from "./quirks";
 import { budgetRemaining, caretakerRecord, pruneCaretakers, recordApplied } from "./score";
+import { careMultiplierPermille, presencePermilleOf } from "./difficulty";
 import {
   diminishedMagnitude,
   HEALTH_MAX,
@@ -192,7 +193,10 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
           // so a favorite-food craving stacks both bonuses (SPEC §25.3).
           if (fulfills) base = Math.floor((base * WANT_BONUS_PERCENT) / 100);
           const curved = diminishedMagnitude(base, state.needs[magnitude.need]);
-          applied = Math.min(curved, budgetRemaining(record, magnitude.need, event.tick));
+          applied = Math.min(
+            curved,
+            budgetRemaining(record, magnitude.need, event.tick, careMultiplierPermille(presencePermilleOf(state))),
+          );
           state.needs[magnitude.need] = clamp(state.needs[magnitude.need] + applied, NEED_MAX);
           recordApplied(record, magnitude.need, event.tick, applied);
           if (fulfills && applied > 0) {

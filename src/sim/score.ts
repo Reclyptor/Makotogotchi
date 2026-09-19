@@ -16,10 +16,11 @@ import {
   NEED_KEYS,
   SCORE_DIVISOR,
   TICKS_PER_DAY,
-  WEEKLY_BUDGET,
+  weeklyBudget,
   type CareAction,
   type NeedKey,
 } from "./tuning";
+import { careMultiplierPermille, presencePermilleOf } from "./difficulty";
 
 export const petDay = (tick: number): number => Math.floor(tick / TICKS_PER_DAY);
 
@@ -57,15 +58,24 @@ const pruneRing = (ring: BudgetDay[], day: number): void => {
   while (ring.length > 0 && ring[0]!.day < oldest) ring.shift();
 };
 
-/** How much applied restoration this caretaker has left for a need right now. */
-export const budgetRemaining = (record: CaretakerRecord, need: NeedKey, tick: number): number => {
+/**
+ * How much applied restoration this caretaker has left for a need right now,
+ * at `multiplierPermille` — the community's difficulty, because the allowance
+ * is scaled by exactly what the demand it covers is scaled by (SPEC §2.5).
+ */
+export const budgetRemaining = (
+  record: CaretakerRecord,
+  need: NeedKey,
+  tick: number,
+  multiplierPermille = 1000,
+): number => {
   const day = petDay(tick);
   const oldest = day - (BUDGET_WINDOW_DAYS - 1);
   let spent = 0;
   for (const entry of record.budget[need] ?? []) {
     if (entry.day >= oldest) spent += entry.applied;
   }
-  const remaining = WEEKLY_BUDGET[need] - spent;
+  const remaining = weeklyBudget(need, multiplierPermille) - spent;
   return remaining > 0 ? remaining : 0;
 };
 
@@ -109,9 +119,13 @@ export const contributionScore = (action: CareAction, applied: number): number =
  */
 export const allowanceRemaining = (state: PetState, caretakerId: string, tick: number): Record<NeedKey, number> => {
   const record = findCaretaker(state, caretakerId);
+  const permille = careMultiplierPermille(presencePermilleOf(state));
   const left = {} as Record<NeedKey, number>;
   for (const need of NEED_KEYS) {
-    left[need] = record === null ? 100 : Math.round((budgetRemaining(record, need, tick) * 100) / WEEKLY_BUDGET[need]);
+    left[need] =
+      record === null
+        ? 100
+        : Math.round((budgetRemaining(record, need, tick, permille) * 100) / weeklyBudget(need, permille));
   }
   return left;
 };
@@ -143,6 +157,7 @@ export const zeroApplyReason = (
   const magnitude = MAGNITUDE_ACTIONS[action];
   if (!magnitude) return null; // MEDICATE is flat: neither curved nor budgeted.
   const record = findCaretaker(state, caretakerId);
-  if (record !== null && budgetRemaining(record, magnitude.need, tick) === 0) return "SPENT";
+  const permille = careMultiplierPermille(presencePermilleOf(state));
+  if (record !== null && budgetRemaining(record, magnitude.need, tick, permille) === 0) return "SPENT";
   return diminishedMagnitude(magnitude.base, state.needs[magnitude.need]) === 0 ? "SATED" : null;
 };

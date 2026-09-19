@@ -222,8 +222,15 @@ export const HOUR_BEFORE_SLEEP = (SLEEP_HOUR + 23) % 24;
 // ── Caretaker budget (SPEC §2.5) ────────────────────────────────────────────
 
 // Applied restoration per (caretaker, need) over any rolling 7 pet-days is
-// capped at this many days' worth of nominal decay. 4 of 7 means one person
-// can burst-rescue but can never supply a week of decay alone.
+// capped at this many days' worth of nominal decay.
+//
+// It MUST stay below BUDGET_WINDOW_DAYS. At 7 a single caretaker could supply
+// a whole week unaided, which deletes the premise the whole game is built on
+// (SPEC §1.2) — a property test pins it rather than this comment.
+//
+// 4 of 7 is the ratio the whole design rests on — one person short of a week,
+// two just above it. It is held at every community size by scaling the
+// allowance with the multiplier (`weeklyBudget` below), not by raising this.
 export const CARETAKER_WEEKLY_BUDGET_DAYS = 4;
 export const BUDGET_WINDOW_DAYS = 7;
 
@@ -241,11 +248,31 @@ export const DAILY_DECAY: Record<NeedKey, number> = (() => {
   return daily;
 })();
 
+/** One caretaker's weekly allowance at the baseline difficulty. */
 export const WEEKLY_BUDGET: Record<NeedKey, number> = (() => {
   const budget = {} as Record<NeedKey, number>;
   for (const need of NEED_KEYS) budget[need] = CARETAKER_WEEKLY_BUDGET_DAYS * DAILY_DECAY[need];
   return budget;
 })();
+
+/**
+ * The same allowance at a community's difficulty (SPEC §2.5, §23).
+ *
+ * The allowance is denominated in days of *nominal* decay while the demand it
+ * is measured against is scaled by the care multiplier, so leaving it flat
+ * silently tightened the design's central ratio as a community grew: a week
+ * costs `7 × m` nominal days, and against a fixed allowance of 4 the number of
+ * caretakers required to break even ran 1.75 → 2.94 → 4.95 → 7.00 across the
+ * multiplier's range. "Barely possible for two, comfortable for three" was
+ * only ever true at 1×, and the people who met the difference were the
+ * regulars — the only ones who ever spend an allowance to the end.
+ *
+ * Scaling it holds that ratio at 1.75 everywhere. Total supply still rises
+ * with headcount, which is §23's actual premise; what stops rising is the
+ * share of a week any one person is asked to carry.
+ */
+export const weeklyBudget = (need: NeedKey, multiplierPermille = 1000): number =>
+  multiplierPermille === 1000 ? WEEKLY_BUDGET[need] : Math.round((WEEKLY_BUDGET[need] * multiplierPermille) / 1000);
 
 export const EXHAUSTED_THRESHOLD = 150_000; // involuntary nap below this
 export const NAP_WAKE_THRESHOLD = 400_000; // nap/lullaby sleep ends at this
