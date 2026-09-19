@@ -184,6 +184,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     action: "PLAY",
     applied: outcome.applied,
     tick: outcome.state.tick,
+    // The run's own payout above is earned by playing well and is untouched;
+    // this is the care ledger, and care that moved nothing earns nothing.
+    changed: outcome.changed,
   });
   await creditCoins(await db(), identity.caretakerId, coins);
   // Granting a play-game wish pays extra (SPEC §25.4).

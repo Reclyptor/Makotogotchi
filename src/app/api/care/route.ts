@@ -82,6 +82,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     action: parsed.data.action,
     applied: outcome.applied,
     tick: outcome.state.tick,
+    changed: outcome.changed,
   });
   // Granting a wish pays extra (SPEC §25.4).
   const wantCoins = await settleWantFulfillment(await db(), identity.caretakerId, outcome.milestones);

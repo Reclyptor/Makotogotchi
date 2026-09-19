@@ -122,3 +122,48 @@ describe("every writer announces the purse it just changed", () => {
     expect(announced.coins).toBe(200);
   });
 });
+
+// Care that changed nothing earns nothing (SPEC §13.1). The one-coin floor
+// rounds a small contribution up; it is not a payment for none.
+describe("coins for care that did nothing", () => {
+  it("pays the floor for a small but real contribution", async () => {
+    const database = await db();
+    const ledger = await recordContribution(database, {
+      caretakerId: "ct-tiny",
+      generationId: "gen-coins",
+      action: "FEED",
+      applied: 1_000, // scores 1, floors to a coin
+      tick: 1_000,
+    });
+    expect(ledger.coins).toBe(1);
+  });
+
+  it("pays nothing when the action moved nothing", async () => {
+    const database = await db();
+    const ledger = await recordContribution(database, {
+      caretakerId: "ct-none",
+      generationId: "gen-coins",
+      action: "FEED",
+      applied: 0,
+      tick: 1_000,
+      changed: false,
+    });
+    expect(ledger.coins).toBe(0);
+    expect((await caretakerProfile(database, "ct-none"))?.coins ?? 0).toBe(0);
+  });
+
+  it("still records that they turned up, which is what presence counts", async () => {
+    // The contribution row is how §23.1 weighs a caretaker's week, so a
+    // no-op action must not erase the fact that someone showed up and tried.
+    const database = await db();
+    await recordContribution(database, {
+      caretakerId: "ct-showed-up",
+      generationId: "gen-coins",
+      action: "CLEAN",
+      applied: 0,
+      tick: 1_000,
+      changed: false,
+    });
+    expect((await caretakerProfile(database, "ct-showed-up"))?.streakDays).toBe(1);
+  });
+});

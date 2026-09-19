@@ -226,6 +226,15 @@ strategy.
 **Per-caretaker cooldown** is what prevents one person from soloing the pet
 indefinitely.
 
+**Both cooldowns are spent by an action that restores nothing**, and that is a
+decision rather than an oversight. Not spending them would be the friendlier
+rule, but `lastActionTick` is fold state: making it conditional on the action
+having had an effect would change how every historical log replays, which §3.1
+forbids for what is ultimately a courtesy. The case it would have softened is
+largely designed out anyway — since the allowance line above and the care
+tile's own warning, a caretaker sees "Spent" or "Not needed" *before* the
+press rather than discovering it afterwards.
+
 `PET` exists as the always-available, low-value action so that a caretaker who
 arrives during a global cooldown still has something to do, and so that a
 sleeping pet is still interactive.
@@ -1615,7 +1624,7 @@ keeping live.
 | Food | Better food restores more hunger and adds a small joy bonus. Consumed on use. Peppers are characters in this world, not ingredients, so they never appear here — the Pepper Treat was legacy and is now Onigiri. |
 | Drinks | Restore energy, not hunger. The lift is flat and bounded by price, so like a food's joy bonus it skips the diminishing curve and the caretaker budget. Drinks are not meals: they live in their own table, outside the taste quirks (§21.4) and the cravings (§25), which index the meal list by position. The Energy Drink (120 coins, +30% energy) is the one consumable Makoto takes while asleep — during a **daytime** sleep, napped into (§2.9) or sung into, never the night's — and it **ends that sleep outright**. Two earlier rules made it a famously dead item, and both are worth recording. It woke Makoto only once the bonus happened to carry energy past the 40% wake line, but a nap begins *below* the 15% exhaustion line and the bonus was exactly the 25-point gap between the two: every nap answered in its first minutes swallowed the can and slept on. And it was refused during a lullaby's sleep, which projection ends at the identical threshold and which a caretaker cannot tell apart from a nap by looking — invisible reasoning, presented as a broken item. The bonus now exceeds the exhaustion line, which is the invariant the unconditional wake rests on: a pet woken by a can is always rested enough to stay awake rather than dropping straight back into the nap it was just lifted out of. Given through `FEED`, so it shares `FEED`'s cooldowns. Consumed. |
 | Medicine | Cures `SICK` instantly with no cooldown. Consumed. |
-| | **A consumable is reserved before the simulation runs** — that is what stops two requests spending the same last one — and handed back if the action is rejected *or* if it turns out to have done nothing. The test is not `applied === 0`: half of what an item gives bypasses the budget and the curve, so a Fish Feast eaten by a full pet still lands its joy and is genuinely used up. `reduce` reports whether the event moved the pet at all — any need, its health, its sleep, its sickness — and only a care action that moved none of them returns the item. Comparing the pet rather than reasoning item by item means a consumable added later is judged correctly without this rule being revisited. The shop says which happened rather than reporting "Used it" over an untouched pack. |
+| | **A consumable is reserved before the simulation runs** — that is what stops two requests spending the same last one — and handed back if the action is rejected *or* if it turns out to have done nothing. The test is not `applied === 0`: half of what an item gives bypasses the budget and the curve, so a Fish Feast eaten by a full pet still lands its joy and is genuinely used up. `reduce` reports whether the event moved the pet at all — any need, its health, its sleep, its sickness — and only a care action that moved none of them returns the item. Comparing the pet rather than reasoning item by item means a consumable added later is judged correctly without this rule being revisited. The shop says which happened rather than reporting "Used it" over an untouched pack. **It earns no coins either** — §13.1's one-coin floor rounds a small contribution up, and an action that moved nothing is not a small contribution; paying it made a spent allowance into a slow, dull way to farm the shop. The contribution row is still written, because §23.1 weighs a caretaker's week by the days they turned up, and someone who tried did turn up. |
 | Toys | Raise the `PLAY` base magnitude. Permanent for the generation, and **funded communally** rather than bought outright (§21.8). |
 | Cosmetics | Hats and accessories for the pet. Permanent, cross-generation. |
 | Room decor | Community-funded upgrades to the room, visible to everyone. Permanent. |

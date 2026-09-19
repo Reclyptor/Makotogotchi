@@ -112,11 +112,24 @@ const emptyProfileFields = (): Omit<CaretakerDoc, "_id" | "nickname" | "nickname
  */
 export const recordContribution = async (
   db: Db,
-  input: { caretakerId: string; generationId: string; action: CareAction; applied: number; tick: number },
+  input: {
+    caretakerId: string;
+    generationId: string;
+    action: CareAction;
+    applied: number;
+    tick: number;
+    /** Whether the action moved the pet (SPEC §13.2). One that did not earns
+     *  nothing; the floor below exists to round small care up, not to pay for
+     *  none. Defaults true so a caller that cannot tell is never penalised. */
+    changed?: boolean;
+  },
 ): Promise<{ score: number; coins: number; streakDays: number }> => {
   await ensureSocialIndexes(db);
   const score = contributionScore(input.action, input.applied);
-  const coins = Math.max(1, Math.floor(score / 10));
+  // The floor rounds a small but real contribution up to one coin. An action
+  // that changed nothing is not a small contribution, and paying it a coin
+  // made a spent allowance into a slow, dull way to farm the shop.
+  const coins = input.changed === false ? 0 : Math.max(1, Math.floor(score / 10));
   const day = petDay(input.tick);
 
   const existing = await caretakers(db).findOne({ _id: input.caretakerId });
