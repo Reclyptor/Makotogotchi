@@ -21,7 +21,7 @@ import {
 
 const ctx = testCtx();
 
-/** A PUP at 07:00 with everything full — the difficulty dial's start state. */
+/** A PUP at waking time with everything full — the difficulty dial's start. */
 const fullPup = (generation?: Generation): PetState => ({
   ...projectImmortal(hatchedState(ctx, generation), TICKS_PER_DAY, ctx),
   needs: { hunger: NEED_MAX, energy: NEED_MAX, hygiene: NEED_MAX, joy: NEED_MAX },
@@ -230,7 +230,7 @@ describe("community difficulty (SPEC §23)", () => {
 });
 
 describe("the difficulty dial (SPEC §16.2)", () => {
-  it("pure neglect: a full pet untouched from 07:00 goes hunger-critical in 28–32h and starves in 42–52h", () => {
+  it("pure neglect: a full pet untouched from waking goes hunger-critical in 28–32h and starves in 42–52h", () => {
     // QUIET_SEED draws no sickness inside the horizon, isolating the
     // deficit-drain clock.
     const start = fullPup(withSeed(QUIET_SEED));

@@ -1,8 +1,8 @@
 // The ONLY timezone-aware code in the project (SPEC §4.5). Generates the
 // sleep/wake boundary ticks that project() consumes as context, so src/sim
 // never touches Intl or locale data. DST transitions fall out for free: this
-// module computes each local 07:00 and 22:00 as an epoch instant, and a
-// spring-forward or fall-back day simply yields a boundary at an unusual
+// module computes each local WAKE_HOUR and SLEEP_HOUR as an epoch instant, and
+// a spring-forward or fall-back day simply yields a boundary at an unusual
 // tick distance from its neighbors.
 
 import type { PhaseSchedule } from "@/sim/model";

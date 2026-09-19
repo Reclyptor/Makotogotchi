@@ -2,7 +2,7 @@
 // for is the communal one: that one caretaker's keystrokes reach every other
 // screen, and that the keepsake reaches exactly one of them.
 //
-// The pet sleeps on its own clock (America/Chicago, 22:00–07:00), so whether
+// The pet sleeps on its own clock (America/Chicago, SLEEP_HOUR–WAKE_HOUR), so whether
 // the sky opens with confetti or with meteors depends on when CI runs. Every
 // assertion here is therefore on the part of the copy both moods share.
 
