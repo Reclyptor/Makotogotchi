@@ -95,7 +95,7 @@ describe("PetEngine", () => {
     const before = await engine.view(generation);
 
     // Kill the hot state and every other Redis key — cold cache only.
-    await redis().flushall();
+    await infra.clearRedis();
 
     const recovered = await engine.recover(generation);
     const ctx = { schedule: scheduleFor(generation.genesisEpochMs, recovered.state.tick, before.tick + 8640, "America/Chicago") };
@@ -166,7 +166,7 @@ describe("PetEngine", () => {
     // Losing Redis loses nothing: the moment is in the durable log, so the
     // fold that rebuilds the pet replays it and lands on the same state — a
     // milestone asserts what happened, it never mutates.
-    await redis().flushall();
+    await infra.clearRedis();
     const recovered = await engine.recover(generation);
     const ctx = { schedule: scheduleFor(generation.genesisEpochMs, recovered.state.tick, before.tick + 8640, "America/Chicago") };
     expect(project(recovered.state, before.tick, ctx).state).toEqual(before);
@@ -185,7 +185,7 @@ describe("PetEngine", () => {
     // Difficulty must survive the loss of the hot state: a pet that got
     // harder because eight people showed up cannot quietly get easy again
     // when a pod restarts.
-    await redis().flushall();
+    await infra.clearRedis();
     const recovered = await engine.recover(generation);
     expect(recovered.state.population).toBe(9);
     expect(recovered.state.populationPermille).toBe(7_000);

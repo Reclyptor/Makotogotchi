@@ -1999,14 +1999,35 @@ rules breaks this test loudly.
 
 ### 16.4 Integration — `src/server`
 
-`mongodb-memory-server` and a real Redis (testcontainers, or the cluster's
-Redis against a scratch DB index in local dev):
+Real Mongo and real Redis in docker, never mocks: the tests exercise the same
+drivers, the same index behaviour and the same locking semantics as
+production. (`mongodb-memory-server` is not used — its downloaded binaries do
+not run on NixOS.)
 
 - Snapshot + event-log recovery reproduces exact state after a simulated
   crash.
 - Leader lease: two engines, one leader, clean handover on expiry, zero drift
   across the gap.
 - Rate limiter behaviour at the boundaries.
+
+**One pair of containers per run, not per file.** Each integration file used
+to boot its own Mongo and Redis. Twenty files in parallel meant forty
+`docker run`s racing the daemon, and the losers failed in `beforeAll` — a
+different file each run, always `Command failed: docker run`, never an
+assertion. The failure was self-feeding: a file whose setup threw never
+reached its teardown, so it leaked the container it had already started and
+made the next run likelier to lose the same race. The suite had become
+unrunnable in its default mode, which is how a green run stops meaning
+anything.
+
+`vitest.config.ts` now starts one pair in `globalSetup` and stops them once.
+Isolation moves to where it is free — the app already reads its database name
+and Redis key prefix from the environment, so each file takes a unique
+`MONGODB_DB` and `REDIS_PREFIX` and cannot see another's writes. The one
+casualty is `flushall`, which is correct only while a file owns the whole
+server; `infra.clearRedis()` deletes that file's prefix instead, which is the
+more precise statement of what those tests meant. The full suite runs in
+about three seconds in parallel, and leaks nothing.
 
 ### 16.5 End-to-End — Playwright
 
