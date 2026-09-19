@@ -1124,6 +1124,16 @@ only identity worth carrying across, and it keeps the feature out of idle
 hands. The per-address rate limit (§8.2) and the code space (31⁶) make
 guessing one impractical inside its lifetime.
 
+**The entry point has to say what linking is for**, or the feature sits
+unused and the population keeps counting devices. "Use this name on another
+device" read as a convenience nobody needed. The real case is about the
+player: a caretaker *is* a cookie, and a score, a purse, a pack and a streak
+all hang off it, so a second device does not extend you — it halves you. Two
+part-scores, two part-streaks, and a name each, because nicknames are unique.
+The room getting an honest head count (§23.1) is the side effect, not the
+pitch; asking people to link for the sake of a number they cannot see would
+be asking them to do the game a favour.
+
 ### 8.2 Rate Limiting
 
 Redis token buckets, checked in order, cheapest first:

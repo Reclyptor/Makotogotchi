@@ -4,6 +4,15 @@
 // can enter one and become that caretaker. Claiming reloads the page: the
 // cookie changed, and everything — the stream, the purse, the name — has to
 // come back as the linked person.
+//
+// The entry point says what linking is *for*, because "use this name on
+// another device" read as a convenience nobody needed and the feature went
+// unused. A caretaker is a cookie, and a score, a purse, a pack and a streak
+// all hang off it — so a second device does not extend you, it halves you:
+// two part-scores, two part-streaks, and a name each, since nicknames are
+// unique. That is the reason to link, and it is a reason about the player
+// rather than about the population count (§23.1), which is merely what the
+// room gets out of it.
 
 import { useState } from "react";
 
@@ -49,9 +58,12 @@ export default function LinkDevices({ named }: Props) {
   if (!open) {
     return (
       <p className="text-xs text-muted">
-        <button type="button" onClick={() => setOpen(true)} className="underline underline-offset-2 hover:text-foreground">
-          {named ? "use this name on another device" : "have a code from another device?"}
+        <span aria-hidden="true">📱 </span>
+        {named ? "Caring on a phone as well as a laptop? " : "Already have a name on another device? "}
+        <button type="button" onClick={() => setOpen(true)} className="font-semibold text-foreground underline underline-offset-2 hover:text-accent">
+          {named ? "Link them" : "Link this device"}
         </button>
+        {named ? " — one name, one score, one streak." : " — bring your score and your pack across."}
       </p>
     );
   }
@@ -60,7 +72,10 @@ export default function LinkDevices({ named }: Props) {
     <section aria-label="Link devices" className="flex w-full flex-col gap-2 rounded-lg border border-white/10 p-3 text-sm">
       {named && (
         <div className="flex flex-col gap-1">
-          <p className="text-xs text-muted">Show a code here, enter it on the other device. It lasts ten minutes and works once.</p>
+          <p className="text-xs text-muted">
+            Show a code here, enter it on the other device. It lasts ten minutes and works once. Unlinked, each device is a
+            separate caretaker with its own score, coins and streak — linking makes them one.
+          </p>
           {code ? (
             <p aria-live="polite" className="font-pixel text-center text-lg tracking-[0.3em]">
               {code}
