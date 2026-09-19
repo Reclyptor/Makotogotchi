@@ -3,11 +3,21 @@
 // whole state, most important fact first (SPEC §11.7).
 
 import { describe, expect, it } from "vitest";
-import { SLIPPING_BELOW, statusLine } from "./status";
+import { SLIPPING_BELOW, statusLine, ticksUntilWake, untilWakeText } from "./status";
 import { derive } from "@/sim/derive";
 import type { PetState } from "@/sim/model";
 import { hatchedState, projectImmortal, testCtx } from "@/sim/testkit";
-import { HEALTH_MAX, NEED_MAX, STAGE_STARTS, TICKS_PER_DAY, TICKS_PER_HOUR } from "@/sim/tuning";
+import {
+  ASLEEP_HOURS,
+  AWAKE_HOURS,
+  ENERGY_SLEEP_RECOVERY,
+  HEALTH_MAX,
+  NAP_WAKE_THRESHOLD,
+  NEED_MAX,
+  STAGE_STARTS,
+  TICKS_PER_DAY,
+  TICKS_PER_HOUR,
+} from "@/sim/tuning";
 
 const ctx = testCtx();
 const contented = (state: PetState): PetState => ({
@@ -113,5 +123,55 @@ describe("the status line", () => {
       expect(line(state)).toBe(expected[stage]);
     }
     expect(line(contented(born))).toBe(expected.HATCHLING);
+  });
+});
+
+// The sleeping pet says how long it has left (SPEC §11.7). A duration, not a
+// clock time: the pet keeps one home timezone and its carers do not.
+describe("the wake countdown", () => {
+  const base = projectImmortal(hatchedState(ctx), 100, ctx);
+
+  it("counts the night down off the schedule", () => {
+    const bedtime = AWAKE_HOURS * TICKS_PER_HOUR;
+    const night = projectImmortal(hatchedState(ctx), bedtime + TICKS_PER_HOUR, ctx);
+    expect(night.asleep).toBe(true);
+    expect(night.sleepReason).toBe("NIGHT");
+    // One hour in, the rest of the night is still to run.
+    expect(ticksUntilWake(night, ctx)).toBe((ASLEEP_HOURS - 1) * TICKS_PER_HOUR);
+  });
+
+  it("counts a nap down off the recovery rate, which is what ends it", () => {
+    const napping: PetState = {
+      ...base,
+      asleep: true,
+      sleepReason: "NAP",
+      needs: { ...base.needs, energy: NAP_WAKE_THRESHOLD - 3 * ENERGY_SLEEP_RECOVERY },
+    };
+    expect(ticksUntilWake(napping, ctx)).toBe(3);
+  });
+
+  it("has nothing to count for a pet that is awake", () => {
+    expect(ticksUntilWake(base, ctx)).toBeNull();
+  });
+
+  it("reads as a duration a person can act on", () => {
+    expect(untilWakeText(0)).toBe("any moment now");
+    expect(untilWakeText(6)).toBe("any moment now"); // one minute
+    expect(untilWakeText(45 * 6)).toBe("in 45m");
+    expect(untilWakeText(2 * TICKS_PER_HOUR)).toBe("in 2h");
+    expect(untilWakeText(2 * TICKS_PER_HOUR + 20 * 6)).toBe("in 2h 20m");
+    // Never a clock time — that is the whole reason this exists.
+    for (const ticks of [0, 6, 300, 5000]) expect(untilWakeText(ticks)).not.toMatch(/\d\d:\d\d/);
+  });
+
+  it("puts the countdown in the status line, whatever put the pet down", () => {
+    for (const reason of ["NIGHT", "NAP", "LULLABY"] as const) {
+      const asleep: PetState = { ...base, asleep: true, sleepReason: reason };
+      const line = statusLine("Makoto", asleep, derive(asleep), ctx);
+      expect(line).toContain("Wakes ");
+    }
+    // And says nothing about waking when there is no schedule to read.
+    const asleep: PetState = { ...base, asleep: true, sleepReason: "NIGHT" };
+    expect(statusLine("Makoto", asleep, derive(asleep))).not.toContain("Wakes ");
   });
 });

@@ -498,7 +498,7 @@ export default function GameView() {
     return venueId === "home" ? null : venueSpec(venueId).label;
   })();
 
-  const statusText = ui ? statusLine(petName, ui.state, ui.derived) : "Connecting…";
+  const statusText = ui ? statusLine(petName, ui.state, ui.derived, ctx ?? undefined) : "Connecting…";
 
   return (
     <div className="flex w-full max-w-xl flex-col items-center gap-3">

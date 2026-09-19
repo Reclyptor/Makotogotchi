@@ -5,9 +5,18 @@
 // the whole of the pet's state, most important fact first.
 
 import type { Ailment, DerivedState, Vitality } from "@/sim/derive";
-import type { PetState } from "@/sim/model";
+import type { PetState, ProjectionContext } from "@/sim/model";
 import { CAUSE_OF_DEATH_TEXT } from "@/app/copy/death";
-import { NEED_KEYS, NEED_MAX, TICKS_PER_DAY, TICKS_PER_HOUR, type LifeStage, type NeedKey } from "@/sim/tuning";
+import {
+  ENERGY_SLEEP_RECOVERY,
+  NAP_WAKE_THRESHOLD,
+  NEED_KEYS,
+  NEED_MAX,
+  TICKS_PER_DAY,
+  TICKS_PER_HOUR,
+  type LifeStage,
+  type NeedKey,
+} from "@/sim/tuning";
 
 /** A need this far down gets a mention before it becomes an ailment. */
 export const SLIPPING_BELOW = NEED_MAX / 2;
@@ -73,27 +82,69 @@ const slipping = (state: PetState): NeedKey | null => {
   return lowest;
 };
 
-const sleeping = (state: PetState): string => {
+/**
+ * Ticks until the pet wakes, or null if that is not knowable.
+ *
+ * A duration rather than a time of day, which is the whole point: the pet
+ * keeps one home timezone and its carers do not, so "wakes at 06:00" answers
+ * the wrong question for most of the room while "wakes in 3h" answers it for
+ * everyone. Players were left refreshing a sleeping pet and concluding it was
+ * broken — *"ok is Makoto bugged? He STILL doesn't want anything from me"* —
+ * when the honest answer was a number nobody was being shown.
+ *
+ * The night ends on the clock, so it reads the schedule. A nap ends on energy,
+ * so it reads the recovery rate — exactly, since recovery is a fixed amount
+ * per sleeping tick (SPEC §2.7) and nothing else moves energy while asleep.
+ */
+export const ticksUntilWake = (state: PetState, ctx: ProjectionContext): number | null => {
+  if (!state.asleep) return null;
+  if (state.sleepReason === "NIGHT") {
+    const wake = ctx.schedule.boundaries.find((boundary) => boundary.phase === "WAKE" && boundary.tick > state.tick);
+    return wake ? wake.tick - state.tick : null;
+  }
+  const missing = NAP_WAKE_THRESHOLD - state.needs.energy;
+  return missing <= 0 ? 0 : Math.ceil(missing / ENERGY_SLEEP_RECOVERY);
+};
+
+/** "3h 20m", "45m", "any moment now" — never a clock time (see above). */
+export const untilWakeText = (ticks: number): string => {
+  const minutes = Math.round((ticks * 10) / 60);
+  if (minutes < 2) return "any moment now";
+  if (minutes < 60) return `in ${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `in ${hours}h` : `in ${hours}h ${rest}m`;
+};
+
+const sleeping = (state: PetState, ctx?: ProjectionContext): string => {
+  const until = ctx ? ticksUntilWake(state, ctx) : null;
+  const wakes = until === null ? "" : ` Wakes ${untilWakeText(until)}.`;
   switch (state.sleepReason) {
     case "NIGHT":
-      return "is asleep for the night.";
+      return `is asleep for the night.${wakes}`;
     case "NAP":
-      return "is napping until the energy comes back.";
+      return `is napping until the energy comes back.${wakes}`;
     case "LULLABY":
-      return "was sung to sleep.";
+      return `was sung to sleep.${wakes}`;
     default:
-      return "is asleep.";
+      return `is asleep.${wakes}`;
   }
 };
 
-export const statusLine = (petName: string, state: PetState, derived: DerivedState): string => {
+export const statusLine = (
+  petName: string,
+  state: PetState,
+  derived: DerivedState,
+  /** Optional: with it, a sleeping pet says how long it has left. */
+  ctx?: ProjectionContext,
+): string => {
   if (state.diedAtTick !== null) {
     const how = state.causeOfDeath ? CAUSE_OF_DEATH_TEXT[state.causeOfDeath] : "has died";
     return `${petName} ${how}. A new egg will appear soon.`;
   }
   if (derived.stage === "EGG") return "The egg is incubating…";
   const tail = HEALTH_TAIL[derived.vitality];
-  if (state.asleep) return `${petName} ${sleeping(state)}${tail}`;
+  if (state.asleep) return `${petName} ${sleeping(state, ctx)}${tail}`;
   const ailment = ailing(state, derived);
   if (ailment) return `${petName} ${ailment}${tail}`;
   if (derived.vitality === "fading") return `${petName} is fading. A little more care each day brings it back.`;

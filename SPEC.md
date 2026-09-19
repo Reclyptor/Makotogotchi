@@ -1458,6 +1458,15 @@ frame with no anchor gets no tufts either — the gravestone wears nothing.
 - Under the meters sit two lines of the same small print: the community the
   difficulty is set for (§23.3), and this caretaker's own remaining allowance
   (§2.5). Demand and supply, in that order, in one panel.
+- **A sleeping pet says how long it has left**, as a duration and never as a
+  clock time: *"Makoto is asleep for the night. Wakes in 3h 20m."* The pet
+  keeps one home timezone (§2.7) and its carers do not, so "wakes at 06:00"
+  answers the wrong question for most of the room. Without it, players
+  refreshed a sleeping pet and concluded the game was broken — *"ok is Makoto
+  bugged? He STILL doesn't want anything from me"* — when the honest answer
+  was a number nobody was being shown. The night counts down off the schedule;
+  a nap counts down off `ENERGY_SLEEP_RECOVERY`, exactly, because a fixed
+  amount per sleeping tick is the only thing that moves energy while asleep.
 - An action carries two cooldowns at once (§2.5) — the pet's and the
   caretaker's — but it gets **one** bar, spanning the single window from the
   tick that armed it to the tick it frees up. That window is whichever of the
