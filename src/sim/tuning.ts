@@ -197,6 +197,28 @@ export const COOLDOWNS: Record<CareAction, { global: number; caretaker: number }
   PET: { global: 1, caretaker: 3 }, //  10s / 30s
 };
 
+// ── Sleep (SPEC §2.7) ───────────────────────────────────────────────────────
+
+export const SLEEP_HOUR = 0;
+export const WAKE_HOUR = 6;
+
+/**
+ * The waking day, in hours — **wrap-aware**, because a night may cross
+ * midnight and this one does.
+ *
+ * Every figure below that is "per day" derives from here rather than naming a
+ * number. The caretaker budget's denominator used to read `15 * TICKS_PER_HOUR`
+ * with `07:00–22:00` in a comment beside it, which meant changing a bedtime
+ * silently desynced every caretaker's weekly allowance from the decay it is
+ * supposed to cover — a whole class of bug that cannot happen now.
+ */
+export const AWAKE_HOURS = (SLEEP_HOUR - WAKE_HOUR + 24) % 24;
+export const ASLEEP_HOURS = 24 - AWAKE_HOURS;
+
+/** The last hour before bed, wrap-aware — the room dims, the day's goal
+ *  makes its evening check (SPEC §21.7, §22.2). */
+export const HOUR_BEFORE_SLEEP = (SLEEP_HOUR + 23) % 24;
+
 // ── Caretaker budget (SPEC §2.5) ────────────────────────────────────────────
 
 // Applied restoration per (caretaker, need) over any rolling 7 pet-days is
@@ -205,7 +227,7 @@ export const COOLDOWNS: Record<CareAction, { global: number; caretaker: number }
 export const CARETAKER_WEEKLY_BUDGET_DAYS = 4;
 export const BUDGET_WINDOW_DAYS = 7;
 
-const AWAKE_TICKS_PER_DAY = 15 * TICKS_PER_HOUR; // 07:00–22:00
+const AWAKE_TICKS_PER_DAY = AWAKE_HOURS * TICKS_PER_HOUR;
 const ASLEEP_TICKS_PER_DAY = TICKS_PER_DAY - AWAKE_TICKS_PER_DAY;
 
 // Nominal daily decay (PUP-stage rates) per need — the budget denominator.
@@ -224,11 +246,6 @@ export const WEEKLY_BUDGET: Record<NeedKey, number> = (() => {
   for (const need of NEED_KEYS) budget[need] = CARETAKER_WEEKLY_BUDGET_DAYS * DAILY_DECAY[need];
   return budget;
 })();
-
-// ── Sleep (SPEC §2.7) ───────────────────────────────────────────────────────
-
-export const SLEEP_HOUR = 22;
-export const WAKE_HOUR = 7;
 
 export const EXHAUSTED_THRESHOLD = 150_000; // involuntary nap below this
 export const NAP_WAKE_THRESHOLD = 400_000; // nap/lullaby sleep ends at this

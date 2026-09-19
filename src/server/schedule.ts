@@ -151,11 +151,10 @@ export const scheduleFor = (
   const fromMs = genesisEpochMs + fromTick * TICK_MS;
   const toMs = genesisEpochMs + toTick * TICK_MS;
 
-  const boundaries: { tick: number; phase: "WAKE" | "SLEEP" }[] = [];
+  const found: { tick: number; phase: "WAKE" | "SLEEP"; epoch: number }[] = [];
   // Start one local day early so the initial phase is derived from a real
   // boundary rather than guessed.
   let cursor = fromMs - DAY_MS;
-  let initialPhase: "WAKE" | "SLEEP" = "WAKE";
 
   while (cursor <= toMs + DAY_MS) {
     const wall = wallClockAt(cursor, timeZone);
@@ -164,19 +163,27 @@ export const scheduleFor = (
       { hour: SLEEP_HOUR, phase: "SLEEP" as const },
     ]) {
       const epoch = localToEpoch({ year: wall.year, month: wall.month, day: wall.day, hour }, timeZone);
-      const tick = Math.ceil((epoch - genesisEpochMs) / TICK_MS);
-      if (tick <= fromTick) {
-        // The latest boundary at-or-before the window start defines the
-        // initial phase. Boundaries are visited in chronological order.
-        initialPhase = phase;
-      } else if (tick <= toTick && epoch <= toMs) {
-        boundaries.push({ tick, phase });
-      }
+      found.push({ tick: Math.ceil((epoch - genesisEpochMs) / TICK_MS), phase, epoch });
     }
     cursor += DAY_MS;
   }
 
-  boundaries.sort((a, b) => a.tick - b.tick);
+  // Sort before splitting, never during. A night that crosses midnight puts
+  // SLEEP earlier in the local date than WAKE, so the order this loop visits
+  // the two hours in is not chronological — and the initial phase used to be
+  // whichever of them the loop happened to see last, which is the wrong one
+  // for the whole of a midnight-to-dawn night.
+  found.sort((a, b) => a.tick - b.tick);
+
+  let initialPhase: "WAKE" | "SLEEP" = "WAKE";
+  const boundaries: { tick: number; phase: "WAKE" | "SLEEP" }[] = [];
+  for (const { tick, phase, epoch } of found) {
+    // The latest boundary at-or-before the window start defines the phase the
+    // window opens in.
+    if (tick <= fromTick) initialPhase = phase;
+    else if (tick <= toTick && epoch <= toMs) boundaries.push({ tick, phase });
+  }
+
   // A 23h/25h DST day can visit the same local date twice; drop duplicates.
   const deduped = boundaries.filter((boundary, index) => index === 0 || boundary.tick !== boundaries[index - 1]!.tick);
   return { initialPhase, boundaries: deduped };

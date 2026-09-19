@@ -11,6 +11,7 @@ import type { PetState } from "./model";
 import { WANT_BONUS_PERCENT, WANT_EXPIRY_JOY_DEBIT, windowEndTick, windowIndexAt, type Want } from "./wants";
 import {
   ACTION_MAGNITUDE,
+  AWAKE_HOURS,
   type CareAction,
   COOLDOWNS,
   diminishedMagnitude,
@@ -186,7 +187,7 @@ describe("canPerform", () => {
   });
 
   it("blocks feeding, playing, and cleaning while asleep — but not petting", () => {
-    const night = project(hatchedState(ctx), 16 * TICKS_PER_HOUR, ctx).state;
+    const night = project(hatchedState(ctx), (AWAKE_HOURS + 1) * TICKS_PER_HOUR, ctx).state;
     expect(night.asleep).toBe(true);
     expect(canPerform(night, "FEED", "a", ctx)).toMatchObject({ ok: false, reason: "ASLEEP" });
     expect(canPerform(night, "PLAY", "a", ctx)).toMatchObject({ ok: false, reason: "ASLEEP" });
@@ -214,7 +215,7 @@ describe("canPerform", () => {
   });
 
   it("blocks LULLABY on a pet that is already asleep, at night or mid-nap", () => {
-    const night = project(hatchedState(ctx), 16 * TICKS_PER_HOUR, ctx).state;
+    const night = project(hatchedState(ctx), (AWAKE_HOURS + 1) * TICKS_PER_HOUR, ctx).state;
     expect(night.asleep).toBe(true);
     expect(canPerform(night, "LULLABY", "a", ctx)).toMatchObject({ ok: false, reason: "ASLEEP" });
 
@@ -506,7 +507,7 @@ describe("an energy drink", () => {
     expect(canPerform(state, "FEED", "a", ctx, "onigiri")).toMatchObject({ ok: false, reason: "ASLEEP" });
     // A lullaby's sleep is the same state by another name, and takes the can.
     expect(canPerform({ ...state, sleepReason: "LULLABY" }, "FEED", "a", ctx, "energy_drink")).toMatchObject({ ok: true });
-    const night = project(hatchedState(ctx), 16 * TICKS_PER_HOUR, ctx).state;
+    const night = project(hatchedState(ctx), (AWAKE_HOURS + 1) * TICKS_PER_HOUR, ctx).state;
     expect(night.sleepReason).toBe("NIGHT");
     expect(canPerform(night, "FEED", "a", ctx, "energy_drink")).toMatchObject({ ok: false, reason: "ASLEEP" });
   });
@@ -549,7 +550,7 @@ describe("an energy drink", () => {
   });
 
   it("leaves the night's sleep alone", () => {
-    const night = project(hatchedState(ctx), 16 * TICKS_PER_HOUR, ctx).state;
+    const night = project(hatchedState(ctx), (AWAKE_HOURS + 1) * TICKS_PER_HOUR, ctx).state;
     const tick = night.tick;
     const { state } = reduce(night, { ...log.care(1, "FEED", "a"), tick, itemId: "energy_drink" }, ctx);
     expect(state.asleep).toBe(true);

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { composeBackdrop, GLASS, keyOf, ROOM_HEIGHT, ROOM_WIDTH, type BackdropKey } from "./compose";
 import { venueSpec } from "./venues";
 import { COZY, hex, type RGB } from "./theme";
-import { skyMomentAt } from "@/sim/atmosphere";
+import { DAY_SEGMENTS, skyMomentAt, type DaySegment } from "@/sim/atmosphere";
 
 const keyAt = (hour: number, extra: Partial<BackdropKey> = {}): BackdropKey => {
   const moment = skyMomentAt(hour, 0);
@@ -88,9 +88,18 @@ describe("backdrop composition", () => {
       for (let x = GLASS.x + 2; x < GLASS.x + 20; x++) row.push(hex(pixelAt(buffer, x, GLASS.y + 4)));
       return row.join(",");
     };
-    const hours = [3, 6, 9, 13, 17, 20];
-    const skies = new Set(hours.map(sample));
-    expect(skies.size).toBe(hours.length);
+    // One settled hour inside each segment, found rather than assumed: the
+    // hand-picked list [3, 6, 9, 13, 17, 20] quietly stopped covering one
+    // segment each the day WAKE_HOUR moved.
+    const firstHourOf = new Map<DaySegment, number>();
+    for (let hour = 0; hour < 24; hour++) {
+      const moment = skyMomentAt(hour, 0);
+      if (moment.blend === 0 && !firstHourOf.has(moment.segment)) firstHourOf.set(moment.segment, hour);
+    }
+    expect([...firstHourOf.keys()].sort()).toEqual([...DAY_SEGMENTS].sort());
+
+    const skies = new Set([...firstHourOf.values()].map(sample));
+    expect(skies.size).toBe(DAY_SEGMENTS.length);
   });
 
   it("wears the room down as the pet's condition worsens", () => {

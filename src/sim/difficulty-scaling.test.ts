@@ -15,15 +15,14 @@ import {
   worthRecording,
 } from "./difficulty";
 import {
+  AWAKE_HOURS,
   decayRates,
   ENERGY_SLEEP_RECOVERY,
   MULTIPLIED_NEEDS,
   NEED_KEYS,
   NEED_MAX,
-  SLEEP_HOUR,
   TICKS_PER_DAY,
   TICKS_PER_HOUR,
-  WAKE_HOUR,
 } from "./tuning";
 
 const whole = (caretakers: number): number => caretakers * PRESENCE_SCALE;
@@ -143,7 +142,7 @@ describe("decay scaling", () => {
    * the very care windows the crowd multiplier was raised to fill.
    */
   it("never lets a waking day cost more energy than a pet can hold", () => {
-    const awakeTicks = (SLEEP_HOUR - WAKE_HOUR) * TICKS_PER_HOUR;
+    const awakeTicks = AWAKE_HOURS * TICKS_PER_HOUR;
     const nightTicks = TICKS_PER_DAY - awakeTicks;
     for (const permille of [1000, 1682, 2559, 2828, 3344, 4000]) {
       const spent = decayRates("PUP", null, "WAKE", permille).energy * awakeTicks;

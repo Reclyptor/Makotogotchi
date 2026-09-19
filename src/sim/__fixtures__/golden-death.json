@@ -8,21 +8,21 @@
   },
   "tick": 103680,
   "bornAtTick": 180,
-  "diedAtTick": 66259,
+  "diedAtTick": 65609,
   "causeOfDeath": "hunger",
   "form": "STEADY",
   "needs": {
     "hunger": 0,
-    "energy": 736000,
+    "energy": 640900,
     "hygiene": 0,
     "joy": 0
   },
   "healthRaw": 0,
-  "asleep": true,
-  "sleepReason": "NIGHT",
+  "asleep": false,
+  "sleepReason": null,
   "sick": false,
   "sickSinceTick": null,
-  "careNum": 70224710735,
+  "careNum": 63180970892,
   "careTicks": 34560,
   "lastActionTick": {
     "FEED": 57040,
@@ -51,27 +51,27 @@
           },
           {
             "day": 1,
-            "applied": 144697
+            "applied": 156375
           },
           {
             "day": 2,
-            "applied": 230535
+            "applied": 254012
           },
           {
             "day": 3,
-            "applied": 261037
+            "applied": 288708
           },
           {
             "day": 4,
-            "applied": 271876
+            "applied": 301035
           },
           {
             "day": 5,
-            "applied": 275726
+            "applied": 305417
           },
           {
             "day": 6,
-            "applied": 277096
+            "applied": 306973
           }
         ],
         "hunger": [
@@ -81,27 +81,27 @@
           },
           {
             "day": 1,
-            "applied": 196949
+            "applied": 207074
           },
           {
             "day": 2,
-            "applied": 266980
+            "applied": 287269
           },
           {
             "day": 3,
-            "applied": 289138
+            "applied": 312644
           },
           {
             "day": 4,
-            "applied": 296149
+            "applied": 320672
           },
           {
             "day": 5,
-            "applied": 298367
+            "applied": 323213
           },
           {
             "day": 6,
-            "applied": 299069
+            "applied": 324016
           }
         ],
         "hygiene": [
@@ -182,27 +182,27 @@
           },
           {
             "day": 1,
-            "applied": 166599
+            "applied": 180099
           },
           {
             "day": 2,
-            "applied": 259973
+            "applied": 287025
           },
           {
             "day": 3,
-            "applied": 289517
+            "applied": 320858
           },
           {
             "day": 4,
-            "applied": 298865
+            "applied": 331563
           },
           {
             "day": 5,
-            "applied": 301823
+            "applied": 334950
           },
           {
             "day": 6,
-            "applied": 302759
+            "applied": 336022
           }
         ],
         "hygiene": [
@@ -242,27 +242,27 @@
           },
           {
             "day": 1,
-            "applied": 160702
+            "applied": 169215
           },
           {
             "day": 2,
-            "applied": 223285
+            "applied": 240401
           },
           {
             "day": 3,
-            "applied": 245524
+            "applied": 265697
           },
           {
             "day": 4,
-            "applied": 253426
+            "applied": 274686
           },
           {
             "day": 5,
-            "applied": 256234
+            "applied": 277880
           },
           {
             "day": 6,
-            "applied": 257232
+            "applied": 279015
           }
         ]
       }

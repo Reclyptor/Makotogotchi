@@ -13,6 +13,7 @@ import { genesis } from "@/sim/genesis";
 import { questFor, QUEST_REWARD_COINS, type QuestId } from "@/sim/quests";
 import { TICKS_PER_HOUR } from "@/sim/tuning";
 import { PRESENCE_SCALE } from "@/sim/difficulty";
+import { HOUR_BEFORE_SLEEP } from "@/sim/tuning";
 import type { Generation, PetState } from "@/sim/model";
 
 const TIME_ZONE = "America/Chicago";
@@ -183,8 +184,8 @@ describe("quest settlement", () => {
     const generation = generationFor("gen-clock", "feast-day");
     const day = questDay(generation, GENESIS_MS + 60_000, TIME_ZONE);
     expect(day.dayIndex).toBe(0);
-    // Genesis is 07:00 local, so 21:00 the same day is fourteen hours in.
-    expect(day.eveningTick).toBe(14 * TICKS_PER_HOUR);
+    // Genesis is 07:00 local, so the evening check lands that many hours in.
+    expect(day.eveningTick).toBe((HOUR_BEFORE_SLEEP - 7) * TICKS_PER_HOUR);
     expect(day.toTick - day.fromTick).toBe(24 * TICKS_PER_HOUR);
     expect(day.fromTick).toBeLessThan(0); // local midnight preceded genesis
   });

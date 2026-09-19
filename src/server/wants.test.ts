@@ -10,12 +10,14 @@ import { closeRedis, key, redis } from "./redis/client";
 import { createGeneration, eventsSince } from "./db/repository";
 import { PetEngine } from "./engine/engine";
 import { observeWants, settleWantFulfillment, windowIsScheduledAwake } from "./wants";
+import { phaseAt } from "@/sim/model";
+import { TICKS_PER_DAY } from "@/sim/tuning";
 import { caretakerProfile } from "./social";
 import { startTestInfra, type TestInfra } from "./testsetup";
 import { genesis } from "@/sim/genesis";
 import { reduce } from "@/sim/reduce";
 import { scheduleFor } from "./schedule";
-import { WANT_REWARD_COINS, wantAt, WANT_WINDOW_TICKS } from "@/sim/wants";
+import { WANT_REWARD_COINS, wantAt, WANT_WINDOW_TICKS, windowEndTick } from "@/sim/wants";
 import type { Generation, PetState } from "@/sim/model";
 import { TICK_SECONDS } from "@/sim/tuning";
 
@@ -154,14 +156,41 @@ describe("settleWantFulfillment", () => {
 });
 
 describe("windowIsScheduledAwake", () => {
-  it("accepts day windows and rejects any window touching scheduled sleep", () => {
-    // Genesis 11:53: awake until 22:00 = tick 3642. Window 5 ends at 3240.
-    expect(windowIsScheduledAwake(GENESIS_MS, 1, TZ)).toBe(true);
-    expect(windowIsScheduledAwake(GENESIS_MS, 5, TZ)).toBe(true);
-    // Window 6 [3240, 3780) straddles 22:00; window 7 sits fully in sleep.
-    expect(windowIsScheduledAwake(GENESIS_MS, 6, TZ)).toBe(false);
-    expect(windowIsScheduledAwake(GENESIS_MS, 7, TZ)).toBe(false);
-    // Deep into day two's waking span (07:00 day two = tick 6882).
-    expect(windowIsScheduledAwake(GENESIS_MS, 13, TZ)).toBe(true);
+  // Written against the schedule rather than against a list of window indices
+  // computed by hand for one bedtime. The indices moved when the night did,
+  // and the arithmetic that produced them was only ever in a comment.
+  const schedule = scheduleFor(GENESIS_MS, 0, 4 * TICKS_PER_DAY, TZ);
+  const fullyAwake = (windowIndex: number): boolean => {
+    const start = windowIndex * WANT_WINDOW_TICKS;
+    const end = windowEndTick(windowIndex);
+    if (phaseAt(schedule, start) !== "WAKE") return false;
+    return !schedule.boundaries.some((boundary) => boundary.tick > start && boundary.tick < end);
+  };
+
+  it("accepts exactly the windows that sit wholly inside waking hours", () => {
+    // Two pet-days of windows is enough to cover a bedtime, a night and a
+    // dawn however the schedule is tuned.
+    const windows = Math.ceil((2 * TICKS_PER_DAY) / WANT_WINDOW_TICKS);
+    for (let index = 0; index < windows; index++) {
+      expect(windowIsScheduledAwake(GENESIS_MS, index, TZ), `window ${index}`).toBe(fullyAwake(index));
+    }
+  });
+
+  it("finds both answers in that span, so the case above is not vacuous", () => {
+    const windows = Math.ceil((2 * TICKS_PER_DAY) / WANT_WINDOW_TICKS);
+    const verdicts = Array.from({ length: windows }, (_, index) => windowIsScheduledAwake(GENESIS_MS, index, TZ));
+    expect(verdicts).toContain(true);
+    expect(verdicts).toContain(false);
+  });
+
+  it("refuses a window that straddles bedtime, not only one inside the night", () => {
+    const bedtime = schedule.boundaries.find((boundary) => boundary.phase === "SLEEP");
+    expect(bedtime).toBeDefined();
+    // A want must not open on a span the pet sleeps through the end of, so
+    // the interesting case is the window bedtime falls *inside*.
+    const index = Math.floor(bedtime!.tick / WANT_WINDOW_TICKS);
+    expect(bedtime!.tick).toBeGreaterThan(index * WANT_WINDOW_TICKS);
+    expect(bedtime!.tick).toBeLessThan(windowEndTick(index));
+    expect(windowIsScheduledAwake(GENESIS_MS, index, TZ)).toBe(false);
   });
 });

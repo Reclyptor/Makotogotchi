@@ -9,7 +9,7 @@
 
 import type { SleepReason } from "./model";
 import { draw32, RNG_PURPOSE } from "./rng";
-import { SLEEP_HOUR, WAKE_HOUR } from "./tuning";
+import { HOUR_BEFORE_SLEEP, WAKE_HOUR } from "./tuning";
 
 export const DAY_SEGMENTS = ["night", "dawn", "morning", "midday", "afternoon", "dusk"] as const;
 export type DaySegment = (typeof DAY_SEGMENTS)[number];
@@ -23,18 +23,23 @@ export type Weather = (typeof WEATHERS)[number];
 const MINUTES_PER_DAY = 24 * 60;
 
 // Segment boundaries, in pet-local hours. They bracket the sleep schedule
-// (§2.4): dawn ends exactly as the pet wakes at 07:00, and night falls an
-// hour before it goes to bed at 22:00, so the room is already dim when it
-// climbs into bed.
-const SEGMENT_STARTS: readonly { hour: number; segment: DaySegment }[] = [
+// (§2.4): dawn ends exactly as the pet wakes, and night falls an hour before
+// it goes to bed, so the room is already dim when it climbs into bed. Both
+// derive from the schedule rather than naming an hour — `SLEEP_HOUR - 1` was
+// a quiet −1 the day bedtime moved to midnight.
+const SEGMENT_STARTS: readonly { hour: number; segment: DaySegment }[] = ([
   { hour: 0, segment: "night" },
-  { hour: 5, segment: "dawn" },
+  { hour: WAKE_HOUR - 1, segment: "dawn" },
   { hour: WAKE_HOUR, segment: "morning" },
   { hour: 11, segment: "midday" },
   { hour: 15, segment: "afternoon" },
   { hour: 18, segment: "dusk" },
-  { hour: SLEEP_HOUR - 1, segment: "night" },
-];
+  { hour: HOUR_BEFORE_SLEEP, segment: "night" },
+] satisfies readonly { hour: number; segment: DaySegment }[])
+  // Bedtime at midnight puts "an hour before bed" at 23:00 and the day's
+  // opening night at 00:00 — the same segment twice, which is fine, and in
+  // ascending order, which the lookup below requires.
+  .filter((start, index, all) => index === 0 || start.hour > all[index - 1]!.hour);
 
 /** How long before a boundary the outgoing sky starts dissolving. */
 const TRANSITION_MINUTES = 40;

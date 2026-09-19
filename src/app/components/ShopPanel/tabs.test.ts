@@ -9,6 +9,7 @@ import { iconTables, shopTabs, initialTab, type CareGate, type ShopModel, type S
 import { hatchedState, testCtx } from "@/sim/testkit";
 import { projectImmortal } from "@/sim/testkit";
 import type { RoomView } from "@/server/shop";
+import { AWAKE_HOURS, TICKS_PER_HOUR } from "@/sim/tuning";
 
 const CATALOG = {
   food: { onigiri: { kind: "food", label: "Onigiri", price: 60, scalePercent: 120, joyBonus: 15_000 } },
@@ -89,7 +90,7 @@ describe("shop tabs", () => {
   });
 
   it("locks pack food while Makoto sleeps, in words rather than an enum", () => {
-    const asleep = projectImmortal(awake, 5500, ctx); // past SLEEP_HOUR on day 0
+    const asleep = projectImmortal(awake, (AWAKE_HOURS + 1) * TICKS_PER_HOUR, ctx); // past bedtime on day 0
     expect(asleep.asleep).toBe(true);
     const tabs = shopTabs(model({ inventory: { onigiri: 2 } }), gate(asleep));
     expect(rowNamed(tab(tabs, "pack"), "Onigiri").action).toMatchObject({

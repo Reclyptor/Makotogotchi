@@ -321,8 +321,9 @@ five minutes, bounded by the 45s global cooldown.
 
 ### 2.7 Day and Night
 
-The pet keeps a home timezone (`America/Chicago`). Between `SLEEP_HOUR` and
-`WAKE_HOUR` it sleeps:
+The pet keeps a home timezone (`America/Chicago`). Between `SLEEP_HOUR`
+(00:00) and `WAKE_HOUR` (06:00) it sleeps — a **six-hour night inside an
+eighteen-hour day**:
 
 - Energy recovers; hunger and joy decay at a reduced rate; hygiene is
   unchanged.
@@ -340,6 +341,43 @@ Gating on energy alone told a caretaker their napping pet was wide awake.
 This gives the game a daily rhythm and — importantly — means the overnight
 window is the *least* dangerous time, not the most. Nobody is punished for
 sleeping.
+
+**The night is six hours, not nine, and it crosses midnight.** The old
+22:00–07:00 window spent a third of every day in a state where `FEED`, `PLAY`
+and `CLEAN` are all refused, and it did so during the evening hours when this
+community is most awake — a pet asleep at 22:00 Chicago is asleep from 20:00
+on the west coast and from 04:00 across the Atlantic. Three hours move back
+into the day, where care can actually land. The costs are stated rather than
+discovered: hunger and joy decay about 10% more per pet-day (they decay at
+0.4× while asleep, and there is now less asleep), energy about 20% more, and
+the caretaker budget's denominator rises with them so every allowance grows to
+match — `DAILY_DECAY` derives from the schedule rather than restating it.
+
+The energy economy still holds with margin: a waking day costs
+`70 × 6,480 = 453,600` against a night that repays `300 × 2,160 = 648,000`.
+
+**A night that crosses midnight is a real constraint, not a cosmetic one**, and
+five places had the old ordering baked in. They are listed because the class of
+bug is worth recognising, not because the list is interesting:
+
+- `AWAKE_TICKS_PER_DAY` read `15 * TICKS_PER_HOUR` with `07:00–22:00` in a
+  comment beside it. Changing a bedtime would have silently desynced every
+  caretaker's weekly allowance from the decay it exists to cover — the budget
+  would have gone on describing a day the pet no longer lived.
+- `scheduleFor` derived a window's opening phase by visiting `WAKE_HOUR` then
+  `SLEEP_HOUR` on each local date and keeping the last one seen, which is only
+  chronological while `WAKE_HOUR < SLEEP_HOUR`. With a midnight bedtime, SLEEP
+  (00:00) precedes WAKE (06:00) on the same date, and **every window opening
+  after dawn would have reported the pet asleep all morning**. Boundaries are
+  now sorted before the split rather than during it.
+- The sky's segment table and the daily quest's evening check both read
+  `SLEEP_HOUR - 1`, which is `-1` at midnight.
+- The test schedules computed `SLEEP_HOUR - WAKE_HOUR` for the waking day,
+  which is negative.
+
+All five now derive from `AWAKE_HOURS` / `ASLEEP_HOURS` / `HOUR_BEFORE_SLEEP`
+in `tuning.ts`, which are wrap-aware. The hours are genuinely tunable now, in
+the way §4.1 always claimed every constant in that file was.
 
 **Energy is exempt from §23's community multiplier**, and it is the only need
 that is. The multiplier's premise is that a bigger community can supply more

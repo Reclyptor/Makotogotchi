@@ -4,6 +4,7 @@ import { stageAt, type PetState } from "./model";
 import { genesis } from "./genesis";
 import { hatchedState, projectImmortal, TEST_GENERATION, testCtx } from "./testkit";
 import {
+  AWAKE_HOURS,
   CRITICAL_THRESHOLD,
   EXHAUSTED_THRESHOLD,
   HEALTH_MAX,
@@ -44,7 +45,7 @@ describe("project", () => {
 
   it("falls asleep at the schedule boundary and recovers energy overnight", () => {
     const state = hatchedState(ctx);
-    const nightfall = 15 * TICKS_PER_HOUR; // 22:00 relative to a 07:00 tick 0
+    const nightfall = AWAKE_HOURS * TICKS_PER_HOUR; // bedtime, relative to a tick 0 at WAKE_HOUR
     const { state: evening, milestones } = project(state, nightfall, ctx);
     expect(evening.asleep).toBe(true);
     expect(evening.sleepReason).toBe("NIGHT");

@@ -11,14 +11,14 @@
 import type { Collection, Db } from "mongodb";
 import { derive } from "@/sim/derive";
 import { isAlive, type Generation, type PetState } from "@/sim/model";
-import { NEED_KEYS, SLEEP_HOUR } from "@/sim/tuning";
+import { HOUR_BEFORE_SLEEP, NEED_KEYS } from "@/sim/tuning";
 import { questFor, questProgress, QUEST_REWARD_COINS, type QuestDef, type QuestStatus } from "@/sim/quests";
 import { events, isDuplicateKeyError } from "./db/collections";
 import { localDayIndex, localTickAt } from "./schedule";
 import { creditCoins } from "./social";
 
 /** The evening check sits one hour before the pet goes to sleep. */
-const EVENING_HOUR = SLEEP_HOUR - 1;
+const EVENING_HOUR = HOUR_BEFORE_SLEEP;
 
 export type QuestDoc = {
   /** `${generationId}:${dayIndex}` — the claim is the primary key. */

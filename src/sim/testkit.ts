@@ -1,5 +1,5 @@
 // Shared fixtures for the sim tests. Everything here is deterministic: fixed
-// seeds, a schedule aligned so tick 0 is 07:00 (WAKE_HOUR) on day 0, and a
+// seeds, a schedule aligned so tick 0 is WAKE_HOUR on day 0, and a
 // seq-assigning event factory.
 
 import type { Generation, PetState, PhaseSchedule, ProjectionContext } from "./model";
@@ -7,7 +7,7 @@ import { genesis } from "./genesis";
 import { project } from "./project";
 import { reduce } from "./reduce";
 import type { CareEvent, HatchedEvent, PetEvent } from "./events";
-import { HEALTH_MAX, SLEEP_HOUR, TICKS_PER_DAY, TICKS_PER_HOUR, WAKE_HOUR, type CareAction } from "./tuning";
+import { AWAKE_HOURS, HEALTH_MAX, TICKS_PER_DAY, TICKS_PER_HOUR, type CareAction } from "./tuning";
 
 export const TEST_GENERATION: Generation = {
   id: "gen-test",
@@ -27,12 +27,13 @@ export const QUIET_SEED = 1337;
 export const withSeed = (seed: number): Generation => ({ ...TEST_GENERATION, seed });
 
 /**
- * Schedule with tick 0 at WAKE_HOUR: awake [0, 5400), asleep [5400, 8640),
- * repeating for `days` days.
+ * Schedule with tick 0 at WAKE_HOUR: awake for AWAKE_HOURS, asleep for the
+ * rest, repeating for `days` days. Both derive from the schedule constants,
+ * so a bedtime change moves the fixtures with it.
  */
 export const testSchedule = (days: number): PhaseSchedule => {
   const boundaries: { tick: number; phase: "WAKE" | "SLEEP" }[] = [];
-  const awakeTicks = (SLEEP_HOUR - WAKE_HOUR) * TICKS_PER_HOUR;
+  const awakeTicks = AWAKE_HOURS * TICKS_PER_HOUR;
   for (let day = 0; day < days; day++) {
     boundaries.push({ tick: day * TICKS_PER_DAY + awakeTicks, phase: "SLEEP" });
     boundaries.push({ tick: (day + 1) * TICKS_PER_DAY, phase: "WAKE" });

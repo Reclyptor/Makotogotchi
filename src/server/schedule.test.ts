@@ -5,32 +5,43 @@
 import { describe, expect, it } from "vitest";
 import { isoWeekKey, isoWeekKeyAtTick, localHourAt, scheduleFor } from "./schedule";
 import { phaseAt } from "@/sim/model";
-import { TICKS_PER_DAY, TICKS_PER_HOUR, TICK_SECONDS } from "@/sim/tuning";
+import { ASLEEP_HOURS, AWAKE_HOURS, TICKS_PER_DAY, TICKS_PER_HOUR, TICK_SECONDS, WAKE_HOUR } from "@/sim/tuning";
 
 describe("scheduleFor", () => {
-  // 2026-01-05 07:00:00 America/Chicago (CST, UTC-6) = 13:00 UTC.
-  const GENESIS = Date.UTC(2026, 0, 5, 13, 0, 0);
+  // 2026-01-05, local WAKE_HOUR in America/Chicago (CST, UTC-6), so tick 0 is
+  // the moment the pet wakes.
+  const GENESIS = Date.UTC(2026, 0, 5, WAKE_HOUR + 6, 0, 0);
 
-  it("anchors boundaries at local 07:00 and 22:00", () => {
+  it("anchors boundaries at the local wake and sleep hours", () => {
     const schedule = scheduleFor(GENESIS, 0, 2 * TICKS_PER_DAY, "America/Chicago");
-    expect(schedule.initialPhase).toBe("WAKE"); // genesis is exactly 07:00
-    expect(schedule.boundaries[0]).toEqual({ tick: 15 * TICKS_PER_HOUR, phase: "SLEEP" }); // 22:00
-    expect(schedule.boundaries[1]).toEqual({ tick: TICKS_PER_DAY, phase: "WAKE" }); // 07:00 next day
+    expect(schedule.initialPhase).toBe("WAKE"); // genesis is exactly WAKE_HOUR
+    expect(schedule.boundaries[0]).toEqual({ tick: AWAKE_HOURS * TICKS_PER_HOUR, phase: "SLEEP" });
+    expect(schedule.boundaries[1]).toEqual({ tick: TICKS_PER_DAY, phase: "WAKE" });
   });
 
   it("reports the correct phase for a window starting mid-night", () => {
-    const midnightTick = 17 * TICKS_PER_HOUR; // 00:00 local
-    const schedule = scheduleFor(GENESIS, midnightTick, midnightTick + TICKS_PER_DAY, "America/Chicago");
+    const bedtime = AWAKE_HOURS * TICKS_PER_HOUR;
+    const schedule = scheduleFor(GENESIS, bedtime, bedtime + TICKS_PER_DAY, "America/Chicago");
     expect(schedule.initialPhase).toBe("SLEEP");
-    expect(phaseAt(schedule, midnightTick + 6 * TICKS_PER_HOUR)) // 06:00
-      .toBe("SLEEP");
-    expect(phaseAt(schedule, midnightTick + 8 * TICKS_PER_HOUR)) // 08:00
-      .toBe("WAKE");
+    expect(phaseAt(schedule, bedtime + (ASLEEP_HOURS - 1) * TICKS_PER_HOUR)).toBe("SLEEP");
+    expect(phaseAt(schedule, bedtime + (ASLEEP_HOURS + 1) * TICKS_PER_HOUR)).toBe("WAKE");
+  });
+
+  it("opens a mid-morning window awake, though that date's night began before dawn", () => {
+    // The regression this guards: a night that crosses midnight puts SLEEP
+    // (00:00) EARLIER in the local date than WAKE. The builder visits the two
+    // hours in a fixed order and used to let the last one it saw define the
+    // opening phase — so every window opening after dawn reported SLEEP, and
+    // the pet read as asleep through the whole morning. Boundaries are sorted
+    // before the split now, never during it.
+    const midMorning = 4 * TICKS_PER_HOUR;
+    const schedule = scheduleFor(GENESIS, midMorning, midMorning + 4 * TICKS_PER_HOUR, "America/Chicago");
+    expect(schedule.initialPhase).toBe("WAKE");
   });
 
   it("spring forward: the night of 2026-03-08 is one hour shorter", () => {
-    // DST begins 2026-03-08 02:00 Chicago. The 22:00→07:00 night spanning it
-    // contains only 8 wall-clock hours.
+    // DST begins 2026-03-08 02:00 Chicago, which the night now spans, so it
+    // contains one wall-clock hour fewer than it should.
     const horizon = 70 * TICKS_PER_DAY;
     const schedule = scheduleFor(GENESIS, 0, horizon, "America/Chicago");
     const boundaries = schedule.boundaries;
@@ -45,11 +56,11 @@ describe("scheduleFor", () => {
     expect(mar8Wake).toBeDefined();
     const precedingSleep = [...boundaries].reverse().find((b) => b.phase === "SLEEP" && b.tick < mar8Wake!.tick);
     expect(precedingSleep).toBeDefined();
-    expect(mar8Wake!.tick - precedingSleep!.tick).toBe(8 * TICKS_PER_HOUR);
+    expect(mar8Wake!.tick - precedingSleep!.tick).toBe((ASLEEP_HOURS - 1) * TICKS_PER_HOUR);
   });
 
   it("fall back: the night of 2026-11-01 is one hour longer", () => {
-    // DST ends 2026-11-01 02:00 Chicago: a 10-hour 22:00→07:00 night.
+    // DST ends 2026-11-01 02:00 Chicago: a night one wall-clock hour longer.
     const nov = Date.UTC(2026, 9, 25, 12, 0, 0); // genesis a week before
     const schedule = scheduleFor(nov, 0, 14 * TICKS_PER_DAY, "America/Chicago");
     const nov1Wake = schedule.boundaries.find((b) => {
@@ -58,7 +69,7 @@ describe("scheduleFor", () => {
     });
     expect(nov1Wake).toBeDefined();
     const precedingSleep = [...schedule.boundaries].reverse().find((b) => b.phase === "SLEEP" && b.tick < nov1Wake!.tick);
-    expect(nov1Wake!.tick - precedingSleep!.tick).toBe(10 * TICKS_PER_HOUR);
+    expect(nov1Wake!.tick - precedingSleep!.tick).toBe((ASLEEP_HOURS + 1) * TICKS_PER_HOUR);
   });
 
   // Wall-clock slots are memoized, and the transition days are precisely
