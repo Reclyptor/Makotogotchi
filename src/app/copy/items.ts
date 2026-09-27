@@ -96,13 +96,16 @@ export const foodDetail = (item: FoodItem): string =>
 export const drinkDetail = (item: DrinkItem): string =>
   [`+${item.energyBonus / 10_000}% energy`, ...perkText(item.perks), "wakes Makoto from a daytime sleep"].join(" · ");
 
-/** What the pack can hand the Feed tile: a food or a drink, with its glyph and its line. */
-export type PackEntry = { itemId: string; label: string; icon: string; detail: string };
+/** What a row can be short by, said the same way on every surface that sells. */
+export const needsMoreCoins = (shortfall: number): string => `Needs ${shortfall} more 🪙`;
 
-export const packEntry = (itemId: string): PackEntry | null => {
+/** A food or a drink as the Feed menu offers it: glyph, line, and what it costs to own. */
+export type FeedEntry = { itemId: string; label: string; icon: string; detail: string; price: number };
+
+export const feedEntry = (itemId: string): FeedEntry | null => {
   const food = foodItem(itemId);
-  if (food) return { itemId, label: food.label, icon: ITEM_ICONS[itemId] ?? CATEGORY_ICONS.food, detail: foodDetail(food) };
+  if (food) return { itemId, label: food.label, icon: ITEM_ICONS[itemId] ?? CATEGORY_ICONS.food, detail: foodDetail(food), price: food.price };
   const drink = drinkItem(itemId);
-  if (drink) return { itemId, label: drink.label, icon: ITEM_ICONS[itemId] ?? CATEGORY_ICONS.drink, detail: drinkDetail(drink) };
+  if (drink) return { itemId, label: drink.label, icon: ITEM_ICONS[itemId] ?? CATEGORY_ICONS.drink, detail: drinkDetail(drink), price: drink.price };
   return null;
 };

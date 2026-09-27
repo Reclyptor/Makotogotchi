@@ -23,7 +23,6 @@ import NicknameEditor from "@/app/components/NicknameEditor";
 import LinkDevices from "@/app/components/LinkDevices";
 import PushToggle from "@/app/components/PushToggle";
 import ShopPanel from "@/app/components/ShopPanel";
-import type { TabId } from "@/app/components/ShopPanel/tabs";
 import QuestBanner from "@/app/components/QuestBanner";
 import WantBanner from "@/app/components/WantBanner";
 import { wantAsk, wantGranted, wantLapse } from "@/app/components/WantBanner/copy";
@@ -211,7 +210,6 @@ export default function GameView() {
   );
   const [muted, setMuted] = useState(true);
   const [shopOpen, setShopOpen] = useState(false);
-  const [shopTab, setShopTab] = useState<TabId | undefined>(undefined);
   const [playing, setPlaying] = useState<MinigameId | null>(null);
   const [spectating, setSpectating] = useState<{ name: string; game: string; score: number } | null>(null);
   const [localSecret, setLocalSecret] = useState<{ mood: SpectacleMood; nonce: number } | null>(null);
@@ -639,12 +637,8 @@ export default function GameView() {
           caretakerId={caretakerId}
           petName={petName}
           nowTickExact={ui.nowTickExact}
-          pack={stream.purse?.inventory ?? {}}
+          purse={stream.purse}
           onPlay={() => setPlaying(pickGame())}
-          onShop={() => {
-            setShopTab("food");
-            setShopOpen(true);
-          }}
         />
       )}
 
@@ -672,10 +666,7 @@ export default function GameView() {
         {ui && !isEgg && !isDead && (
           <button
             type="button"
-            onClick={() => {
-              setShopTab(undefined);
-              setShopOpen((open) => !open);
-            }}
+            onClick={() => setShopOpen((open) => !open)}
             aria-expanded={shopOpen}
             aria-label="Shop"
             className="press panel !rounded-full px-4 py-1.5 text-sm font-semibold hover:border-gold/40"
@@ -695,7 +686,6 @@ export default function GameView() {
           purse={stream.purse}
           onFunded={onFunded}
           petDay={ui.petDay}
-          {...(shopTab !== undefined ? { initialTab: shopTab } : {})}
           onClose={() => setShopOpen(false)}
         />
       )}

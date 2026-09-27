@@ -8,11 +8,11 @@
 // the accessible name (SPEC §11.3).
 //
 // Feed is a split tile. Its face serves the free meal in one tap, as it
-// always did; a chevron beside it opens the pack — every food and drink this
-// caretaker owns, each with its line and its own availability — and a way
-// into the shop when the pack is empty. Choosing a meal used to mean opening
-// the shop, finding the Pack tab and using it from there, which nobody did;
-// a menu belongs on the tile that feeds.
+// always did; a chevron beside it opens the menu — every food and drink the
+// shop sells, each with its line and its own availability. What you own
+// shows a count and feeds in one tap; what you don't shows its price and is
+// bought and fed in one tap, or says how far short you are. A menu that only
+// listed the pack showed a new caretaker two rows: rice, and a link.
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { canPerform } from "@/sim/validate";
@@ -20,7 +20,8 @@ import { zeroApplyReason, type ZeroApplyReason } from "@/sim/score";
 import { CARE_ACTIONS, TICK_SECONDS, type CareAction } from "@/sim/tuning";
 import { DRINK_ITEMS, FOOD_ITEMS } from "@/sim/economy";
 import type { PetState, ProjectionContext } from "@/sim/model";
-import { packEntry, type PackEntry } from "@/app/copy/items";
+import { feedEntry, needsMoreCoins, type FeedEntry } from "@/app/copy/items";
+import type { Purse } from "@/server/purse";
 import { isLockReason, REASON_GLYPH, REASON_SHORT, rejectionText, zeroApplyText, ZERO_APPLY_GLYPH, ZERO_APPLY_SHORT } from "./copy";
 
 const ACTION_META: Record<CareAction, { label: string; emoji: string }> = {
@@ -70,12 +71,10 @@ export type ActionBarProps = {
    * a bar empties on exactly the tick canPerform() starts saying yes.
    */
   nowTickExact: number;
-  /** This caretaker's pack, live off the stream (SPEC §13.1) — what Feed can offer besides the free meal. */
-  pack: Partial<Record<string, number>>;
+  /** This caretaker's coins and pack, live off the stream (SPEC §13.1), or null before a caretaker exists. */
+  purse: Purse | null;
   /** PLAY launches the minigame (SPEC §13.3) instead of posting directly. */
   onPlay: () => void;
-  /** Opens the shop on its Food tab, for a pack with nothing in it. */
-  onShop: () => void;
 };
 
 type Tile = {
@@ -88,7 +87,7 @@ type Tile = {
   cooldownFraction: number;
 };
 
-export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExact, pack, onPlay, onShop }: ActionBarProps) {
+export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExact, purse, onPlay }: ActionBarProps) {
   const [notice, setNotice] = useState<string | null>(null);
   const [chooserOpen, setChooserOpen] = useState(false);
   const chooserId = useId();
@@ -99,7 +98,7 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExa
   // action moves it: an applied-nothing result has to be explained by the
   // world as it was when the button was pressed, not as it is afterwards.
   const act = useCallback(
-    async (action: CareAction, outlook: ZeroApplyReason | null, item?: PackEntry) => {
+    async (action: CareAction, outlook: ZeroApplyReason | null, item?: FeedEntry, justBought = false) => {
       setNotice(null);
       const response = await fetch("/api/care", {
         method: "POST",
@@ -115,7 +114,10 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExa
       } else if (response.status === 409) {
         const body = (await response.json().catch(() => null)) as { reason?: string } | null;
         const reason = body?.reason;
-        setNotice(isLockReason(reason) ? `${rejectionText(petName)[reason]}.` : `${petName} can't do that right now.`);
+        const why = isLockReason(reason) ? rejectionText(petName)[reason] : `${petName} can't do that right now`;
+        // A refused action hands the item back (SPEC §13.2); one just bought
+        // for this is worth saying so about, or the purchase reads as lost.
+        setNotice(item && justBought ? `Bought the ${item.label} — ${why}. It's in your pack.` : `${why}.`);
       } else if (response.ok) {
         const body = (await response.json().catch(() => null)) as { applied?: number; itemKept?: boolean } | null;
         if (item && body?.itemKept) {
@@ -127,6 +129,30 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExa
       }
     },
     [petName],
+  );
+
+  // Buying from the menu is buying to feed: the purchase and the meal are one
+  // tap, and a purchase that goes through but a meal that does not still
+  // leaves the item in the pack, which the notice says.
+  const buyAndFeed = useCallback(
+    async (item: FeedEntry) => {
+      setNotice(null);
+      const response = await fetch("/api/shop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ buy: item.itemId }),
+      }).catch(() => null);
+      if (!response) {
+        setNotice("Connection hiccup — try again.");
+        return;
+      }
+      if (!response.ok) {
+        setNotice(response.status === 402 ? `Not enough 🪙 for the ${item.label}.` : `Couldn't buy the ${item.label}.`);
+        return;
+      }
+      await act("FEED", null, item, true);
+    },
+    [act],
   );
 
   const reasons = rejectionText(petName);
@@ -165,14 +191,18 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExa
   });
   const feed = tiles.find((tile) => tile.action === "FEED")!;
 
-  // The pack, in catalog order, each entry judged the way the shop judges it
-  // (SPEC §13.2): a drink is offered during a nap, a meal is not.
+  // The whole catalog, in shop order, each entry judged the way the shop
+  // judges it (SPEC §13.2): the pet's rules first — a drink is offered during
+  // a nap, a meal is not — then, for what is not yet owned, the balance.
+  const coins = purse?.coins ?? 0;
   const entries = FEEDABLE_IDS.flatMap((itemId) => {
-    const count = pack[itemId] ?? 0;
-    const entry = count > 0 ? packEntry(itemId) : null;
+    const entry = feedEntry(itemId);
     if (!entry) return [];
+    const count = purse?.inventory[itemId] ?? 0;
     const verdict = canPerform(state, "FEED", caretakerId, ctx, itemId);
-    return [{ entry, count, ok: verdict.ok, note: verdict.ok ? null : reasons[verdict.reason] }];
+    const short = count > 0 ? 0 : Math.max(0, entry.price - coins);
+    const note = !verdict.ok ? reasons[verdict.reason] : short > 0 ? needsMoreCoins(short) : null;
+    return [{ entry, count, ok: note === null, note }];
   });
 
   // The chooser is a menu: Escape and a click elsewhere close it, arrows walk
@@ -294,7 +324,7 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExa
                     setChooserOpen(true);
                   }
                 }}
-                className="press flex w-7 shrink-0 items-center justify-center border-l border-white/10 text-xs text-muted hover:bg-white/5 hover:text-foreground"
+                className="press flex w-8 shrink-0 items-center justify-center border-l border-white/10 text-sm text-muted hover:bg-white/5 hover:text-foreground"
               >
                 <span aria-hidden="true">{chooserOpen ? "▴" : "▾"}</span>
               </button>
@@ -340,9 +370,10 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExa
               type="button"
               role="menuitem"
               aria-disabled={!ok}
-              aria-label={`${entry.label}, ${count} in your pack${note ? ` — ${note}` : ""}`}
+              aria-label={`${entry.label}, ${count > 0 ? `${count} in your pack` : `${entry.price} coins`}${note ? ` — ${note}` : ""}`}
               onClick={() => {
-                if (ok) choose(() => void act("FEED", null, entry));
+                if (!ok) return;
+                choose(() => void (count > 0 ? act("FEED", null, entry) : buyAndFeed(entry)));
               }}
               className={`flex items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/5 ${ok ? "" : "cursor-not-allowed opacity-60"}`}
             >
@@ -354,21 +385,10 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExa
                 {/* The lock's reason replaces the detail line, as on a shop row (SPEC §11.3). */}
                 <span className="block truncate text-xs text-muted">{note ?? entry.detail}</span>
               </span>
-              <span className="shrink-0 text-xs tabular-nums text-muted">×{count}</span>
+              {/* Owned: how many. Not owned: what one costs, in the balance's own glyph. */}
+              <span className="shrink-0 text-xs tabular-nums text-muted">{count > 0 ? `×${count}` : `🪙 ${entry.price}`}</span>
             </button>
           ))}
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => choose(onShop)}
-            className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm text-muted hover:bg-white/5 hover:text-foreground"
-          >
-            <span aria-hidden="true" className="w-6 text-center text-lg">
-              🛒
-            </span>
-            <span className="flex-1">{entries.length === 0 ? "Pack's empty — shop for more" : "Shop for more"}</span>
-            <span aria-hidden="true">→</span>
-          </button>
         </div>
       )}
 

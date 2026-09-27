@@ -1476,16 +1476,20 @@ frame with no anchor gets no tufts either — the gravestone wears nothing.
   before the press instead of after it.
 - **Feed is a split tile.** Its face serves the free meal in one tap, as it
   always has; the chevron beside it opens a menu — the free meal first, then
-  every food and drink in this caretaker's pack with its count and its perk
-  line, then a way into the shop's Food tab. Each entry is judged by
+  **every food and drink the shop sells**, in shop order, with its perk line.
+  What the caretaker owns shows a count and feeds in one tap; what they do
+  not shows its price and is bought and fed in one tap, or is locked with how
+  far short the balance is (§11.3). Each entry is also judged by
   `canPerform()` with its own item id, exactly as the shop's Pack tab judges
-  it, so a drink is offered during a nap when the meal is not, and a locked
-  entry shows its reason where its detail would be (§11.3). The chevron itself
-  is never locked, for that reason. The menu is a `role="menu"`: arrows walk
-  it, Escape closes it, and focus returns to the chevron. Before this, using a
-  meal from the pack meant opening the shop and finding the Pack tab — a
-  menu nobody thought of as one, because it was nowhere near the tile that
-  feeds.
+  it, so a drink is offered during a nap when the meal is not; the chevron
+  itself is never locked, for that reason. A purchase that goes through but a
+  meal the pet refuses leaves the item in the pack, and the notice says so.
+  The menu is a `role="menu"`: arrows walk it, Escape closes it, and focus
+  returns to the chevron. Two earlier shapes failed: using a meal from the
+  pack meant opening the shop and finding the Pack tab — a menu nobody thought
+  of as one, because it was nowhere near the tile that feeds — and a menu that
+  listed only the pack showed a new caretaker two rows, rice and a link, which
+  is not a menu either.
 - Under the meters sit two lines of the same small print: the community the
   difficulty is set for (§23.3), and this caretaker's own remaining allowance
   (§2.5). Demand and supply, in that order, in one panel.

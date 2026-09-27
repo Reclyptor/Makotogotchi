@@ -15,7 +15,7 @@ import { THEMES, venueSpec } from "@/game/scene/backdrop";
 import { BALLOT_MAX_EXTRA_TICKETS, rotationPool, ticketsFor, VENUE_TICKET_COINS, type VenueId } from "@/sim/atmosphere";
 import { canPerform } from "@/sim/validate";
 import type { DrinkItem, FoodItem } from "@/sim/economy";
-import { CATEGORY_ICONS, drinkDetail, foodDetail, ITEM_ICONS } from "@/app/copy/items";
+import { CATEGORY_ICONS, drinkDetail, foodDetail, ITEM_ICONS, needsMoreCoins } from "@/app/copy/items";
 import type { PetState, ProjectionContext } from "@/sim/model";
 import type { catalog, FundingView, RoomView } from "@/server/shop";
 import { rejectionText } from "../ActionBar/copy";
@@ -109,7 +109,7 @@ type GrandItem = ShopCatalog["grand"][keyof ShopCatalog["grand"]];
 const themeIdOf = (item: GrandItem): string | null => (item.group === "theme" ? item.themeId : null);
 
 const affordable = (coins: number, price: number): Availability =>
-  coins >= price ? { ok: true } : { ok: false, note: `Needs ${price - coins} more 🪙` };
+  coins >= price ? { ok: true } : { ok: false, note: needsMoreCoins(price - coins) };
 
 /** What a consumable does, from the same line the Food tab sells it with. */
 const consumableDetail = (shopCatalog: ShopCatalog, itemId: string): string => {
