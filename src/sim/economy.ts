@@ -3,14 +3,32 @@
 // pricing and ownership. Cosmetics and room decor are deliberately absent:
 // they never touch the simulation (visual only, stored server-side).
 
+/**
+ * What a consumable does besides the thing it is for (SPEC §13.2): flat,
+ * signed, and bounded by purchase price, so like the joy on a Fish Feast
+ * they skip the diminishing curve and the caretaker budget but never the
+ * clamp. A cost here is what makes choosing a meal a decision — candy is
+ * cheap joy with a health tax, pizza is the biggest meal and a greasy one —
+ * where two foods that were strictly better than the free meal were not.
+ */
+export type Perks = {
+  /** Need units: 10_000 is one percent of a meter. */
+  joy?: number;
+  hygiene?: number;
+  /**
+   * Health units: 10_000_000_000 is one percent. A negative perk floors at 1
+   * rather than 0, so a treat can never be the thing that kills.
+   */
+  health?: number;
+};
+
 export type FoodItem = {
   kind: "food";
   label: string;
   price: number;
   /** Multiplies FEED's base magnitude (percent). */
   scalePercent: number;
-  /** Flat joy on top — bounded by purchase price, so budget-exempt. */
-  joyBonus: number;
+  perks: Perks;
 };
 
 export type DrinkItem = {
@@ -18,12 +36,13 @@ export type DrinkItem = {
   label: string;
   price: number;
   /**
-   * Flat energy, bounded by purchase price like a food's joy bonus, so it
-   * skips the diminishing curve and the caretaker budget — never the clamp.
-   * Must exceed EXHAUSTED_THRESHOLD, or a drink could end a nap and leave the
-   * pet tired enough to fall straight back into one.
+   * Flat energy, bounded by purchase price like a perk, so it skips the
+   * diminishing curve and the caretaker budget — never the clamp. Must
+   * exceed EXHAUSTED_THRESHOLD, or a drink could end a nap and leave the pet
+   * tired enough to fall straight back into one.
    */
   energyBonus: number;
+  perks: Perks;
 };
 
 export type MedicineItem = {
@@ -44,9 +63,16 @@ export type ToyItem = {
 
 // Peppers are people here — Dr Pepper runs the surgery, and other things
 // besides — so they are not on this list and should not end up on it.
+//
+// Append only. Taste and cravings index this list by position over the
+// prefix a generation was born with (SPEC §21.4), so a meal inserted
+// mid-list would hand every living pet a new favourite.
 export const FOOD_ITEMS = {
-  onigiri: { kind: "food", label: "Onigiri", price: 60, scalePercent: 120, joyBonus: 15_000 },
-  fish_feast: { kind: "food", label: "Fish Feast", price: 150, scalePercent: 145, joyBonus: 35_000 },
+  onigiri: { kind: "food", label: "Onigiri", price: 60, scalePercent: 120, perks: { joy: 15_000 } },
+  fish_feast: { kind: "food", label: "Fish Feast", price: 150, scalePercent: 145, perks: { joy: 35_000 } },
+  sausage: { kind: "food", label: "Sausage", price: 90, scalePercent: 135, perks: { joy: 20_000 } },
+  pizza: { kind: "food", label: "Nile River Pizza", price: 200, scalePercent: 175, perks: { joy: 10_000, hygiene: -30_000 } },
+  candy: { kind: "food", label: "Candy", price: 30, scalePercent: 40, perks: { joy: 40_000, health: -10_000_000_000 } },
 } as const satisfies Record<string, FoodItem>;
 
 // Drinks are not meals: they restore energy, not hunger, and they stay out of
@@ -55,7 +81,8 @@ export const FOOD_ITEMS = {
 // is the one consumable Makoto takes while asleep — during a daytime sleep,
 // napped into or sung into — and it ends that sleep outright (SPEC §13.2).
 export const DRINK_ITEMS = {
-  energy_drink: { kind: "drink", label: "Energy Drink", price: 120, energyBonus: 300_000 },
+  energy_drink: { kind: "drink", label: "Energy Drink", price: 120, energyBonus: 300_000, perks: {} },
+  soda: { kind: "drink", label: "Soda", price: 80, energyBonus: 160_000, perks: { joy: 20_000, health: -10_000_000_000 } },
 } as const satisfies Record<string, DrinkItem>;
 
 export const MEDICINE_ITEMS = {
@@ -75,6 +102,18 @@ export type SimItemId = FoodItemId | DrinkItemId | MedicineItemId | ToyItemId;
 
 /** Declaration order is the canonical order every quirk draw indexes into. */
 export const FOOD_ITEM_IDS = Object.keys(FOOD_ITEMS) as readonly FoodItemId[];
+
+/** The menu's length before a generation started recording it (SPEC §21.4). */
+export const LEGACY_FOOD_CATALOG_SIZE = 2;
+
+/**
+ * The meals a generation knows: the catalog as it stood when the egg was
+ * laid. New meals are appended, never inserted, so a prefix of today's list
+ * is exactly yesterday's list — which is what keeps a living pet's favourite
+ * dish its favourite when the menu grows.
+ */
+export const foodCatalogOf = (generation: { foodCatalogSize?: number }): readonly FoodItemId[] =>
+  FOOD_ITEM_IDS.slice(0, generation.foodCatalogSize ?? LEGACY_FOOD_CATALOG_SIZE);
 
 export const foodItem = (itemId: string | undefined): FoodItem | null =>
   itemId !== undefined && itemId in FOOD_ITEMS ? FOOD_ITEMS[itemId as FoodItemId] : null;
@@ -103,16 +142,4 @@ export const PERFORMANCE_MAX = 150;
 // out better for the same score; joy is joy, but enthusiasm is worth coins.
 export const QUIRK_FAVORITE_PERCENT = 125;
 export const QUIRK_DISLIKED_PERCENT = 75;
-/** The menu's length before a generation started recording it (SPEC §21.4). */
-export const LEGACY_FOOD_CATALOG_SIZE = 2;
-
-/**
- * The meals a generation knows: the catalog as it stood when the egg was
- * laid. New meals are appended, never inserted, so a prefix of today's list
- * is exactly yesterday's list — which is what keeps a living pet's favourite
- * dish its favourite when the menu grows.
- */
-export const foodCatalogOf = (generation: { foodCatalogSize?: number }): readonly FoodItemId[] =>
-  FOOD_ITEM_IDS.slice(0, generation.foodCatalogSize ?? LEGACY_FOOD_CATALOG_SIZE);
-
 export const QUIRK_FAVORITE_GAME_COIN_PERCENT = 125;

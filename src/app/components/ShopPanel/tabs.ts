@@ -14,6 +14,8 @@
 import { THEMES, venueSpec } from "@/game/scene/backdrop";
 import { BALLOT_MAX_EXTRA_TICKETS, rotationPool, ticketsFor, VENUE_TICKET_COINS, type VenueId } from "@/sim/atmosphere";
 import { canPerform } from "@/sim/validate";
+import type { DrinkItem, FoodItem } from "@/sim/economy";
+import { CATEGORY_ICONS, drinkDetail, foodDetail, ITEM_ICONS } from "@/app/copy/items";
 import type { PetState, ProjectionContext } from "@/sim/model";
 import type { catalog, FundingView, RoomView } from "@/server/shop";
 import { rejectionText } from "../ActionBar/copy";
@@ -96,73 +98,6 @@ export type ShopTab = {
   footnote?: string;
 };
 
-/**
- * One glyph per item, so a long list is scannable without reading it.
- *
- * Two rules, both learned the hard way. **Name the actual object**: the
- * Running Wheel wore 🎡, a Ferris wheel, which is a fairground ride and not
- * the thing in the cage. And **no two rows should look alike**: Fish Feast
- * wore 🐟 while the Aquarium wore 🐠, so the shop offered a fish to eat and a
- * fish to keep with all but the same picture, a tab apart.
- *
- * tabs.test.ts holds only the mechanical half of the second rule — two items
- * with the *identical* glyph. It could not have caught the fish, because 🐟
- * and 🐠 are different characters that happen to look the same at 18px, and
- * it cannot catch a Ferris wheel standing in for a hamster wheel at all.
- * Those need eyes on the rendered tab.
- */
-const ITEM_ICONS: Record<string, string> = {
-  onigiri: "🍙",
-  fish_feast: "🍣",
-  super_medicine: "💊",
-  energy_drink: "🥫",
-  teeter: "🛝",
-  wheel: "🛞",
-  bow: "🎀",
-  cap: "🧢",
-  crown: "👑",
-  plant: "🪴",
-  picture: "🖼️",
-  lamp: "💡",
-  window_seat: "🪟",
-  aquarium: "🐠",
-  kotatsu: "♨️",
-  theme_cabin: "🪵",
-  theme_seaside: "🌊",
-  beach: "🏖️",
-  forest: "🌲",
-  blossom: "🌸",
-  pond: "🎏",
-  shrine: "⛩️",
-  mountain: "🗻",
-  garden: "🌻",
-  meadow: "🦋",
-};
-
-/**
- * What a row shows when its item has no glyph of its own, so a catalog
- * addition degrades to its category rather than to nothing.
- *
- * Where the game already has a symbol for the idea, these borrow it rather
- * than inventing one: 🍖 is the FEED action's and the Hunger meter's, 💊 is
- * MEDICATE's, 🎮 is PLAY's, 🧭 is the one the status line uses for an away
- * day. The rest are generics chosen not to collide with any real item —
- * cosmetics used to fall back to 🎀 and decor to 🪴, which are the Ribbon
- * Bow's and the Potted Plant's, so a new item would have quietly
- * impersonated an existing one in the same list.
- */
-const CATEGORY_ICONS = {
-  food: "🍖",
-  medicine: "💊",
-  drink: "🧃",
-  toy: "🎮",
-  cosmetic: "🎩",
-  decor: "🛋️",
-  grand: "🪑",
-  theme: "🎨",
-  venue: "🧭",
-} as const;
-
 /** Exported for the test that holds the no-two-items-alike rule. */
 export const iconTables = { items: ITEM_ICONS, categories: CATEGORY_ICONS };
 
@@ -175,6 +110,17 @@ const themeIdOf = (item: GrandItem): string | null => (item.group === "theme" ? 
 
 const affordable = (coins: number, price: number): Availability =>
   coins >= price ? { ok: true } : { ok: false, note: `Needs ${price - coins} more 🪙` };
+
+/** What a consumable does, from the same line the Food tab sells it with. */
+const consumableDetail = (shopCatalog: ShopCatalog, itemId: string): string => {
+  const food = (shopCatalog.food as Record<string, FoodItem | undefined>)[itemId];
+  if (food) return foodDetail(food);
+  const drink = (shopCatalog.drinks as Record<string, DrinkItem | undefined>)[itemId];
+  if (drink) return drinkDetail(drink);
+  return MEDICINE_DETAIL;
+};
+
+const MEDICINE_DETAIL = "Cures instantly, no cooldown";
 
 /** The pet's own rules, asked the same way the server asks them (SPEC §4.1). */
 const usable = (gate: CareGate, care: "FEED" | "MEDICATE", itemId: string): Availability => {
@@ -278,7 +224,7 @@ const packTab = (shop: ShopModel, gate: CareGate): ShopTab => {
         id: itemId,
         icon: icon(itemId, CATEGORY_ICONS[medicine ? "medicine" : drink ? "drink" : "food"]),
         name: `${itemLabel(shop.catalog, itemId)} ×${count}`,
-        detail: medicine ? "Cures instantly, no cooldown" : drink ? "A jolt of energy, even mid-nap" : "An extra-tasty meal",
+        detail: consumableDetail(shop.catalog, itemId),
         action: { kind: "use", itemId, care, availability },
       };
     });
@@ -299,21 +245,9 @@ const foodTab = (shop: ShopModel): ShopTab => ({
     {
       id: "food",
       rows: [
-        ...Object.entries(shop.catalog.food).map(([itemId, item]) =>
-          buyRow(
-            itemId,
-            item,
-            `Feeds ×${(item.scalePercent / 100).toFixed(2)} · +${item.joyBonus / 10_000}% joy`,
-            shop,
-            "🍖",
-          ),
-        ),
-        ...Object.entries(shop.catalog.drinks).map(([itemId, item]) =>
-          buyRow(itemId, item, `+${item.energyBonus / 10_000}% energy · wakes him from a daytime sleep`, shop, CATEGORY_ICONS.drink),
-        ),
-        ...Object.entries(shop.catalog.medicine).map(([itemId, item]) =>
-          buyRow(itemId, item, "Cures instantly, no cooldown", shop, CATEGORY_ICONS.medicine),
-        ),
+        ...Object.entries(shop.catalog.food).map(([itemId, item]) => buyRow(itemId, item, foodDetail(item), shop, CATEGORY_ICONS.food)),
+        ...Object.entries(shop.catalog.drinks).map(([itemId, item]) => buyRow(itemId, item, drinkDetail(item), shop, CATEGORY_ICONS.drink)),
+        ...Object.entries(shop.catalog.medicine).map(([itemId, item]) => buyRow(itemId, item, MEDICINE_DETAIL, shop, CATEGORY_ICONS.medicine)),
       ],
     },
   ],

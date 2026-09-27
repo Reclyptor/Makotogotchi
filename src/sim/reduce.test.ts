@@ -265,6 +265,35 @@ describe("economy items (SPEC §13)", () => {
     expect(loved.applied).toBeGreaterThan(loathed.applied);
   });
 
+  it("a meal's perks land whole, signed, and outside the budget (SPEC §13.2)", () => {
+    const state = { ...bornState(), needs: { hunger: 0, energy: 500_000, hygiene: 500_000, joy: 100_000 } };
+    const log = new EventLog();
+    const pizza = reduce(state, { ...log.care(1000, "FEED", "a"), tick: 1000, itemId: "pizza" }, ctx);
+    expect(pizza.state.needs.joy).toBe(state.needs.joy + FOOD_ITEMS.pizza.perks.joy);
+    expect(pizza.state.needs.hygiene).toBe(state.needs.hygiene + FOOD_ITEMS.pizza.perks.hygiene);
+    const candy = reduce(state, { ...log.care(1001, "FEED", "b"), tick: 1000, itemId: "candy" }, ctx);
+    expect(candy.state.healthRaw).toBe(state.healthRaw + FOOD_ITEMS.candy.perks.health);
+    expect(candy.state.needs.joy).toBe(state.needs.joy + FOOD_ITEMS.candy.perks.joy);
+  });
+
+  it("a treat is never what kills: a health cost stops at one", () => {
+    const state = { ...bornState(), healthRaw: 5, needs: { hunger: 0, energy: 500_000, hygiene: 500_000, joy: 100_000 } };
+    const log = new EventLog();
+    const candy = reduce(state, { ...log.care(1000, "FEED", "a"), tick: 1000, itemId: "candy" }, ctx);
+    expect(candy.state.healthRaw).toBe(1);
+    expect(candy.state.diedAtTick).toBeNull();
+  });
+
+  it("a soda is a drink with perks: energy, then joy and the health tax", () => {
+    const state = { ...bornState(), needs: { hunger: 0, energy: 100_000, hygiene: 500_000, joy: 100_000 } };
+    const log = new EventLog();
+    const soda = reduce(state, { ...log.care(1000, "FEED", "a"), tick: 1000, itemId: "soda" }, ctx);
+    expect(soda.applied).toBe(DRINK_ITEMS.soda.energyBonus);
+    expect(soda.state.needs.hunger).toBe(0);
+    expect(soda.state.needs.joy).toBe(state.needs.joy + DRINK_ITEMS.soda.perks.joy);
+    expect(soda.state.healthRaw).toBe(state.healthRaw + DRINK_ITEMS.soda.perks.health);
+  });
+
   it("leaves a plain feed untouched by taste — no item, no opinion", () => {
     const state = { ...bornState(), needs: { hunger: 0, energy: 500_000, hygiene: 500_000, joy: 100_000 } };
     const log = new EventLog();

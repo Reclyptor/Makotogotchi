@@ -5,7 +5,7 @@
 
 import { phaseAt, type PetState, type ProjectionContext } from "./model";
 import { project } from "./project";
-import { drinkItem, foodItem, toysPlayBonusPercent } from "./economy";
+import { drinkItem, foodItem, toysPlayBonusPercent, type Perks } from "./economy";
 import { quirkFoodPercent } from "./quirks";
 import { budgetRemaining, caretakerRecord, pruneCaretakers, recordApplied } from "./score";
 import { careMultiplierPermille, presencePermilleOf } from "./difficulty";
@@ -52,6 +52,17 @@ const petMark = (state: PetState): string =>
   [...NEED_KEYS.map((need) => state.needs[need]), state.healthRaw, state.asleep, state.sick].join(":");
 
 const clamp = (value: number, max: number): number => (value < 0 ? 0 : value > max ? max : value);
+
+/**
+ * A consumable's side effects (SPEC §13.2): flat and bounded by purchases,
+ * so they bypass the caretaker budget and the curve but never the clamp. A
+ * health cost stops at 1 — a treat is never what kills the pet.
+ */
+const applyPerks = (state: PetState, perks: Perks): void => {
+  if (perks.joy) state.needs.joy = clamp(state.needs.joy + perks.joy, NEED_MAX);
+  if (perks.hygiene) state.needs.hygiene = clamp(state.needs.hygiene + perks.hygiene, NEED_MAX);
+  if (perks.health) state.healthRaw = Math.max(perks.health < 0 ? 1 : 0, clamp(state.healthRaw + perks.health, HEALTH_MAX));
+};
 
 export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext): ReduceResult => {
   if (event.tick < input.tick) {
@@ -167,6 +178,7 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
         const before = state.needs.energy;
         state.needs.energy = clamp(state.needs.energy + drink.energyBonus, NEED_MAX);
         applied = state.needs.energy - before;
+        applyPerks(state, drink.perks);
         if (state.asleep && state.sleepReason !== "NIGHT") {
           state.asleep = false;
           state.sleepReason = null;
@@ -209,11 +221,7 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
               detail: want.itemId !== undefined ? `${want.kind}:${want.itemId}` : want.kind,
             });
           }
-          if (food) {
-            // The joy side-bonus is bounded by purchases, so it bypasses the
-            // caretaker budget but never the clamp.
-            state.needs.joy = clamp(state.needs.joy + food.joyBonus, NEED_MAX);
-          }
+          if (food) applyPerks(state, food.perks);
         }
         if (event.action === "PLAY") {
           state.needs.energy = clamp(state.needs.energy - PLAY_ENERGY_COST, NEED_MAX);

@@ -12,8 +12,11 @@ import type { RoomView } from "@/server/shop";
 import { AWAKE_HOURS, TICKS_PER_HOUR } from "@/sim/tuning";
 
 const CATALOG = {
-  food: { onigiri: { kind: "food", label: "Onigiri", price: 60, scalePercent: 120, joyBonus: 15_000 } },
-  drinks: { energy_drink: { kind: "drink", label: "Energy Drink", price: 120, energyBonus: 300_000 } },
+  food: {
+    onigiri: { kind: "food", label: "Onigiri", price: 60, scalePercent: 120, perks: { joy: 15_000 } },
+    pizza: { kind: "food", label: "Nile River Pizza", price: 200, scalePercent: 175, perks: { joy: 10_000, hygiene: -30_000 } },
+  },
+  drinks: { energy_drink: { kind: "drink", label: "Energy Drink", price: 120, energyBonus: 300_000, perks: {} } },
   medicine: { super_medicine: { kind: "medicine", label: "Super Medicine", price: 250, bypassCooldowns: true } },
   toys: { teeter: { kind: "toy", label: "Teeter Toy", price: 400, playBonusPercent: 15 } },
   cosmetics: { bow: { kind: "cosmetic", price: 300, label: "Ribbon Bow" } },
@@ -110,7 +113,9 @@ describe("shop tabs", () => {
     });
     expect(rowNamed(tab(tabs, "pack"), "Onigiri").action).toMatchObject({ availability: { ok: false, note: "Makoto is asleep" } });
     expect(rowNamed(tab(tabs, "pack"), "Energy Drink").icon).toBe("🥫");
-    expect(rowNamed(tab(tabs, "food"), "Energy Drink").detail).toBe("+30% energy · wakes him from a daytime sleep");
+    expect(rowNamed(tab(tabs, "food"), "Energy Drink").detail).toBe("+30% energy · wakes Makoto from a daytime sleep");
+    expect(rowNamed(tab(tabs, "food"), "Nile River Pizza").detail).toBe("Feeds ×1.75 · +1% joy · −3% hygiene");
+    expect(rowNamed(tab(tabs, "food"), "Onigiri").detail).toBe("Feeds ×1.20 · +1.5% joy");
   });
 
   it("locks pack medicine when there is nothing to cure", () => {
