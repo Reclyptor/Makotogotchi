@@ -30,6 +30,6 @@ export const GAMES: Record<MinigameId, GameEntry> = {
   shuffle: { Component: MakotoShuffle, hint: "Watch which bowl Makoto hides under, then tap it — or press 1, 2, 3!" },
   natsumi: { Component: NatsumisWatch, hint: "Hold to scurry for the treat — let go before Natsumi turns around!" },
   coffeerun: { Component: CoffeeRun, hint: "Hold to brew, let go to pour — don't be brewing when Natsumi walks in!" },
-  sausageparty: { Component: SausageParty, hint: "Tap the guest who is holding up the dish you're serving!" },
+  sausageparty: { Component: SausageParty, hint: "Serve the dish on the tray to the guest holding it up — wrong guests lose patience and walk out!" },
   sausaged: { Component: DontGetSausaged, hint: "Do what Natsumi says, fast — hesitate and you're a sausage!" },
 };

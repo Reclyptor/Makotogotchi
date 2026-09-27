@@ -1820,6 +1820,25 @@ score per second, minimum inputs per point), because a fully authoritative
 implementation is disproportionate for a friends' toy while an unbounded
 client score is not acceptable either. The envelope judges *play* time: the
 server measures wall time from `start` and deducts the pre-roll (§13.3.1)
+Two rules keep it a matching game rather than a waiting game, and both
+exist because the first version was, in practice, neither.
+**The kitchen never sends out a dish nobody at the table asked for**: every
+deal is drawn from what the seated and arriving guests are holding up, and a
+dish orphaned by a walkout is taken back and re-plated. The first version
+dealt the opening tray at random and a fifth of later trays too, with no way
+to discard one — two runs in five opened on a dish with no taker, and the
+only exits were a wrong tap or a seven-second wait. **Every outcome
+is visible**: a wrong plate lights the chunk of patience it cost, a guest out
+of patience storms off angry with a ✗ where their order was and a `lost`
+counter that climbs, and a tap while the kitchen is still plating wobbles the
+plate rather than vanishing. The tray is the biggest prop on the board and
+sits centre-front under a `SERVE` label; the guests' orders are small speech
+bubbles. Four look-alike dish icons with the authoritative one in a corner
+read as pure chance, and a game whose failures are silent is
+indistinguishable from one that is random. The rules are a pure module
+(`sausagePartyRules.ts`) with the randomness injected, and the no-dead-dish
+rule is a property test over thousands of random steps.
+
 before applying the rate ceiling. The chosen game is fixed at `start` and
 stored in the server's session, so a client cannot start a cheap envelope and
 finish an expensive one; per-game curves translate the score into the `PLAY`
