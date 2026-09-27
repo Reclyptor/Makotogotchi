@@ -6,6 +6,15 @@ follow [Semantic Versioning]. Pre-1.0, so game-rule changes are minor bumps.
 [Keep a Changelog]: https://keepachangelog.com/en/1.1.0/
 [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
 
+## [0.3.2] — 2026-09-27
+
+### Fixed
+
+- **Don't Get Sausaged no longer lights the answer.** The ordered pad lit up
+  as the order came, so the game was "tap the bright one". The shouted word
+  is now the only cue — larger, and in no pad's colour — and a pad lights
+  only after it is pressed
+
 ## [0.3.1] — 2026-09-27
 
 ### Fixed
