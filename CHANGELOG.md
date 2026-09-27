@@ -6,6 +6,19 @@ follow [Semantic Versioning]. Pre-1.0, so game-rule changes are minor bumps.
 [Keep a Changelog]: https://keepachangelog.com/en/1.1.0/
 [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
 
+## [0.3.1] — 2026-09-27
+
+### Fixed
+
+- **The Feed menu lists the whole catalog, not only the pack.** A new
+  caretaker saw two rows — rice and a link to the shop — because the menu
+  only offered what was already owned. Every food and drink now appears with
+  its price; owned ones feed in one tap, unowned ones buy and feed in one
+  tap, and one the balance cannot cover says how far short it is. The shop
+  link, and the shop's open-on-a-tab plumbing, are gone with it
+- `feedEntry` replaces `packEntry` and carries the price; `needsMoreCoins`
+  is the one shortfall line the shop rows and the menu share
+
 ## [0.3.0] — 2026-09-27
 
 A pass on the one minigame that read as random, on what feeding can mean,
