@@ -1,13 +1,14 @@
 import type { MetadataRoute } from "next";
+import { SLOGAN, SITE_NAME } from "@/app/site";
 
 // PWA manifest: installable on phones, which pairs naturally with the
 // emergency push alerts (SPEC §12).
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Makotogotchi",
+    name: SITE_NAME,
     short_name: "Makoto",
-    description: "One chinchilla, on the internet, that everybody shares.",
+    description: SLOGAN,
     start_url: "/",
     display: "standalone",
     background_color: "#131017",

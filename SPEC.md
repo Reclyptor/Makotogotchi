@@ -2432,6 +2432,28 @@ from the number rather than stored as prose. Many hands shows one fraction:
 its two are the same. Completed state: gold check + "done! +15 🪙 to today's
 caretakers".
 
+**The link carries the goal.** A bare URL unfurled into a static card that
+said the same thing every time, so rallying a room around the day's goal
+meant typing the progress beside the link by hand. The embed now says it
+itself. `src/server/share.ts` derives one view — name, stage and age,
+the five meters, and `questLine()`, the goal as a sentence that says what is
+*left* ("7 more meals to Feast day · 3/5 caretakers have helped") — and both
+halves of the unfurl draw from it: the home page's `generateMetadata` puts
+the line in `og:description`, and `app/opengraph-image.tsx` (the file
+convention, request-time) draws the card — name, status, meter bars, the goal
+along the bottom, in the app's palette. No emoji, because satori fetches
+those over the network at render time; no sprite, because a 16px frame
+scaled to a card is a blur. The banner gains a share button that copies
+`/?goal=<dayIndex>-<current>` (or hands it to the device's share sheet):
+the query is a cache key, since a chat unfurls each distinct URL once, and
+the page ignores it. An egg shares as "An egg, waiting for a name"; a
+memorial as "<name> has passed — a new egg is coming", each as the card's
+whole body since there are no meters to draw; a store that cannot be reached
+falls back to the slogan under the link and a name-and-slogan card,
+and never 500s the page. The banner keeps its own two-fraction JSX rather than the
+sentence — it has a progress bar and screen-reader text the sentence would
+flatten — so the sentence lives where only a sentence fits.
+
 ### 21.8 Co-op Purchases (server + UI)
 
 Grand decor items too expensive for one caretaker, funded communally. New

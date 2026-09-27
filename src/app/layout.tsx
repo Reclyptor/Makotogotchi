@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Atkinson_Hyperlegible, Press_Start_2P } from "next/font/google";
 import RetroOverlay from "@/app/components/RetroOverlay";
+import { SLOGAN, SITE_NAME, SITE_URL } from "@/app/site";
 import "./globals.css";
 
 // The wordmark's retro face — used sparingly; body text stays a system
@@ -21,23 +22,24 @@ const atkinson = Atkinson_Hyperlegible({
   display: "swap",
 });
 
+// The card beside a shared link is drawn live by opengraph-image.tsx (SPEC
+// §21.7), which the file convention wires in ahead of anything listed here;
+// the home page swaps the description for the pet's state the same way.
 export const metadata: Metadata = {
-  metadataBase: new URL("https://makotogotchi.com"),
-  title: "Makotogotchi",
-  description: "One chinchilla, on the internet, that everybody shares. Keep Makoto alive.",
+  metadataBase: new URL(SITE_URL),
+  title: SITE_NAME,
+  description: SLOGAN,
   openGraph: {
-    title: "Makotogotchi",
-    description: "One chinchilla, on the internet, that everybody shares. Keep Makoto alive.",
-    url: "https://makotogotchi.com",
-    siteName: "Makotogotchi",
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Makoto the chinchilla" }],
+    title: SITE_NAME,
+    description: SLOGAN,
+    url: SITE_URL,
+    siteName: SITE_NAME,
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Makotogotchi",
-    description: "One chinchilla, on the internet, that everybody shares.",
-    images: ["/og.png"],
+    title: SITE_NAME,
+    description: SLOGAN,
   },
   icons: {
     icon: "/favicon.ico",

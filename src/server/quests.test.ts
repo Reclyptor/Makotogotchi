@@ -7,10 +7,10 @@ import { closeDb, db } from "./db/client";
 import { closeRedis } from "./redis/client";
 import { appendEvent } from "./db/repository";
 import { caretakerProfile } from "./social";
-import { questDay, questMarkers, questView, settleQuest } from "./quests";
+import { questDay, questLine, questMarkers, questView, settleQuest, type QuestView } from "./quests";
 import { startTestInfra, type TestInfra } from "./testsetup";
 import { genesis } from "@/sim/genesis";
-import { questFor, QUEST_REWARD_COINS, type QuestId } from "@/sim/quests";
+import { questFor, QUEST_REWARD_COINS, QUESTS, type QuestId, type QuestStatus } from "@/sim/quests";
 import { TICKS_PER_HOUR } from "@/sim/tuning";
 import { PRESENCE_SCALE } from "@/sim/difficulty";
 import { HOUR_BEFORE_SLEEP } from "@/sim/tuning";
@@ -188,5 +188,45 @@ describe("quest settlement", () => {
     expect(day.eveningTick).toBe((HOUR_BEFORE_SLEEP - 7) * TICKS_PER_HOUR);
     expect(day.toTick - day.fromTick).toBe(24 * TICKS_PER_HOUR);
     expect(day.fromTick).toBeLessThan(0); // local midnight preceded genesis
+  });
+});
+
+describe("questLine — the goal as one sentence (SPEC §21.7)", () => {
+  const view = (questId: QuestId, status: Partial<QuestStatus>): QuestView => ({
+    dayIndex: 3,
+    quest: QUESTS[questId],
+    contributors: [],
+    current: 0,
+    target: 10,
+    hands: 0,
+    handsTarget: 2,
+    complete: false,
+    ...status,
+  });
+
+  it("says what is left, not what is done", () => {
+    expect(questLine(view("feast-day", { current: 23, target: 30, hands: 3, handsTarget: 5 }), false)).toBe(
+      "7 more meals to Feast day · 3/5 caretakers have helped",
+    );
+    expect(questLine(view("game-night", { current: 0, target: 40 }), false)).toBe("40 more points to Game night · 0/2 caretakers have helped");
+  });
+
+  it("names the hands when the count is met but the room has not turned up", () => {
+    expect(questLine(view("feast-day", { current: 30, target: 30, hands: 1, handsTarget: 2 }), false)).toBe(
+      "Feast day — 30/30 meals, waiting on 1 more caretaker",
+    );
+  });
+
+  it("counts caretakers once for Many hands, and reads a meter for Full bellies", () => {
+    expect(questLine(view("many-hands", { current: 1, target: 3 }), false)).toBe("2 more caretakers to Many hands");
+    expect(questLine(view("full-bellies", { current: 62, target: 70 }), false)).toBe(
+      "Full bellies — every meter at 70% by evening, the lowest is 62% · 0/2 caretakers have helped",
+    );
+  });
+
+  it("celebrates once settled", () => {
+    expect(questLine(view("feast-day", { current: 30, target: 30 }), true)).toBe(
+      `Feast day — done! +${QUEST_REWARD_COINS} coins to everyone who helped today`,
+    );
   });
 });

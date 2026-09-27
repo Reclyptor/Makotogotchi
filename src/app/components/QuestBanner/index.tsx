@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const REFRESH_DEBOUNCE_MS = 1500;
+const COPIED_MS = 2000;
 
 export type QuestPayload = {
   dayIndex: number;
@@ -28,12 +29,28 @@ export type QuestBannerProps = {
 
 export default function QuestBanner({ subscribe }: QuestBannerProps) {
   const [quest, setQuest] = useState<QuestPayload | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
   const pendingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refresh = useCallback(async (): Promise<void> => {
     const response = await fetch("/api/quest").catch(() => null);
     if (response?.ok) setQuest((await response.json()) as QuestPayload);
   }, []);
+
+  // The link carries the day and the count as a cache key (SPEC §21.7): a
+  // chat unfurls each distinct URL once, so a link shared at 23/30 and again
+  // at 27/30 gets a fresh card both times. The page ignores the query.
+  const share = useCallback(async (): Promise<void> => {
+    if (!quest) return;
+    const url = `${window.location.origin}/?goal=${quest.dayIndex}-${quest.current}`;
+    if (typeof navigator.share === "function") {
+      await navigator.share({ url }).catch(() => null);
+      return;
+    }
+    const ok = await navigator.clipboard.writeText(url).then(() => true, () => false);
+    setCopied(ok ? "Copied — paste it in the chat" : "Couldn't copy — the link is in the address bar");
+    setTimeout(() => setCopied(null), COPIED_MS);
+  }, [quest]);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,8 +91,10 @@ export default function QuestBanner({ subscribe }: QuestBannerProps) {
           <strong>{quest.quest.title}</strong>
           <span className="text-muted"> — {quest.quest.description}</span>
         </span>
-        <span className="shrink-0 tabular-nums text-muted">
-          {quest.settled ? (
+        <span aria-live="polite" className="shrink-0 tabular-nums text-muted">
+          {copied ? (
+            <span className="text-mint">{copied}</span>
+          ) : quest.settled ? (
             <span className="font-semibold text-gold">done! +15 🪙 to today&apos;s caretakers</span>
           ) : (
             <>
@@ -93,6 +112,15 @@ export default function QuestBanner({ subscribe }: QuestBannerProps) {
             </>
           )}
         </span>
+        <button
+          type="button"
+          onClick={() => void share()}
+          aria-label="Share today's goal"
+          title="Share today's goal"
+          className="press -mr-2 shrink-0 rounded-full px-2 text-base leading-none text-muted hover:text-foreground"
+        >
+          <span aria-hidden="true">↗</span>
+        </button>
       </p>
       <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[3px] bg-white/5">
         <span

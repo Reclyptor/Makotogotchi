@@ -144,3 +144,21 @@ export const settleQuest = async (
 /** Whether today's goal has already been settled — the banner reads this. */
 export const questSettled = async (db: Db, generationId: string, dayIndex: number): Promise<boolean> =>
   (await questMarkers(db).findOne({ _id: `${generationId}:${dayIndex}` })) !== null;
+
+/**
+ * Today's goal as one sentence, for the places that can only carry one: the
+ * link's description and the card beside it (SPEC §21.7). It says what is
+ * left rather than what is done, because "7 more meals to Feast day" is
+ * what a room rallying around the goal actually says.
+ */
+export const questLine = (view: QuestView, settled: boolean): string => {
+  const { quest, current, target, hands, handsTarget } = view;
+  const more = (count: number): string => `${count} more caretaker${count === 1 ? "" : "s"}`;
+  if (settled) return `${quest.title} — done! +${QUEST_REWARD_COINS} coins to everyone who helped today`;
+  if (quest.id === "many-hands") return `${more(Math.max(0, target - current))} to ${quest.title}`;
+  const helped = `${hands}/${handsTarget} caretakers have helped`;
+  if (quest.id === "full-bellies") return `${quest.title} — every meter at ${target}% by evening, the lowest is ${current}% · ${helped}`;
+  const left = Math.max(0, target - current);
+  if (left > 0) return `${left} more ${quest.unit} to ${quest.title} · ${helped}`;
+  return `${quest.title} — ${current}/${target} ${quest.unit}, waiting on ${more(Math.max(0, handsTarget - hands))}`;
+};

@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { derive, type DerivedState } from "@/sim/derive";
 import { stageAt, type PetState } from "@/sim/model";
 import { allowanceRemaining } from "@/sim/score";
-import { TICKS_PER_DAY, TICKS_PER_HOUR, type CareAction } from "@/sim/tuning";
+import type { CareAction } from "@/sim/tuning";
 import { GameAudio } from "@/game/audio";
 import PetCanvas from "@/app/components/PetCanvas";
 import Meters from "@/app/components/Meters";
@@ -28,6 +28,7 @@ import QuestBanner from "@/app/components/QuestBanner";
 import WantBanner from "@/app/components/WantBanner";
 import { wantAsk, wantGranted, wantLapse } from "@/app/components/WantBanner/copy";
 import { statusLine } from "@/app/components/GameView/status";
+import { ageText, STAGE_LABELS } from "@/sim/lifetime";
 import MinigameShell from "@/app/components/minigames/Shell";
 import { isMinigameId, MINIGAME_IDS, MINIGAMES, type MinigameId } from "@/sim/minigames";
 import { isAmbientEvent, type AmbientEvent } from "@/sim/ambient";
@@ -39,15 +40,6 @@ import { useKonami } from "@/app/hooks/useKonami";
 import { useRetro } from "@/app/hooks/useRetro";
 import { spectacleMood, type SpectacleMood } from "@/sim/secret";
 import type { FeedEntryPayload } from "@/app/api/feed/route";
-
-const STAGE_LABELS: Record<string, string> = {
-  EGG: "Egg",
-  HATCHLING: "Hatchling",
-  PUP: "Pup",
-  JUVENILE: "Juvenile",
-  ADULT: "Adult",
-  ELDER: "Elder",
-};
 
 const ACTION_EMOJI: Record<CareAction, string> = {
   FEED: "🍖",
@@ -168,14 +160,6 @@ const milestoneLine = (kind: string, detail: string | undefined, petName: string
 
 const clockTime = (date: Date): string => date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-const age = (state: PetState): string => {
-  if (state.bornAtTick === null) return "incubating";
-  const ticks = state.tick - state.bornAtTick;
-  const days = Math.floor(ticks / TICKS_PER_DAY);
-  const hours = Math.floor((ticks % TICKS_PER_DAY) / TICKS_PER_HOUR);
-  return days > 0 ? `${days}d ${hours}h` : `${hours}h`;
-};
-
 export default function GameView() {
   const stream = usePetStream();
   const {
@@ -211,7 +195,6 @@ export default function GameView() {
     if (isMinigameId(pinned)) return pinned;
     return MINIGAME_IDS[Math.floor(Math.random() * MINIGAME_IDS.length)]!;
   };
-  const [shopTab, setShopTab] = useState<TabId | undefined>(undefined);
   const [feed, setFeed] = useState<FeedEntry[]>([]);
   // Care and milestones are the two things that can move today's goal; the
   // banner debounces the refetch itself.
@@ -228,6 +211,7 @@ export default function GameView() {
   );
   const [muted, setMuted] = useState(true);
   const [shopOpen, setShopOpen] = useState(false);
+  const [shopTab, setShopTab] = useState<TabId | undefined>(undefined);
   const [playing, setPlaying] = useState<MinigameId | null>(null);
   const [spectating, setSpectating] = useState<{ name: string; game: string; score: number } | null>(null);
   const [localSecret, setLocalSecret] = useState<{ mood: SpectacleMood; nonce: number } | null>(null);
@@ -607,7 +591,7 @@ export default function GameView() {
         <h1 className="text-2xl font-extrabold tracking-tight">{isEgg ? "???" : petName}</h1>
         {ui && (
           <span className="flex items-center gap-1.5 text-xs text-muted">
-            <span className="panel !rounded-full px-2 py-0.5">{age(ui.state)}</span>
+            <span className="panel !rounded-full px-2 py-0.5">{ageText(ui.state)}</span>
             <span className="panel !rounded-full px-2 py-0.5">{STAGE_LABELS[stage ?? ""] ?? ""}</span>
             {ui.state.form && <span className="panel !rounded-full px-2 py-0.5 capitalize">{ui.state.form.toLowerCase()}</span>}
           </span>
@@ -695,7 +679,6 @@ export default function GameView() {
             aria-expanded={shopOpen}
             aria-label="Shop"
             className="press panel !rounded-full px-4 py-1.5 text-sm font-semibold hover:border-gold/40"
-          {...(shopTab !== undefined ? { initialTab: shopTab } : {})}
           >
             🛒 Shop
           </button>
@@ -712,6 +695,7 @@ export default function GameView() {
           purse={stream.purse}
           onFunded={onFunded}
           petDay={ui.petDay}
+          {...(shopTab !== undefined ? { initialTab: shopTab } : {})}
           onClose={() => setShopOpen(false)}
         />
       )}
