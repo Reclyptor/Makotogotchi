@@ -6,6 +6,59 @@ follow [Semantic Versioning]. Pre-1.0, so game-rule changes are minor bumps.
 [Keep a Changelog]: https://keepachangelog.com/en/1.1.0/
 [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
 
+## [Unreleased]
+
+A pass on the one minigame that read as random, on what feeding can mean,
+and on what a shared link says. Every event log written before this folds
+byte-identically: the one new field on a
+generation is optional and reads as the old catalog when absent.
+
+### Added
+
+- **A food menu with costs.** Sausage (×1.35, +2% joy), Nile River Pizza
+  (×1.75, +1% joy, −3% hygiene), Candy (×0.40, +4% joy, −1% health) and
+  Soda (+16% energy, +2% joy, −1% health). A meal is a decision now; a treat
+  can never be what kills (health floors at 1). Peppers stay off the menu —
+  they are people here
+- **The Feed tile is split.** One tap still serves the free meal; the chevron
+  opens the pack as a menu — each item with its perk line and its own
+  availability — and leads into the shop when the pack is empty
+- **The link card is live.** `og:description` and the card image carry the
+  pet's name, stage, meters and today's goal, phrased as what is left ("7
+  more meals to Feast day"); the goal banner gains a share button that copies
+  a cache-keyed link
+- `questLine` — the day's goal as one sentence; `shareView` — the one view
+  the description and the card draw from
+- The head count under the meters links to device linking, with the reason
+- `Perks` on food and drink items; `foodCatalogOf` and
+  `Generation.foodCatalogSize`
+
+### Changed
+
+- **A generation's taste is pinned to the menu it was born with.** Quirks
+  and cravings draw over the catalog prefix recorded at laying, so a longer
+  menu never reshuffles a living pet's favourite; older eggs read as the
+  two-meal catalog
+- Slogan: "The internet's chinchilla." — under every
+  link, in the manifest, and on the card
+- Shop item glyphs and detail lines come from one copy module; the pack tab
+  says what each item does instead of "An extra-tasty meal"
+- `quirks()`, `quirkFoodPercent()` and `wantAt()` take a generation, not a
+  bare seed; `toGeneration()` is the one place a stored generation becomes
+  the sim's
+
+### Fixed
+
+- **Sausage Party dealt dishes nobody wanted.** Two runs in five opened on a
+  dish with no taker and a fifth of later trays did too, with no way to
+  discard one. The kitchen now only plates what a seated guest is holding
+  up, re-plates a dish orphaned by a walkout, answers a tap during plating
+  with a wobble instead of silence, and shows walkouts (angry pose, ✗, a
+  `lost` counter) and the patience a wrong plate cost. The tray is the
+  biggest thing on the board, centre-front; the rules are a pure module with
+  a property test
+- The drink detail line no longer genders the pet
+
 ## [0.2.0] — 2026-09-18
 
 Balance and clarity pass, driven by player reports. Every event log written
