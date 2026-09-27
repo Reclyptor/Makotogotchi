@@ -30,14 +30,16 @@ export type ShopPanelProps = {
    *  tomorrow's (SPEC §22.9). Passed in rather than read here, because
    *  reading a clock during render is impure. */
   petDay: number | null;
+  /** The tab to open on; the pack when it has something in it, otherwise Food. */
+  initialTab?: TabId;
   onClose: () => void;
 };
 
 const TAB_ORDER: TabId[] = ["pack", "food", "toys", "style", "room"];
 
-export default function ShopPanel({ state, ctx, caretakerId, petName, room, purse, onFunded, petDay, onClose }: ShopPanelProps) {
+export default function ShopPanel({ state, ctx, caretakerId, petName, room, purse, onFunded, petDay, initialTab: opened, onClose }: ShopPanelProps) {
   const shop = useShop(petName, onFunded);
-  const [active, setActive] = useState<TabId | null>(null);
+  const [active, setActive] = useState<TabId | null>(opened ?? null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const openerRef = useRef<Element | null>(null);
 

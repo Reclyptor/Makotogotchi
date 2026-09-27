@@ -23,6 +23,7 @@ import NicknameEditor from "@/app/components/NicknameEditor";
 import LinkDevices from "@/app/components/LinkDevices";
 import PushToggle from "@/app/components/PushToggle";
 import ShopPanel from "@/app/components/ShopPanel";
+import type { TabId } from "@/app/components/ShopPanel/tabs";
 import QuestBanner from "@/app/components/QuestBanner";
 import WantBanner from "@/app/components/WantBanner";
 import { wantAsk, wantGranted, wantLapse } from "@/app/components/WantBanner/copy";
@@ -210,6 +211,7 @@ export default function GameView() {
     if (isMinigameId(pinned)) return pinned;
     return MINIGAME_IDS[Math.floor(Math.random() * MINIGAME_IDS.length)]!;
   };
+  const [shopTab, setShopTab] = useState<TabId | undefined>(undefined);
   const [feed, setFeed] = useState<FeedEntry[]>([]);
   // Care and milestones are the two things that can move today's goal; the
   // banner debounces the refetch itself.
@@ -653,7 +655,12 @@ export default function GameView() {
           caretakerId={caretakerId}
           petName={petName}
           nowTickExact={ui.nowTickExact}
+          pack={stream.purse?.inventory ?? {}}
           onPlay={() => setPlaying(pickGame())}
+          onShop={() => {
+            setShopTab("food");
+            setShopOpen(true);
+          }}
         />
       )}
 
@@ -681,10 +688,14 @@ export default function GameView() {
         {ui && !isEgg && !isDead && (
           <button
             type="button"
-            onClick={() => setShopOpen((open) => !open)}
+            onClick={() => {
+              setShopTab(undefined);
+              setShopOpen((open) => !open);
+            }}
             aria-expanded={shopOpen}
             aria-label="Shop"
             className="press panel !rounded-full px-4 py-1.5 text-sm font-semibold hover:border-gold/40"
+          {...(shopTab !== undefined ? { initialTab: shopTab } : {})}
           >
             🛒 Shop
           </button>

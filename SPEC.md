@@ -1474,6 +1474,18 @@ frame with no anchor gets no tufts either — the gravestone wears nothing.
   because the action is legal and the game's rules have not changed. Only the
   player's expectation of it has, which is the entire point: they now know
   before the press instead of after it.
+- **Feed is a split tile.** Its face serves the free meal in one tap, as it
+  always has; the chevron beside it opens a menu — the free meal first, then
+  every food and drink in this caretaker's pack with its count and its perk
+  line, then a way into the shop's Food tab. Each entry is judged by
+  `canPerform()` with its own item id, exactly as the shop's Pack tab judges
+  it, so a drink is offered during a nap when the meal is not, and a locked
+  entry shows its reason where its detail would be (§11.3). The chevron itself
+  is never locked, for that reason. The menu is a `role="menu"`: arrows walk
+  it, Escape closes it, and focus returns to the chevron. Before this, using a
+  meal from the pack meant opening the shop and finding the Pack tab — a
+  menu nobody thought of as one, because it was nowhere near the tile that
+  feeds.
 - Under the meters sit two lines of the same small print: the community the
   difficulty is set for (§23.3), and this caretaker's own remaining allowance
   (§2.5). Demand and supply, in that order, in one panel.
