@@ -65,9 +65,9 @@ beforeAll(async () => {
   engine = await buildEngine();
   expect((await engine.ensureGeneration()).seed).toBe(SEED);
   // The layout the tests below stand on.
-  expect(wantAt(SEED, 0)).toBeNull();
-  expect(wantAt(SEED, 1)).toEqual({ kind: "dust-bath" });
-  expect(wantAt(SEED, 2)).toEqual({ kind: "cuddle" });
+  expect(wantAt({ seed: SEED }, 0)).toBeNull();
+  expect(wantAt({ seed: SEED }, 1)).toEqual({ kind: "dust-bath" });
+  expect(wantAt({ seed: SEED }, 2)).toEqual({ kind: "cuddle" });
 }, 120_000);
 
 afterAll(async () => {

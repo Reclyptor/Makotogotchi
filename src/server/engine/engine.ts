@@ -19,6 +19,7 @@
 
 import type { Db } from "mongodb";
 import type Redis from "ioredis";
+import { FOOD_ITEM_IDS } from "@/sim/economy";
 import { genesis } from "@/sim/genesis";
 import { project } from "@/sim/project";
 import { reduce } from "@/sim/reduce";
@@ -37,6 +38,7 @@ import {
   recordDeath,
   recordHatch,
   writeSnapshot,
+  toGeneration,
 } from "../db/repository";
 import { withLock } from "../redis/lock";
 import { scheduleFor } from "../schedule";
@@ -124,20 +126,13 @@ export class PetEngine {
   /** The active generation, creating generation 1 on a virgin database. */
   async ensureGeneration(): Promise<Generation> {
     const existing = await latestGeneration(this.deps.db);
-    if (existing) {
-      return {
-        id: existing._id,
-        ordinal: existing.ordinal,
-        seed: existing.seed,
-        genesisEpochMs: existing.genesisEpochMs,
-        name: existing.name,
-      };
-    }
+    if (existing) return toGeneration(existing);
     const generation: Generation = {
       id: `gen-${crypto.randomUUID()}`,
       ordinal: 1,
       seed: crypto.getRandomValues(new Uint32Array(1))[0]!,
       genesisEpochMs: this.now(),
+      foodCatalogSize: FOOD_ITEM_IDS.length,
       name: null,
     };
     await createGeneration(this.deps.db, generation);

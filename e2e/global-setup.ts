@@ -4,6 +4,7 @@
 
 import { E2E } from "../playwright.config";
 import { TICK_SECONDS } from "@/sim/tuning";
+import { FOOD_ITEM_IDS } from "@/sim/economy";
 
 export default async function globalSetup(): Promise<void> {
   process.env.MONGODB_URI = E2E.mongoUri;
@@ -29,6 +30,7 @@ export default async function globalSetup(): Promise<void> {
     seed: 21,
     genesisEpochMs: Date.now() - BASE_TICK * TICK_SECONDS * 1000,
     name: null,
+    foodCatalogSize: FOOD_ITEM_IDS.length,
   };
   await createGeneration(await db(), generation);
 

@@ -10,9 +10,9 @@
 // retuning these odds, weights, or catalogs never re-folds an old log.
 
 import { draw32, RNG_PURPOSE } from "./rng";
-import { FOOD_ITEM_IDS } from "./economy";
+import { foodCatalogOf } from "./economy";
 import { MINIGAME_IDS } from "./minigames";
-import { quirks } from "./quirks";
+import { quirks, type Lineage } from "./quirks";
 import type { CareAction } from "./tuning";
 
 export const WANT_KINDS = ["crave-food", "play-game", "cuddle", "dust-bath"] as const;
@@ -73,7 +73,8 @@ const pickItem = (options: readonly string[], seed: number, windowIndex: number)
   options[draw32(seed, windowIndex, RNG_PURPOSE.wantItem) % options.length]!;
 
 /** The want this window brings, if any. */
-export const wantAt = (seed: number, windowIndex: number): Want | null => {
+export const wantAt = (generation: Lineage, windowIndex: number): Want | null => {
+  const { seed } = generation;
   if (draw32(seed, windowIndex, RNG_PURPOSE.wantOdds) >= WANT_ODDS_P32) return null;
 
   const total = TABLE.reduce((sum, candidate) => sum + candidate.weight, 0);
@@ -90,10 +91,12 @@ export const wantAt = (seed: number, windowIndex: number): Want | null => {
 
   switch (chosen.kind) {
     case "crave-food": {
-      // The pet does not crave what it hates. A one-food catalog leaves
-      // nothing else to crave, and the craving falls on that food anyway.
-      const palatable = FOOD_ITEM_IDS.filter((itemId) => itemId !== quirks(seed).dislikedFood);
-      const pool = palatable.length > 0 ? palatable : FOOD_ITEM_IDS;
+      // The pet does not crave what it hates, and it craves only from the
+      // menu it was born with. A one-food catalog leaves nothing else to
+      // crave, and the craving falls on that food anyway.
+      const menu = foodCatalogOf(generation);
+      const palatable = menu.filter((itemId) => itemId !== quirks(generation).dislikedFood);
+      const pool = palatable.length > 0 ? palatable : menu;
       return { kind: chosen.kind, itemId: pickItem(pool, seed, windowIndex) };
     }
     case "play-game":

@@ -14,7 +14,7 @@ import { env } from "./env";
 import { PetEngine } from "./engine/engine";
 import { Lifecycle } from "./engine/lifecycle";
 import { Lease } from "./redis/lock";
-import { latestGeneration } from "./db/repository";
+import { latestGeneration, toGeneration } from "./db/repository";
 import { anonymousName, nicknameMap } from "./social";
 import { PushDispatcher } from "./push/dispatcher";
 import { pushConfigured, webPushSender } from "./push/sender";
@@ -44,14 +44,6 @@ export type Runtime = {
 
 const GLOBAL_KEY = Symbol.for("makotogotchi.runtime");
 type GlobalWithRuntime = typeof globalThis & { [GLOBAL_KEY]?: Promise<Runtime> };
-
-const toGeneration = (doc: NonNullable<Awaited<ReturnType<typeof latestGeneration>>>): Generation => ({
-  id: doc._id,
-  ordinal: doc.ordinal,
-  seed: doc.seed,
-  genesisEpochMs: doc.genesisEpochMs,
-  name: doc.name,
-});
 
 const boot = async (): Promise<Runtime> => {
   const database = await db();

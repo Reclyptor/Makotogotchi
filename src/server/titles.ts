@@ -7,7 +7,7 @@
 // read can name the wrong loser under two concurrent takeovers.
 
 import type { Collection, Db } from "mongodb";
-import { quirks } from "@/sim/quirks";
+import { quirks, type Lineage } from "@/sim/quirks";
 import type { CareAction } from "@/sim/tuning";
 import type { Generation } from "@/sim/model";
 import type { Milestone } from "@/sim/events";
@@ -59,7 +59,7 @@ export const resetTitleIndexCache = (): void => ensureTitleIndexes.reset();
 export const classifyTitles = (input: {
   action: CareAction;
   itemId?: string;
-  seed: number;
+  generation: Lineage;
   /** Pet-local hour of the action's tick (localHourAt). */
   localHour: number;
   /** The outcome carried SLEPT — the lullaby actually worked. */
@@ -71,7 +71,7 @@ export const classifyTitles = (input: {
   // Any accepted care action counts at night: MEDICATE alone would make the
   // title a sickness lottery (SPEC §24.1).
   if (input.localHour < NIGHT_END_HOUR) earned.push("night-nurse");
-  if (input.action === "FEED" && input.itemId !== undefined && input.itemId === quirks(input.seed).favoriteFood) {
+  if (input.action === "FEED" && input.itemId !== undefined && input.itemId === quirks(input.generation).favoriteFood) {
     earned.push("chef");
   }
   if (input.action === "CLEAN") earned.push("groundskeeper");
@@ -192,7 +192,7 @@ export const rollTitles = async (
   const earned = classifyTitles({
     action: input.action,
     ...(input.itemId !== undefined ? { itemId: input.itemId } : {}),
-    seed: input.generation.seed,
+    generation: input.generation,
     localHour: localHourAt(input.generation.genesisEpochMs, input.tick, input.timeZone),
     becameAsleep: input.milestones.some((milestone) => milestone.kind === "SLEPT"),
     wantFulfilled: input.milestones.some((milestone) => milestone.kind === "WANT_FULFILLED"),

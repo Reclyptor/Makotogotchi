@@ -14,11 +14,22 @@ export const createGeneration = async (database: Db, generation: Generation): Pr
     seed: generation.seed,
     genesisEpochMs: generation.genesisEpochMs,
     name: generation.name,
+    ...(generation.foodCatalogSize !== undefined ? { foodCatalogSize: generation.foodCatalogSize } : {}),
     hatchedAtTick: null,
     died: null,
     memorial: null,
   });
 };
+
+/** The sim's view of a stored generation — the one place the two shapes meet. */
+export const toGeneration = (doc: GenerationDoc): Generation => ({
+  id: doc._id,
+  ordinal: doc.ordinal,
+  seed: doc.seed,
+  genesisEpochMs: doc.genesisEpochMs,
+  name: doc.name,
+  ...(doc.foodCatalogSize !== undefined ? { foodCatalogSize: doc.foodCatalogSize } : {}),
+});
 
 export const latestGeneration = async (database: Db): Promise<GenerationDoc | null> => {
   await ensureIndexes(database);

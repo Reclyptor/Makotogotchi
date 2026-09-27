@@ -2263,15 +2263,32 @@ Each generation has a personality derived deterministically from its seed —
 never stored, never voted, discovered through play:
 
 ```
-quirks(seed) = {
-  favoriteFood:  rng(seed, 0, "quirk-fav-food")  over FOOD_ITEM_IDS,
-  dislikedFood:  rng(seed, 0, "quirk-bad-food")  over FOOD_ITEM_IDS \ favorite,
+quirks(generation) = {
+  favoriteFood:  rng(seed, 0, "quirk-fav-food")  over foodCatalogOf(generation),
+  dislikedFood:  rng(seed, 0, "quirk-bad-food")  over foodCatalogOf(generation) \ favorite,
   favoriteGame:  rng(seed, 0, "quirk-fav-game")  over MINIGAME_IDS,
 }
 ```
 
 implemented in `src/sim/quirks.ts` (pure, unit-tested: same seed → same
-quirks; favorite ≠ disliked). `FOOD_ITEM_IDS` are the shop's food item ids.
+quirks; favorite ≠ disliked). `FOOD_ITEM_IDS` are the shop's food item ids,
+in declaration order.
+
+**The menu is the one the generation was born with.** The draw indexes the
+meal list by position, so a longer list would reshuffle every living
+generation's taste the day it shipped — the chef title, the craving pool and
+what caretakers had learned by feeding would all move at once, and the spec's
+own promise ("a property of the generation, never a moment in its life")
+would be broken by a shop update. Each egg therefore records
+`Generation.foodCatalogSize`, the list's length when it was laid, and every
+draw runs over `foodCatalogOf(generation)`: that prefix of today's list. Meals
+are **appended, never inserted**, which is what makes a prefix of today's
+list exactly yesterday's. Eggs laid before the record existed carry no size
+and read as `LEGACY_FOOD_CATALOG_SIZE` (two: Onigiri and Fish Feast), so old
+documents, old snapshots and the golden fixtures fold unchanged. A new meal
+is on the menu for the next generation; the current one never learns it has
+a favourite it cannot have tasted. The sealed memorial was already safe — it
+stores the quirks at death — and this makes the living pet as safe.
 
 Effects, all folded in the sim so every client and the server agree:
 - **FEED with the favorite food**: `applied` gains ×1.25 before the

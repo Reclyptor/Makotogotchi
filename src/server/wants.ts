@@ -69,7 +69,7 @@ export const observeWants = async (
     const windowIndex = windowIndexAt(latest.tick);
     const settled = latest.wantSettledWindow ?? null;
     if (settled === null || windowIndex > settled) {
-      const want = wantAt(generation.seed, windowIndex);
+      const want = wantAt(generation, windowIndex);
       if (want && windowIsScheduledAwake(generation.genesisEpochMs, windowIndex, timeZone)) {
         latest = await engine.openWant(generation, windowIndex, want);
       }

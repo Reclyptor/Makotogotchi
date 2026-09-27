@@ -14,6 +14,8 @@ export type GenerationDoc = {
   seed: number;
   genesisEpochMs: number;
   name: string | null;
+  /** The menu's length at laying (SPEC §21.4); absent on older eggs. */
+  foodCatalogSize?: number;
   hatchedAtTick: number | null;
   died: { tick: number; at: Date; cause: CauseOfDeath } | null;
   /** Written once at seal time — the permanent record the memorial reads. */

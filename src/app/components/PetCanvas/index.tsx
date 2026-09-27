@@ -132,7 +132,7 @@ export default function PetCanvas({ stream, localSecret = null }: PetCanvasProps
     const tasteOf = (itemId: string | undefined): FoodTaste | undefined => {
       const state = itemId === undefined ? null : projectNow();
       if (!state) return undefined;
-      const taste = quirks(state.generation.seed);
+      const taste = quirks(state.generation);
       if (itemId === taste.favoriteFood) return "favorite";
       if (itemId === taste.dislikedFood) return "disliked";
       return undefined;

@@ -103,4 +103,16 @@ export const PERFORMANCE_MAX = 150;
 // out better for the same score; joy is joy, but enthusiasm is worth coins.
 export const QUIRK_FAVORITE_PERCENT = 125;
 export const QUIRK_DISLIKED_PERCENT = 75;
+/** The menu's length before a generation started recording it (SPEC §21.4). */
+export const LEGACY_FOOD_CATALOG_SIZE = 2;
+
+/**
+ * The meals a generation knows: the catalog as it stood when the egg was
+ * laid. New meals are appended, never inserted, so a prefix of today's list
+ * is exactly yesterday's list — which is what keeps a living pet's favourite
+ * dish its favourite when the menu grows.
+ */
+export const foodCatalogOf = (generation: { foodCatalogSize?: number }): readonly FoodItemId[] =>
+  FOOD_ITEM_IDS.slice(0, generation.foodCatalogSize ?? LEGACY_FOOD_CATALOG_SIZE);
+
 export const QUIRK_FAVORITE_GAME_COIN_PERCENT = 125;

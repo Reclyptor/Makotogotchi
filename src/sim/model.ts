@@ -20,6 +20,15 @@ export type Generation = {
   genesisEpochMs: number;
   /** Set by the HATCHED event once the naming vote resolves. */
   name: string | null;
+  /**
+   * How many meals the shop sold when this egg was laid (SPEC §21.4). A
+   * generation's taste and cravings index the meal list by position, so the
+   * list it draws from has to be the list it was born with — a meal added
+   * later is on the menu for the next generation, never a reshuffle of this
+   * one's. Absent on eggs laid before the catalog first grew, which read as
+   * `LEGACY_FOOD_CATALOG_SIZE`.
+   */
+  foodCatalogSize?: number;
 };
 
 /** One pet-day of applied restoration, for the rolling budget (SPEC §2.5). */

@@ -248,7 +248,7 @@ describe("economy items (SPEC §13)", () => {
   });
 
   it("generational taste scales the same meal up or down (SPEC §21.4)", () => {
-    const taste = quirks(TEST_GENERATION.seed);
+    const taste = quirks(TEST_GENERATION);
     const state = { ...bornState(), needs: { hunger: 0, energy: 500_000, hygiene: 500_000, joy: 100_000 } };
     const log = new EventLog();
     const loved = reduce(state, { ...log.care(1000, "FEED", "a"), tick: 1000, itemId: taste.favoriteFood }, ctx);
@@ -426,7 +426,7 @@ describe("want fulfillment (SPEC §25.3)", () => {
   });
 
   it("a craving names its dish: the exact item fulfills, anything else does not", () => {
-    const { favoriteFood } = quirks(TEST_GENERATION.seed);
+    const { favoriteFood } = quirks(TEST_GENERATION);
     const { open } = craving({ kind: "crave-food", itemId: favoriteFood });
 
     const bare = reduce(open, care(1010, "FEED"), ctx);

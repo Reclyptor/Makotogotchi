@@ -8,10 +8,11 @@
 
 import type { Db } from "mongodb";
 import type { Generation, PetState } from "@/sim/model";
+import { FOOD_ITEM_IDS } from "@/sim/economy";
 import { quirks } from "@/sim/quirks";
 import { INCUBATION_TICKS, MOURNING_TICKS } from "@/sim/tuning";
 import { generations, isDuplicateKeyError } from "../db/collections";
-import { createGeneration } from "../db/repository";
+import { createGeneration, toGeneration } from "../db/repository";
 import { announceRoom } from "../shop";
 import { anonymousName, generationRanking, incrementGenerationsSurvived, nicknameMap } from "../social";
 import { titleHolders } from "../titles";
@@ -58,7 +59,7 @@ export class Lifecycle {
     if (!doc) return;
     const claimed = await generations(this.db).findOneAndUpdate(
       { _id: generationId, memorial: null, died: { $ne: null } },
-      { $set: { memorial: { sealedAt: new Date(), ranking: [], titles: [], quirks: quirks(doc.seed) } } },
+      { $set: { memorial: { sealedAt: new Date(), ranking: [], titles: [], quirks: quirks(doc) } } },
     );
     if (!claimed) return; // already sealed, or death not yet recorded
     const ranking = await generationRanking(this.db, generationId);
@@ -81,21 +82,15 @@ export class Lifecycle {
   /** Lay the next egg. Guarded by ordinal uniqueness against double-rotation. */
   private async rotate(previous: Generation): Promise<Generation | null> {
     const successor = await generations(this.db).findOne({ ordinal: previous.ordinal + 1 });
-    if (successor) {
-      return {
-        id: successor._id,
-        ordinal: successor.ordinal,
-        seed: successor.seed,
-        genesisEpochMs: successor.genesisEpochMs,
-        name: successor.name,
-      };
-    }
+    if (successor) return toGeneration(successor);
     const generation: Generation = {
       id: `gen-${crypto.randomUUID()}`,
       ordinal: previous.ordinal + 1,
       seed: crypto.getRandomValues(new Uint32Array(1))[0]!,
       genesisEpochMs: this.now(),
       name: null,
+      // The menu this egg is born with: everything the shop sells today.
+      foodCatalogSize: FOOD_ITEM_IDS.length,
     };
     try {
       await createGeneration(this.db, generation);

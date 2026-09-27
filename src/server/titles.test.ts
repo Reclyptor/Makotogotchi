@@ -25,7 +25,7 @@ afterAll(async () => {
 });
 
 describe("classifyTitles (SPEC §24.1)", () => {
-  const base = { seed: SEED, localHour: 12, becameAsleep: false, wantFulfilled: false } as const;
+  const base = { generation: { seed: SEED }, localHour: 12, becameAsleep: false, wantFulfilled: false } as const;
 
   it("counts any accepted action at night, not just medicine", () => {
     expect(classifyTitles({ ...base, action: "PET", localHour: 0 })).toContain("night-nurse");
@@ -35,7 +35,7 @@ describe("classifyTitles (SPEC §24.1)", () => {
   });
 
   it("credits the chef only for the generation's favorite dish", () => {
-    const { favoriteFood, dislikedFood } = quirks(SEED);
+    const { favoriteFood, dislikedFood } = quirks({ seed: SEED });
     expect(classifyTitles({ ...base, action: "FEED", itemId: favoriteFood })).toContain("chef");
     expect(classifyTitles({ ...base, action: "FEED", itemId: dislikedFood })).not.toContain("chef");
     expect(classifyTitles({ ...base, action: "FEED" })).not.toContain("chef");

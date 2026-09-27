@@ -175,7 +175,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   // This generation is better at one game than the others, and paid for it
   // (SPEC §21.4) — the same pure function every client can check.
-  const favorite = quirks(current.seed).favoriteGame === sessionGame.id;
+  const favorite = quirks(current).favoriteGame === sessionGame.id;
   const base = sessionGame.coins(score);
   const coins = favorite ? Math.round((base * QUIRK_FAVORITE_GAME_COIN_PERCENT) / 100) : base;
   const ledger = await recordContribution(await db(), {

@@ -1,19 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { isWantKind, WANT_KINDS, WANT_WINDOW_TICKS, wantAt, windowEndTick, windowIndexAt } from "./wants";
 import { quirks } from "./quirks";
-import { FOOD_ITEM_IDS } from "./economy";
+import { foodCatalogOf } from "./economy";
 import { MINIGAME_IDS } from "./minigames";
 
 const SEED = 0xc0ffee;
 const SPAN = 4000; // windows swept — 400 pet-days
 
 const sweep = (seed = SEED): NonNullable<ReturnType<typeof wantAt>>[] =>
-  Array.from({ length: SPAN }, (_, windowIndex) => wantAt(seed, windowIndex)).filter((want) => want !== null);
+  Array.from({ length: SPAN }, (_, windowIndex) => wantAt({ seed }, windowIndex)).filter((want) => want !== null);
 
 describe("pet wants (SPEC §25.1)", () => {
   it("draws the same want for the same seed and window on every client", () => {
     for (let windowIndex = 0; windowIndex < 2000; windowIndex++) {
-      expect(wantAt(SEED, windowIndex)).toEqual(wantAt(SEED, windowIndex));
+      expect(wantAt({ seed: SEED }, windowIndex)).toEqual(wantAt({ seed: SEED }, windowIndex));
     }
   });
 
@@ -34,10 +34,10 @@ describe("pet wants (SPEC §25.1)", () => {
 
   it("never craves the generation's disliked food", () => {
     for (const seed of [SEED, 1337, 42]) {
-      const { dislikedFood } = quirks(seed);
+      const { dislikedFood } = quirks({ seed });
       for (const want of sweep(seed)) {
         if (want.kind !== "crave-food") continue;
-        expect(FOOD_ITEM_IDS).toContain(want.itemId);
+        expect(foodCatalogOf({})).toContain(want.itemId);
         expect(want.itemId).not.toBe(dislikedFood);
       }
     }
