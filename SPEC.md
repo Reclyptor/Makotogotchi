@@ -1848,6 +1848,10 @@ and Makoto has a shrinking window to obey it on the four pads. Obeying is a
 point and the window tightens; one wrong move or one hesitation and she turns
 Makoto into a sausage on a plate, which ends the run. It is Simon Squeaks' pads
 with the memory replaced by pure reaction, and the roster's best fail state.
+The pads never show the answer: the shouted word is the only cue, drawn large
+and in no pad's colour, and a pad lights only once it has been pressed. The
+first version lit the ordered pad as the order came, which turned a reaction
+game into "tap the bright one" and made the shouting decoration.
 
 Each game is scored client-side but validated server-side against a
 **per-game plausibility envelope** (`src/sim/minigames.ts`: max score, max

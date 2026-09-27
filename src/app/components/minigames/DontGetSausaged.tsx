@@ -8,6 +8,11 @@
 // Simon Squeaks' pads with the memory taken out and pure reaction put in. Like
 // Simon it runs on timers rather than the shared loop, so it opens the
 // pre-roll itself.
+//
+// The pads never show the answer. The word Natsumi shouts is the only cue,
+// and a pad lights only once it has been pressed: the first version lit the
+// ordered pad the moment the order came, which made the game "tap the bright
+// one" and the shouting decoration.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FrameName } from "@/game/atlas.generated";
@@ -24,6 +29,7 @@ const START_WINDOW_MS = 1900;
 const WINDOW_STEP_MS = 55;
 const MIN_WINDOW_MS = 700;
 const BEAT_MS = 500; // the pause between obeying and the next order
+const PRESS_FLASH_MS = 160; // a pad lights for this long after it is pressed
 
 type Command = { label: string; colour: string; pose: FrameName };
 
@@ -40,6 +46,7 @@ export default function DontGetSausaged({ sheet, reportScore, finish }: GameProp
   const [pose, setPose] = useState<FrameName>("idleFront1");
   const [sausaged, setSausaged] = useState(false);
   const [round, setRound] = useState(0);
+  const [pressed, setPressed] = useState<number | null>(null);
 
   const scoreRef = useRef(0);
   const inputsRef = useRef(0);
@@ -87,6 +94,8 @@ export default function DontGetSausaged({ sheet, reportScore, finish }: GameProp
   const obey = (pad: number): void => {
     if (orderRef.current === null || finishedRef.current) return;
     inputsRef.current += 1;
+    setPressed(pad);
+    schedule(() => setPressed((current) => (current === pad ? null : current)), PRESS_FLASH_MS);
     if (pad !== orderRef.current) {
       endRun(true);
       return;
@@ -141,13 +150,15 @@ export default function DontGetSausaged({ sheet, reportScore, finish }: GameProp
       drawFrameAnchored(ctx, sheet, pose, 66, CANVAS_H - 6, 42);
     }
 
-    ctx.font = "12px monospace";
+    // The order is the whole cue, so it is the biggest thing on the board —
+    // and in no pad's colour, so reading it is the only way to know the pad.
+    ctx.font = "bold 20px monospace";
     if (order !== null) {
-      ctx.fillStyle = COMMANDS[order]!.colour;
-      ctx.fillText(`${COMMANDS[order]!.label.toUpperCase()}!`, 108, 30);
+      ctx.fillStyle = "#f5f0dc";
+      ctx.fillText(`${COMMANDS[order]!.label.toUpperCase()}!`, 104, 34);
     } else if (sausaged) {
       ctx.fillStyle = "#fb7185";
-      ctx.fillText("sausaged.", 108, 30);
+      ctx.fillText("sausaged.", 104, 34);
     }
     ctx.font = "10px monospace";
     ctx.fillStyle = "#f5f0dc";
@@ -169,7 +180,7 @@ export default function DontGetSausaged({ sheet, reportScore, finish }: GameProp
             aria-disabled={order === null}
             onClick={() => obey(index)}
             className="press h-12 rounded-xl text-xs font-semibold text-black/70"
-            style={{ backgroundColor: order === index ? command.colour : `${command.colour}4d` }}
+            style={{ backgroundColor: pressed === index ? command.colour : `${command.colour}4d` }}
           >
             {command.label}
           </button>
