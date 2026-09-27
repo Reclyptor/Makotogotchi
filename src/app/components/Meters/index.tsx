@@ -96,6 +96,18 @@ export default function Meters({ percentages, population, careMultiplier, allowa
         <span aria-hidden="true">👥 </span>
         {crowd}
         {demand}
+        {/* The count is per cookie and names are unique, so a phone and a
+            laptop are two caretakers until linked (§8.1). The first question
+            this number provokes is whether devices are counted twice, so the
+            answer sits beside it — for a viewer with an identity to link. */}
+        {allowance && (
+          <>
+            {" · "}
+            <a href="#link-devices" className="underline underline-offset-2 hover:text-foreground">
+              on two devices? link them
+            </a>
+          </>
+        )}
       </li>
       {allowanceText && (
         <li className="px-1 text-[11px] leading-tight text-muted">

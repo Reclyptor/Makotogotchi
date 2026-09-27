@@ -1820,18 +1820,6 @@ fast a player can tap, which is not a skill this roster tests. Pure
 order-matching, and the only game that asks the player to read several things
 at once rather than time one thing.
 
-**Don't Get Sausaged.** Natsumi gives a command — sit, spin, sleep, cheer —
-and Makoto has a shrinking window to obey it on the four pads. Obeying is a
-point and the window tightens; one wrong move or one hesitation and she turns
-Makoto into a sausage on a plate, which ends the run. It is Simon Squeaks' pads
-with the memory replaced by pure reaction, and the roster's best fail state.
-
-Each game is scored client-side but validated server-side against a
-**per-game plausibility envelope** (`src/sim/minigames.ts`: max score, max
-score per second, minimum inputs per point), because a fully authoritative
-implementation is disproportionate for a friends' toy while an unbounded
-client score is not acceptable either. The envelope judges *play* time: the
-server measures wall time from `start` and deducts the pre-roll (§13.3.1)
 Two rules keep it a matching game rather than a waiting game, and both
 exist because the first version was, in practice, neither.
 **The kitchen never sends out a dish nobody at the table asked for**: every
@@ -1851,6 +1839,18 @@ indistinguishable from one that is random. The rules are a pure module
 (`sausagePartyRules.ts`) with the randomness injected, and the no-dead-dish
 rule is a property test over thousands of random steps.
 
+**Don't Get Sausaged.** Natsumi gives a command — sit, spin, sleep, cheer —
+and Makoto has a shrinking window to obey it on the four pads. Obeying is a
+point and the window tightens; one wrong move or one hesitation and she turns
+Makoto into a sausage on a plate, which ends the run. It is Simon Squeaks' pads
+with the memory replaced by pure reaction, and the roster's best fail state.
+
+Each game is scored client-side but validated server-side against a
+**per-game plausibility envelope** (`src/sim/minigames.ts`: max score, max
+score per second, minimum inputs per point), because a fully authoritative
+implementation is disproportionate for a friends' toy while an unbounded
+client score is not acceptable either. The envelope judges *play* time: the
+server measures wall time from `start` and deducts the pre-roll (§13.3.1)
 before applying the rate ceiling. The chosen game is fixed at `start` and
 stored in the server's session, so a client cannot start a cheap envelope and
 finish an expensive one; per-game curves translate the score into the `PLAY`
@@ -3190,6 +3190,14 @@ exposes both the population and the multiplier, and the UI states them
 plainly beneath the meters — *"9 named caretakers this week · Makoto needs
 3.0× the care"* — so a needier pet reads as a bigger community rather than a
 bug. When the multiplier is 1.00× the line simply names the community size.
+
+The line also points at device linking (§8.1) — *"on two devices? link
+them"* — for any viewer with an identity to link. The count is per cookie
+and nicknames are unique, so a phone and a laptop are two named caretakers
+until they are linked, and the first question the number provokes in a
+crowded room is whether phones and laptops are being counted twice. Linking
+existed and was unfindable from the number that raised the question; the answer now sits beside it, and the
+link opens the panel rather than landing on a prompt to open it.
 
 The number on that line is the **head count**, not §23.1's presence weighting,
 and that is the right choice even though it is not the number the multiplier

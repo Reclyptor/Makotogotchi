@@ -14,7 +14,7 @@
 // rather than about the population count (§23.1), which is merely what the
 // room gets out of it.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Props = { named: boolean };
 
@@ -24,6 +24,18 @@ export default function LinkDevices({ named }: Props) {
   const [entered, setEntered] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // The head count under the meters links here (§23.3); arriving by that
+  // link — or by any link carrying the hash — opens the panel rather than
+  // landing on a one-line prompt to open it.
+  useEffect(() => {
+    const sync = (): void => {
+      if (window.location.hash === "#link-devices") setOpen(true);
+    };
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, []);
 
   const mint = async (): Promise<void> => {
     setNotice(null);
@@ -57,7 +69,7 @@ export default function LinkDevices({ named }: Props) {
 
   if (!open) {
     return (
-      <p className="text-xs text-muted">
+      <p id="link-devices" className="text-xs text-muted">
         <span aria-hidden="true">📱 </span>
         {named ? "Caring on a phone as well as a laptop? " : "Already have a name on another device? "}
         <button type="button" onClick={() => setOpen(true)} className="font-semibold text-foreground underline underline-offset-2 hover:text-accent">
@@ -69,7 +81,7 @@ export default function LinkDevices({ named }: Props) {
   }
 
   return (
-    <section aria-label="Link devices" className="flex w-full flex-col gap-2 rounded-lg border border-white/10 p-3 text-sm">
+    <section id="link-devices" aria-label="Link devices" className="flex w-full flex-col gap-2 rounded-lg border border-white/10 p-3 text-sm">
       {named && (
         <div className="flex flex-col gap-1">
           <p className="text-xs text-muted">
