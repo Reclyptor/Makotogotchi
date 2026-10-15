@@ -4,7 +4,7 @@
 // the crown and an elder's brow tufts drawn on every frame for a look before
 // committing.
 //
-// Two things are read off the art:
+// Three things are read off the art:
 //
 //   • The hat anchor. The inner ears are pink in every frame the pet is drawn
 //     in; the two pink blobs in the top half of a frame are the ears, and the
@@ -15,6 +15,9 @@
 //     contours, which touch pink — level with each other and an eye-spacing
 //     apart. The tufts' brow bars sit one art pixel above them, and their fur
 //     never rises above the head outline.
+//   • A nightcap. When the skyline at the anchor column is a vivid colour the
+//     pet itself never is, the art already wears a hat, and a cosmetic drawn
+//     there would land on top of it.
 //
 // Frames with no ears (the egg, the gravestone, the medicine) get no
 // candidate and wear nothing; a frame whose eyes are hidden prints a comment
@@ -44,6 +47,17 @@ const at = (x: number, y: number): Rgba => {
 };
 const isPink = ([r, g, b, a]: Rgba): boolean => a > 0 && r > 200 && g > 110 && g < 200 && b > 110 && b < 200 && r - g > 40;
 const isBlack = ([r, g, b, a]: Rgba): boolean => a > 0 && r < 50 && g < 50 && b < 50;
+/**
+ * A vivid colour the pet never is — its outline, fur and inner ears are all
+ * grey or pink. The muted blue-greys of the dust bath's cloud and the sick
+ * pet's ice pack sit well under the line; the nightcap's navy and cyan sit
+ * well over it.
+ */
+const isWorn = (pixel: Rgba): boolean => {
+  const [r, g, b] = pixel;
+  return !isPink(pixel) && Math.max(r, g, b) - Math.min(r, g, b) > 60;
+};
+
 const petFrames = (): FrameName[] => {
   const names = new Set<FrameName>();
   for (const clip of [...Object.values(BASE_CLIPS), ...Object.values(ONE_SHOT_CLIPS), ...IDLE_FLOURISH_CLIPS, WALK_CLIP]) {
@@ -54,7 +68,7 @@ const petFrames = (): FrameName[] => {
 
 type Blob = { x0: number; x1: number; y0: number; y1: number; size: number };
 type Point = { x: number; y: number };
-type Candidate = { name: FrameName; hat: Point | null; brows: Point | null };
+type Candidate = { name: FrameName; hat: (Point & { nightcap: boolean }) | null; brows: Point | null };
 
 /**
  * Four-connected blobs of `matches` pixels within rows [0, rows), with
@@ -133,13 +147,16 @@ const candidate = (name: FrameName): Candidate => {
     floor = Math.max(floor, y);
   }
   const centre = Math.round((centreOf(left) + centreOf(right)) / 2);
+  let crown = 0;
+  while (crown < f.h && at(f.x + centre, f.y + crown)[3] === 0) crown++;
+  const nightcap = isWorn(at(f.x + centre, f.y + crown));
   // Frame coordinates → the room's head space: columns from the frame's
   // bottom-centre as the atlas snaps it, rows from the frame's bottom edge.
   const toHeadSpace = (x: number, y: number): Point => ({ x: Math.round(x) - Math.floor(f.w / 2), y: y - f.h });
   const pair = eyes(name, floor);
   return {
     name,
-    hat: toHeadSpace(centre, floor),
+    hat: { ...toHeadSpace(centre, floor), nightcap },
     // Raised eyes would lift the tufts' fur over the skull, which is the
     // second pair of ears this table exists to prevent: the fur's top row
     // never rises above the head outline.
@@ -180,7 +197,7 @@ const contactSheet = (candidates: Candidate[]): void => {
     const footY = oy + f.h;
     // The tufts as the atlas draws them: bottom-centre on the brow point.
     if (c.brows) blit(BROWS.x, BROWS.y, BROWS.w, BROWS.h, footX + c.brows.x - BROWS.w / 2, footY + c.brows.y - BROWS.h);
-    if (!c.hat) return;
+    if (!c.hat || c.hat.nightcap) return;
     // The crown as room.ts draws it, so what the sheet shows is what ships.
     const ax = footX + c.hat.x;
     const ay = footY + c.hat.y;
@@ -198,7 +215,7 @@ const entry = ({ name, hat, brows }: Candidate): string => {
   if (!hat) return `  ${name}: null, // no ears in this frame`;
   const point = (p: Point): string => `{ x: ${p.x}, y: ${p.y} }`;
   const browsText = brows ? point(brows) : "null /* eyes hidden: set by hand */";
-  return `  ${name}: { x: ${hat.x}, y: ${hat.y}, brows: ${browsText} },`;
+  return `  ${name}: { x: ${hat.x}, y: ${hat.y}, brows: ${browsText}${hat.nightcap ? ", nightcap: true" : ""} },`;
 };
 
 const candidates = petFrames().map(candidate);

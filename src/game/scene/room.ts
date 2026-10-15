@@ -577,8 +577,10 @@ export class Room {
    * a hatchling's hat is a hatchling-sized hat, and at this frame's own
    * anchors (SPEC §10.5) so it sits between the ears wherever the pose put
    * them. An elder's brow tufts stand over the eyes, underneath whatever
-   * cosmetic is on top (SPEC §21.9). A frame with no anchor has no head to
-   * speak of — the egg, the gravestone — and wears nothing.
+   * cosmetic is on top (SPEC §21.9); a frame whose art already wears a
+   * nightcap keeps the tufts and leaves the cosmetic off. A frame with no
+   * anchor has no head to speak of — the egg, the gravestone — and wears
+   * nothing.
    */
   private renderHead(ctx: SceneContext, frame: FrameName, scale: number): void {
     const anchor = HEAD_ANCHORS[frame];
@@ -587,6 +589,7 @@ export class Room {
       ctx.translate(0, PET_Y);
       ctx.scale(scale, scale);
       if (this.stage === "ELDER") this.atlas.draw(ctx, "elderBrows", anchor.brows.x, anchor.brows.y);
+      if (anchor.nightcap) return;
       ctx.translate(anchor.x, anchor.y);
       this.renderCosmetic(ctx);
     });

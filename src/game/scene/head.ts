@@ -12,6 +12,8 @@
 //     between the eyes, one art pixel above them. Not the hat anchor: the dip
 //     is the top of the skull, and tufts hung from it stood above the outline
 //     like a second pair of ears.
+//   • `nightcap` — the art already wears a hat here, so no cosmetic goes on
+//     top of it.
 //
 // `null` is a frame with no ears to wear anything on: the egg, the
 // gravestone, the medicine, the pet inside the cloning tank.
@@ -26,6 +28,7 @@ export type HeadAnchor = {
   x: number;
   y: number;
   brows: { x: number; y: number };
+  nightcap?: true;
 };
 
 export const HEAD_ANCHORS: Partial<Record<FrameName, HeadAnchor | null>> = {
@@ -74,8 +77,8 @@ export const HEAD_ANCHORS: Partial<Record<FrameName, HeadAnchor | null>> = {
   shiver2: { x: -11, y: -126, brows: { x: -11, y: -109 } },
   sick1: { x: -3, y: -110, brows: { x: -3, y: -87 } },
   sick2: { x: -3, y: -110, brows: { x: -3, y: -87 } },
-  sleep1: { x: -5, y: -116, brows: { x: -5, y: -88 } },
-  sleep2: { x: -5, y: -116, brows: { x: -5, y: -88 } },
+  sleep1: { x: -5, y: -116, brows: { x: -5, y: -88 }, nightcap: true },
+  sleep2: { x: -5, y: -116, brows: { x: -5, y: -88 }, nightcap: true },
   sneeze1: { x: -13, y: -126, brows: { x: -22, y: -104 } },
   sneeze2: { x: -7, y: -126, brows: { x: -16, y: -104 } },
   tea1: { x: -7, y: -105, brows: { x: -17, y: -82 } },

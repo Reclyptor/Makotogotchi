@@ -1416,7 +1416,7 @@ frame's bottom-centre as the atlas snaps it and rows from its bottom edge.
 Frames with no ears (the egg, the gravestone, the medicine) carry `null` and
 wear nothing.
 
-Each entry also carries a brow point read off the same art:
+Each entry carries two more things read off the same art:
 
 - **`brows`** — where an elder's brow tufts (§21.9) stand, bottom-centre:
   midway between the eyes and one art pixel above them, and never so high
@@ -1426,12 +1426,17 @@ Each entry also carries a brow point read off the same art:
   once hung nine rows below the hat anchor instead; the dip is the top of the
   skull, so their fur stood above the outline between the ears and read as a
   second, paler pair of ears on every elder.
+- **`nightcap`** — the sleeping art wears its own hat. Where the skyline at
+  the anchor column is a vivid colour the pet never is, no cosmetic is drawn:
+  a crown over the nightcap was a blue-and-gold smear on the head all night.
+  The tufts still show beneath it.
 
 `npm run head-anchors` derives candidate entries from the art (the ears are
 pink in every frame) and draws a contact sheet with the crown and the tufts
 on every frame for review; the table is committed, hand-corrected where the
 art hides an ear or an eye, and render tests hold every clip frame to having
-an entry and every entry's tufts to sitting inside the head.
+an entry, every entry's tufts to sitting inside the head, and the nightcap
+frames to wearing nothing on top.
 
 The room draws the head layer inside the same transform as the sprite — so a
 hat mirrors with a pet strolling right, scales with a hatchling, and lands at

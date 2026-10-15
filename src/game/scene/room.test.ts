@@ -435,6 +435,19 @@ describe("a hat on the head", () => {
     expect(mourning.drawn.map((entry) => entry.x1 - entry.x0)).toEqual([SPRITE_FRAMES.dead1.w]);
   });
 
+  // The sleeping art wears its own nightcap, and the crown was drawn straight
+  // over it — a blue-and-gold smear on the head all night.
+  it("leaves the cosmetic off a sleeping pet's nightcap but keeps an elder's tufts", () => {
+    for (const frame of BASE_CLIPS.sleeping.frames) expect(HEAD_ANCHORS[frame]?.nightcap, frame).toBe(true);
+    const { room, state } = contentedRoom(22);
+    room.decor = { decor: [], activeCosmetic: "crown", ancestors: [] };
+    room.syncDerived(derive({ ...state, asleep: true, sleepReason: "NIGHT" }), true, 0);
+    const recorder = recordingContext();
+    room.render(recorder.ctx, 1000);
+    expect(crownBand(recorder.fills)).toBeUndefined();
+    expect(recorder.drawn.some((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES.elderBrows.w)).toBe(true);
+  });
+
   it("mirrors the hat with the pet when it faces right", () => {
     vi.useFakeTimers();
     try {
