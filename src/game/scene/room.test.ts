@@ -40,7 +40,7 @@ const IDENTITY: Matrix = { a: 1, d: 1, e: 0, f: 0 };
  */
 const recordingContext = (failAtCall = -1) => {
   /** Every sprite blit: where it landed, and whether the transform flipped it. */
-  const drawn: { x0: number; x1: number; mirrored: boolean }[] = [];
+  const drawn: { x0: number; x1: number; y0: number; y1: number; mirrored: boolean }[] = [];
   /** Every filled rectangle, in canvas pixels. */
   const fills: { x0: number; x1: number; y0: number; y1: number; mirrored: boolean }[] = [];
   /** Every full-canvas paint, with the clip that was in force when it landed. */
@@ -123,10 +123,11 @@ const recordingContext = (failAtCall = -1) => {
     drawImage: (...args: number[]) => {
       step();
       // The 9-argument form: the last four are the destination rectangle.
-      const [dx, , dw] = args.slice(5);
+      const [dx, dy, dw, dh] = args.slice(5);
       const a = state.matrix.e + state.matrix.a * dx!;
       const b = state.matrix.e + state.matrix.a * (dx! + dw!);
-      drawn.push({ x0: Math.min(a, b), x1: Math.max(a, b), mirrored: state.matrix.a < 0 });
+      const y0 = state.matrix.f + state.matrix.d * dy!;
+      drawn.push({ x0: Math.min(a, b), x1: Math.max(a, b), y0, y1: y0 + state.matrix.d * dh!, mirrored: state.matrix.a < 0 });
     },
   };
 
@@ -401,7 +402,18 @@ describe("a hat on the head", () => {
     expect(band.y1 - 172).toBe(anchor.y);
   });
 
-  it("rests an elder's brow tufts on the same anchor, and takes them off the gravestone", () => {
+  // The tufts used to hang nine rows below the ear dip — the top of the
+  // skull — so their fur stood above the head outline between the ears and
+  // read as a second, paler pair of ears on every elder. They now stand over
+  // the eyes, from an anchor of their own.
+  it("keeps every frame's brow tufts inside the head, never above its outline", () => {
+    for (const [frame, anchor] of Object.entries(HEAD_ANCHORS)) {
+      if (!anchor) continue;
+      expect(anchor.brows.y - SPRITE_FRAMES.elderBrows.h, frame).toBeGreaterThanOrEqual(anchor.y);
+    }
+  });
+
+  it("stands an elder's brow tufts over the eyes, and takes them off the gravestone", () => {
     const { room, derived, state } = contentedRoom(22);
     expect(derived.stage).toBe("ELDER");
     room.reducedMotion = true;
@@ -409,12 +421,13 @@ describe("a hat on the head", () => {
     const recorder = recordingContext();
     room.render(recorder.ctx, 1000);
     const frame = BASE_CLIPS.idle.frames[0]!;
-    const anchor = HEAD_ANCHORS[frame]!;
+    const { brows } = HEAD_ANCHORS[frame]!;
     const sprite = recorder.drawn.find((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES[frame].w)!;
     const tufts = recorder.drawn.find((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES.elderBrows.w)!;
     expect(tufts).toBeDefined();
-    // Centred on the anchor column, like a hat.
-    expect(tufts.x0 - sprite.x0).toBe(Math.floor(SPRITE_FRAMES[frame].w / 2) + anchor.x - SPRITE_FRAMES.elderBrows.w / 2);
+    // Bottom-centre on the brow point, measured from the pet's feet at y = 172.
+    expect(tufts.x0 - sprite.x0).toBe(Math.floor(SPRITE_FRAMES[frame].w / 2) + brows.x - SPRITE_FRAMES.elderBrows.w / 2);
+    expect(tufts.y1 - 172).toBe(brows.y);
 
     room.syncDerived(derive({ ...state, diedAtTick: state.tick }), false, 2000);
     const mourning = recordingContext();

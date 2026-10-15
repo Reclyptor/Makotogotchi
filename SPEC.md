@@ -1414,20 +1414,32 @@ between the two pink inner ears, and the row of the head outline at the
 bottom of the dip between them — in the room's head space, columns from the
 frame's bottom-centre as the atlas snaps it and rows from its bottom edge.
 Frames with no ears (the egg, the gravestone, the medicine) carry `null` and
-wear nothing. `npm run head-anchors` derives candidate entries from the art
-(the ears are pink in every frame) and draws a contact sheet with the crown
+wear nothing.
+
+Each entry also carries a brow point read off the same art:
+
+- **`brows`** — where an elder's brow tufts (§21.9) stand, bottom-centre:
+  midway between the eyes and one art pixel above them, and never so high
+  that the tufts' fur rises past the head outline. The eyes are the topmost
+  level pair of black shapes enclosed by fur — not the outline, which touches
+  the outside, and not the inner-ear contours, which touch pink. The tufts
+  once hung nine rows below the hat anchor instead; the dip is the top of the
+  skull, so their fur stood above the outline between the ears and read as a
+  second, paler pair of ears on every elder.
+
+`npm run head-anchors` derives candidate entries from the art (the ears are
+pink in every frame) and draws a contact sheet with the crown and the tufts
 on every frame for review; the table is committed, hand-corrected where the
-art hides an ear, and a render test holds every clip frame to having an
-entry.
+art hides an ear or an eye, and render tests hold every clip frame to having
+an entry and every entry's tufts to sitting inside the head.
 
 The room draws the head layer inside the same transform as the sprite — so a
 hat mirrors with a pet strolling right, scales with a hatchling, and lands at
 this frame's own anchor — and cosmetics are shaped around the anchor: x = 0
 between the ears, y = 0 the top of the outline, a hat's base row at y = −1.
 The crown's band is 27 pixels, the width of the front view's dip, so it
-fills that dip edge to edge. An elder's brow tufts (§21.9) sit on the same
-anchor, nine rows down, so they stay on the brow when the head tilts; a
-frame with no anchor gets no tufts either — the gravestone wears nothing.
+fills that dip edge to edge. A frame with no anchor gets no tufts either —
+the gravestone wears nothing.
 
 ---
 
@@ -2540,7 +2552,7 @@ pet just never looks different. Presentation-layer only:
 - **JUVENILE**: 90%.
 - **ADULT**: 100% (today's look).
 - **ELDER**: 100% plus a new `@1x` accessory sprite — gray brow tufts —
-  drawn in the head layer at the §10.5 head anchor like the cosmetics are
+  drawn in the head layer at the frame's §10.5 brow point, over the eyes
   (stacking under any worn cosmetic).
 
 The stage scale applies everywhere the room draws the pet (idle, wander,
