@@ -13,10 +13,13 @@ import { GAME_H, GAME_W } from "./engine";
 import type { Rng } from "./types";
 
 const TAP_SLOP = 6; // extra px of forgiveness around a bubble's radius
-// The smallest bubble's tap target, in game px. At the 288 CSS px canvas a
-// 360px phone gets, a game px is about 1.1 CSS px, so 19 makes the 10px
-// bubble a ~42px target — the usual touch guideline — rather than ~24.
-export const MIN_TAP_REACH = 19;
+// Every bubble is at least this big a target, in CSS px across, measured at
+// the 288px canvas a 360px phone gets (the usual touch guideline is 44).
+// Before this the 10px bubble was ~24px across at that size.
+const TAP_TARGET_CSS = 42;
+const REFERENCE_CANVAS_CSS = 288;
+// The target as a reach (a radius), in game px.
+export const MIN_TAP_REACH = (TAP_TARGET_CSS / 2) * (GAME_W / REFERENCE_CANVAS_CSS);
 const SWAY_AMP = 6;
 const MAX_DRIFT = 18; // px/s sideways, either way
 // Keeps the sprite just clear of the walls so float rounding can never

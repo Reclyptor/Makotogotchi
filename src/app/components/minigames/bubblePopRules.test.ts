@@ -82,11 +82,18 @@ describe("tapping", () => {
     for (const tier of TIERS) expect(tapReach(tier.size)).toBeGreaterThanOrEqual(MIN_TAP_REACH);
   });
 
+  it("makes the smallest bubble a touch-sized target at the 288px reference canvas", () => {
+    const smallest = Math.min(...TIERS.map((tier) => tier.size));
+    const targetCss = 2 * tapReach(smallest) * (288 / GAME_W);
+    expect(targetCss).toBeGreaterThanOrEqual(40);
+    expect(targetCss).toBeLessThanOrEqual(44);
+  });
+
   it("pops a bubble from as far off as its reach and no further", () => {
     const smallest = Math.min(...TIERS.map((tier) => tier.size));
-    const bubbles = [at(100, 60, smallest)];
-    expect(pickBubble(bubbles, 100 + MIN_TAP_REACH, 60)).toBe(0);
-    expect(pickBubble(bubbles, 100 + MIN_TAP_REACH + 0.5, 60)).toBe(-1);
+    const bubbles = [at(0, 60, smallest)];
+    expect(pickBubble(bubbles, MIN_TAP_REACH, 60)).toBe(0);
+    expect(pickBubble(bubbles, MIN_TAP_REACH + 0.5, 60)).toBe(-1);
   });
 
   it("returns -1 on a miss and on an empty tub", () => {
