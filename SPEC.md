@@ -1749,19 +1749,20 @@ time, world-wide, by design.
 | Don't Get Sausaged | reaction: do what Natsumi says, before she finishes saying it | +1 per command obeyed; one miss and Makoto is a sausage |
 
 A game may also restore a second need beside joy — a `bonus` on its roster
-entry, set only on Bubble Bath Pop (hygiene, `BATH_HYGIENE_BASE` = 5%). The
-base is scaled by the run's performance (so 2.5%–7.5%), then takes the ordinary
+entry, set only on Bubble Bath Pop (hygiene, `BATH_HYGIENE_BASE` = 10%). The
+base is scaled by the run's performance (so 5%–15%), then takes the ordinary
 road: the diminishing-returns curve on the current need, the caretaker's
-remaining allowance for it, and `recordApplied` — it spends the same hygiene
-allowance CLEAN does and can never exceed what care could do anyway. Toys and
-wishes scale joy only. It is not a `CLEAN`: no cooldown is set or checked, no
-want is fulfilled, and no coins or ledger credit follow. Because `itemId` names
-the game on every past run, it cannot switch the effect on without washing
-historical logs; the `CARE` event carries an optional `minigame` field instead,
-written by the play route from the server-side session. `reduce` applies the
-bonus only when that field is present, so logs from before it fold exactly as
-they always did, and reports what it applied (`ReduceResult.bonus`) for the
-route to return and the result line to show.
+remaining allowance for it, and `recordApplied`. The curve halves the bonus at
+50% hygiene, so a par run on a half-clean Makoto gives about 5%. It spends the
+same hygiene allowance CLEAN does and can never exceed what care could do
+anyway. Toys and wishes scale joy only. It is not a `CLEAN`: no cooldown is
+set or checked, no want is fulfilled, and no coins or ledger credit follow.
+Because `itemId` names the game on every past run, it cannot switch the effect
+on without washing historical logs; the `CARE` event carries an optional
+`minigame` field instead, written by the play route from the server-side
+session. `reduce` applies the bonus only when that field is present, so logs
+from before it fold exactly as they always did, and reports what it applied
+(`ReduceResult.bonus`) for the route to return and the result line to show.
 
 ### 13.3.1 The three-second pre-roll
 

@@ -346,10 +346,10 @@ describe("economy items (SPEC §13)", () => {
         expect(result.bonus).toEqual({ need: "hygiene", applied: expected });
         expect(result.state.needs.hygiene).toBe(hygiene + expected);
       }
-      // Worked numbers from 50% hygiene: 1.3%, 2.5%, 3.8%.
-      expect(reduce(state, bath(log, "w50", 50, "bubblepop"), ctx).bonus?.applied).toBe(12_500);
-      expect(reduce(state, bath(log, "w100", 100, "bubblepop"), ctx).bonus?.applied).toBe(25_000);
-      expect(reduce(state, bath(log, "w150", 150, "bubblepop"), ctx).bonus?.applied).toBe(37_500);
+      // Worked numbers from 50% hygiene: 2.5%, 5%, 7.5%.
+      expect(reduce(state, bath(log, "w50", 50, "bubblepop"), ctx).bonus?.applied).toBe(25_000);
+      expect(reduce(state, bath(log, "w100", 100, "bubblepop"), ctx).bonus?.applied).toBe(50_000);
+      expect(reduce(state, bath(log, "w150", 150, "bubblepop"), ctx).bonus?.applied).toBe(75_000);
     });
 
     it("joy is untouched by the bonus, and the toy bonus does not scale it", () => {
