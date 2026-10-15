@@ -1748,6 +1748,21 @@ time, world-wide, by design.
 | Sausage Party | 35s: serve each guest the plate they are holding up | +1 per plate matched; a wrong plate costs that guest's patience |
 | Don't Get Sausaged | reaction: do what Natsumi says, before she finishes saying it | +1 per command obeyed; one miss and Makoto is a sausage |
 
+A game may also restore a second need beside joy — a `bonus` on its roster
+entry, set only on Bubble Bath Pop (hygiene, `BATH_HYGIENE_BASE` = 5%). The
+base is scaled by the run's performance (so 2.5%–7.5%), then takes the ordinary
+road: the diminishing-returns curve on the current need, the caretaker's
+remaining allowance for it, and `recordApplied` — it spends the same hygiene
+allowance CLEAN does and can never exceed what care could do anyway. Toys and
+wishes scale joy only. It is not a `CLEAN`: no cooldown is set or checked, no
+want is fulfilled, and no coins or ledger credit follow. Because `itemId` names
+the game on every past run, it cannot switch the effect on without washing
+historical logs; the `CARE` event carries an optional `minigame` field instead,
+written by the play route from the server-side session. `reduce` applies the
+bonus only when that field is present, so logs from before it fold exactly as
+they always did, and reports what it applied (`ReduceResult.bonus`) for the
+route to return and the result line to show.
+
 ### 13.3.1 The three-second pre-roll
 
 Every run opens with a **three-second countdown** (`MINIGAME_COUNTDOWN_MS` in

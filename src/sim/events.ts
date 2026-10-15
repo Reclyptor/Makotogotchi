@@ -11,6 +11,7 @@ import { z } from "zod";
 import { CARE_ACTIONS } from "./tuning";
 import { PERFORMANCE_MAX, PERFORMANCE_MIN } from "./economy";
 import { WANT_KINDS } from "./wants";
+import { MINIGAME_IDS } from "./minigames";
 
 export const NICKNAME_PATTERN = /^[\p{L}\p{N} _-]{2,16}$/u;
 
@@ -30,6 +31,11 @@ export const careEventSchema = z.object({
   itemId: z.string().min(1).optional(),
   /** Minigame result scaling PLAY's magnitude, percent (SPEC §13.3). */
   performance: z.number().int().min(PERFORMANCE_MIN).max(PERFORMANCE_MAX).optional(),
+  /** The game this PLAY came from, written only by a ruleset that gives games
+   *  a secondary effect (SPEC §13.3). `itemId` already names the game on older
+   *  events, so it cannot gate the effect without re-washing every past run;
+   *  this field can, because only newer events carry it. */
+  minigame: z.enum(MINIGAME_IDS).optional(),
 });
 
 /** Installs a communal toy for the rest of the generation (SPEC §13.2). */

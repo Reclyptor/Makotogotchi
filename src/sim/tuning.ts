@@ -184,6 +184,9 @@ export const MAGNITUDE_ACTIONS: Partial<Record<CareAction, { need: NeedKey; base
 };
 
 export const PLAY_ENERGY_COST = 60_000; // paid by the pet (SPEC §2.5)
+/** What a Bubble Bath Pop run adds to hygiene before the run's performance
+ *  scales it and the curve shapes it — 5% at par (SPEC §13.3). */
+export const BATH_HYGIENE_BASE = 50_000;
 export const MEDICATE_HEALTH_RESTORE = 50_000_000_000; // +5% health, flat
 
 // Cooldowns in ticks. Global belongs to the pet ("Makoto is still eating");

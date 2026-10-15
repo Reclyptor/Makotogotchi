@@ -1,10 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { MINIGAMES, MINIGAME_COUNTDOWN_MS, plausibleRun } from "./minigames";
+import { BATH_HYGIENE_BASE } from "./tuning";
 
 // The server measures wall time from `start`, which opens with the pre-roll
 // (SPEC §13.3.1). These cases are written in play time — how long the player
 // actually had the controls — and wall() puts the count back on top.
 const wall = (playMs: number): number => playMs + MINIGAME_COUNTDOWN_MS;
+
+describe("minigame secondary effects", () => {
+  it("only Bubble Bath Pop restores a second need", () => {
+    const withBonus = Object.values(MINIGAMES).filter((game) => game.bonus);
+    expect(withBonus.map((game) => game.id)).toEqual(["bubblepop"]);
+    expect(MINIGAMES.bubblepop.bonus).toEqual({ need: "hygiene", base: BATH_HYGIENE_BASE });
+  });
+});
 
 describe("minigame envelopes", () => {
   it("accepts an honest middling run in every game", () => {

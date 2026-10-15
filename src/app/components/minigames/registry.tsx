@@ -24,7 +24,7 @@ export type GameEntry = {
 export const GAMES: Record<MinigameId, GameEntry> = {
   dustdash: { Component: DustDash, hint: "Tap, click, or press space to hop the dust bunnies!" },
   snackcatch: { Component: SnackCatch, hint: "Move with your pointer or arrow keys — catch the food, dodge the sock!" },
-  bubblepop: { Component: BubblePop, hint: "Tap or click the bubbles before they float away!" },
+  bubblepop: { Component: BubblePop, hint: "Tap or click the bubbles before they float away — a good bath leaves Makoto cleaner!" },
   simon: { Component: SimonSqueaks, hint: "Watch Makoto's moves, then repeat them on the pads!" },
   wheelsprint: { Component: WheelSprint, hint: "Tap, click, or press space when the spark crosses the top!" },
   shuffle: { Component: MakotoShuffle, hint: "Watch which bowl Makoto hides under, then tap it — or press 1, 2, 3!" },

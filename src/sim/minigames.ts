@@ -4,6 +4,8 @@
 // a legitimate client can produce, and the curves translate score into the
 // PLAY performance multiplier and the coin payout.
 
+import { BATH_HYGIENE_BASE, type NeedKey } from "./tuning";
+
 export const MINIGAME_IDS = [
   "dustdash",
   "snackcatch",
@@ -42,6 +44,10 @@ export type MinigameDef = {
   performance: (score: number) => number;
   /** score → coins credited. */
   coins: (score: number) => number;
+  /** A second need the run restores beside PLAY's joy (SPEC §13.3). Scaled by
+   *  the run's performance and shaped by the same curve and caretaker budget
+   *  as any care, but it is not that need's action: no cooldown is set. */
+  bonus?: { need: NeedKey; base: number };
 };
 
 const clampPerformance = (value: number): number => Math.max(50, Math.min(150, Math.round(value)));
@@ -81,6 +87,7 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
     inputsPerPoint: 1,
     performance: (score) => clampPerformance(50 + score * 4),
     coins: (score) => Math.round(score * 0.5),
+    bonus: { need: "hygiene", base: BATH_HYGIENE_BASE },
   },
   simon: {
     id: "simon",

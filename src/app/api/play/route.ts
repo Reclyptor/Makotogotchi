@@ -162,9 +162,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   // The game's id rides the event as itemId — injected here from the
   // server-side session, never from the client body — so the fold can match
-  // play-game wants (SPEC §25.3).
+  // play-game wants (SPEC §25.3). It rides again as `minigame`, the field that
+  // switches on a game's secondary effect (SPEC §13.3).
   const outcome = await engine.care(current, "PLAY", identity.caretakerId, {
     itemId: sessionGame.id,
+    minigame: sessionGame.id,
     performance: sessionGame.performance(score),
     minigameScore: score,
   });
@@ -218,5 +220,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   await endSpectacle(score, outcome.applied);
-  return withCookie(NextResponse.json({ applied: outcome.applied, coins: ledger.coins + coins + wantCoins, score }));
+  return withCookie(
+    NextResponse.json({
+      applied: outcome.applied,
+      ...(outcome.bonus ? { bonus: outcome.bonus } : {}),
+      coins: ledger.coins + coins + wantCoins,
+      score,
+    }),
+  );
 }

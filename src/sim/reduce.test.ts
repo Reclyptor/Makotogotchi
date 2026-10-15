@@ -12,6 +12,7 @@ import { WANT_BONUS_PERCENT, WANT_EXPIRY_JOY_DEBIT, windowEndTick, windowIndexAt
 import {
   ACTION_MAGNITUDE,
   AWAKE_HOURS,
+  BATH_HYGIENE_BASE,
   type CareAction,
   COOLDOWNS,
   diminishedMagnitude,
@@ -321,6 +322,101 @@ describe("economy items (SPEC §13)", () => {
     const poor = reduce(state, { ...log.care(1002, "PLAY", "c"), tick: 1000, performance: 50 }, ctx).applied;
     expect(great).toBeGreaterThan(base);
     expect(poor).toBeLessThan(base);
+  });
+
+  describe("a minigame's secondary effect (SPEC §13.3)", () => {
+    const hygiene = 500_000;
+    const stateWith = (overrides: Partial<PetState["needs"]> = {}): PetState => ({
+      ...bornState(),
+      needs: { hunger: 500_000, energy: 500_000, hygiene, joy: 0, ...overrides },
+    });
+    const bath = (log: EventLog, caretaker: string, performance: number, minigame?: "bubblepop" | "dustdash") => ({
+      ...log.care(1000, "PLAY", caretaker),
+      itemId: minigame ?? "bubblepop",
+      performance,
+      ...(minigame ? { minigame } : {}),
+    });
+
+    it("bubblepop scales its hygiene by performance and shapes it with the curve", () => {
+      const state = stateWith();
+      const log = new EventLog();
+      for (const performance of [50, 100, 150]) {
+        const result = reduce(state, bath(log, `c${performance}`, performance, "bubblepop"), ctx);
+        const expected = diminishedMagnitude(Math.floor((BATH_HYGIENE_BASE * performance) / 100), hygiene);
+        expect(result.bonus).toEqual({ need: "hygiene", applied: expected });
+        expect(result.state.needs.hygiene).toBe(hygiene + expected);
+      }
+      // Worked numbers from 50% hygiene: 1.3%, 2.5%, 3.8%.
+      expect(reduce(state, bath(log, "w50", 50, "bubblepop"), ctx).bonus?.applied).toBe(12_500);
+      expect(reduce(state, bath(log, "w100", 100, "bubblepop"), ctx).bonus?.applied).toBe(25_000);
+      expect(reduce(state, bath(log, "w150", 150, "bubblepop"), ctx).bonus?.applied).toBe(37_500);
+    });
+
+    it("joy is untouched by the bonus, and the toy bonus does not scale it", () => {
+      const state = stateWith();
+      const log = new EventLog();
+      const plain = reduce(state, bath(log, "a", 100), ctx);
+      const withBath = reduce(state, bath(log, "b", 100, "bubblepop"), ctx);
+      expect(withBath.applied).toBe(plain.applied);
+      expect(withBath.state.needs.joy).toBe(plain.state.needs.joy);
+
+      const toyed = { ...state, toys: ["wheel"] };
+      const withToy = reduce(toyed, bath(log, "c", 100, "bubblepop"), ctx);
+      expect(withToy.applied).toBeGreaterThan(withBath.applied);
+      expect(withToy.bonus).toEqual(withBath.bonus);
+    });
+
+    it("an event without `minigame` — an old log — adds no hygiene", () => {
+      const state = stateWith();
+      const log = new EventLog();
+      const old = reduce(state, bath(log, "a", 150), ctx);
+      expect(old.bonus).toBeUndefined();
+      expect(old.state.needs.hygiene).toBe(hygiene);
+      expect(old.state.caretakers.find((c) => c.id === "a")?.budget.hygiene).toBeUndefined();
+    });
+
+    it("another game's `minigame` adds no hygiene", () => {
+      const log = new EventLog();
+      const result = reduce(stateWith(), bath(log, "a", 150, "dustdash"), ctx);
+      expect(result.bonus).toBeUndefined();
+      expect(result.state.needs.hygiene).toBe(hygiene);
+    });
+
+    it("is not a CLEAN: no cooldown is set and CLEAN stays available", () => {
+      const state = stateWith();
+      const log = new EventLog();
+      const { state: bathed } = reduce(state, bath(log, "a", 100, "bubblepop"), ctx);
+      expect(bathed.lastActionTick.CLEAN).toBe(state.lastActionTick.CLEAN);
+      expect(bathed.caretakers.find((c) => c.id === "a")?.lastActionTick.CLEAN).toBeUndefined();
+      expect(canPerform(bathed, "CLEAN", "a", ctx)).toMatchObject({ ok: true });
+    });
+
+    it("draws on the caretaker's hygiene allowance, shared with CLEAN", () => {
+      const state = stateWith();
+      const log = new EventLog();
+      const { state: bathed, bonus } = reduce(state, bath(log, "a", 100, "bubblepop"), ctx);
+      const spent = bathed.caretakers.find((c) => c.id === "a")!;
+      expect(budgetRemaining(spent, "hygiene", 1000)).toBe(WEEKLY_BUDGET.hygiene - bonus!.applied);
+    });
+
+    it("applies nothing once the hygiene allowance is spent, while joy still lands", () => {
+      const state = stateWith();
+      const record = caretakerRecord(state, "greedy");
+      record.budget.hygiene = [{ day: 0, applied: WEEKLY_BUDGET.hygiene }];
+      const log = new EventLog();
+      const result = reduce(state, bath(log, "greedy", 150, "bubblepop"), ctx);
+      expect(result.bonus).toEqual({ need: "hygiene", applied: 0 });
+      expect(result.state.needs.hygiene).toBe(hygiene);
+      expect(result.applied).toBeGreaterThan(0);
+    });
+
+    it("caps the bonus at the allowance that is left", () => {
+      const state = stateWith();
+      const record = caretakerRecord(state, "nearly");
+      record.budget.hygiene = [{ day: 0, applied: WEEKLY_BUDGET.hygiene - 1_000 }];
+      const log = new EventLog();
+      expect(reduce(state, bath(log, "nearly", 150, "bubblepop"), ctx).bonus?.applied).toBe(1_000);
+    });
   });
 
   it("super medicine bypasses cooldowns but never the sickness gate", () => {

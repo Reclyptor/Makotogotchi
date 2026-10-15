@@ -7,6 +7,7 @@ import { phaseAt, type PetState, type ProjectionContext } from "./model";
 import { project } from "./project";
 import { drinkItem, foodItem, toysPlayBonusPercent, type Perks } from "./economy";
 import { quirkFoodPercent } from "./quirks";
+import { MINIGAMES } from "./minigames";
 import { budgetRemaining, caretakerRecord, pruneCaretakers, recordApplied } from "./score";
 import { careMultiplierPermille, presencePermilleOf } from "./difficulty";
 import {
@@ -17,6 +18,7 @@ import {
   NEED_KEYS,
   NEED_MAX,
   PLAY_ENERGY_COST,
+  type NeedKey,
 } from "./tuning";
 import { WANT_BONUS_PERCENT, WANT_EXPIRY_JOY_DEBIT, WANT_FULFILLING_ACTION, windowIndexAt } from "./wants";
 import type { Milestone, PetEvent } from "./events";
@@ -26,6 +28,11 @@ export type ReduceResult = {
   milestones: Milestone[];
   /** Need units actually restored by a care action (post-curve, post-budget). */
   applied: number;
+  /** What a minigame run restored beside `applied` (SPEC §13.3). Present only
+   *  when the event named a game with a secondary effect, even if the curve or
+   *  the budget left it at zero. The reducer is the one place it is computed;
+   *  everything downstream carries it. */
+  bonus?: { need: NeedKey; applied: number };
   /**
    * Whether a `CARE` event moved the pet at all — any need, its health, its
    * sleep, or its sickness.
@@ -146,6 +153,19 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       // this action's doing and never the ticks that led up to it.
       const before = petMark(state);
       let applied = 0;
+      let bonus: ReduceResult["bonus"];
+
+      // Restores a need the way every care action does: base through the curve,
+      // capped by this caretaker's remaining allowance, then booked against it.
+      const grant = (need: NeedKey, base: number): number => {
+        const given = Math.min(
+          diminishedMagnitude(base, state.needs[need]),
+          budgetRemaining(record, need, event.tick, careMultiplierPermille(presencePermilleOf(state))),
+        );
+        state.needs[need] = clamp(state.needs[need] + given, NEED_MAX);
+        recordApplied(record, need, event.tick, given);
+        return given;
+      };
 
       // The open want, granted iff the action matches its kind (and item,
       // where the kind names one) inside its own window — the deadline lives
@@ -204,13 +224,7 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
           // Granting a wish pays extra — last among the pre-curve modifiers,
           // so a favorite-food craving stacks both bonuses (SPEC §25.3).
           if (fulfills) base = Math.floor((base * WANT_BONUS_PERCENT) / 100);
-          const curved = diminishedMagnitude(base, state.needs[magnitude.need]);
-          applied = Math.min(
-            curved,
-            budgetRemaining(record, magnitude.need, event.tick, careMultiplierPermille(presencePermilleOf(state))),
-          );
-          state.needs[magnitude.need] = clamp(state.needs[magnitude.need] + applied, NEED_MAX);
-          recordApplied(record, magnitude.need, event.tick, applied);
+          applied = grant(magnitude.need, base);
           if (fulfills && applied > 0) {
             // A budget-exhausted no-op does not grant a wish (SPEC §25.3).
             state.wantSettledWindow = want.window;
@@ -222,6 +236,15 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
             });
           }
           if (food) applyPerks(state, food.perks);
+          // A game with a secondary effect pays it on the run's performance
+          // alone — toys and wishes are about joy — and only when the event
+          // names the game: older logs carry the game as `itemId` too, and
+          // must keep folding to what they always did (SPEC §13.3).
+          const secondary = event.action === "PLAY" && event.minigame !== undefined ? MINIGAMES[event.minigame].bonus : undefined;
+          if (secondary) {
+            const scaled = Math.floor((secondary.base * (event.performance ?? 100)) / 100);
+            bonus = { need: secondary.need, applied: grant(secondary.need, scaled) };
+          }
         }
         if (event.action === "PLAY") {
           state.needs.energy = clamp(state.needs.energy - PLAY_ENERGY_COST, NEED_MAX);
@@ -236,7 +259,7 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       state.lastActionTick[event.action] = event.tick;
       record.lastActionTick[event.action] = event.tick;
       pruneCaretakers(state, event.tick);
-      return { state, milestones, applied, changed: petMark(state) !== before };
+      return { state, milestones, applied, ...(bonus ? { bonus } : {}), changed: petMark(state) !== before };
     }
   }
 };

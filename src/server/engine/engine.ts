@@ -22,7 +22,8 @@ import type Redis from "ioredis";
 import { FOOD_ITEM_IDS } from "@/sim/economy";
 import { genesis } from "@/sim/genesis";
 import { project } from "@/sim/project";
-import { reduce } from "@/sim/reduce";
+import { reduce, type ReduceResult } from "@/sim/reduce";
+import type { MinigameId } from "@/sim/minigames";
 import { canPerform, type ValidationResult } from "@/sim/validate";
 import { windowEndTick, windowIndexAt, type Want } from "@/sim/wants";
 import { isAlive, type Generation, type PetState, type ProjectionContext } from "@/sim/model";
@@ -61,6 +62,9 @@ export type CareOutcome =
   | {
       ok: true;
       applied: number;
+      /** What a minigame's secondary effect restored (SPEC §13.3), as the
+       *  reducer computed it. */
+      bonus?: ReduceResult["bonus"];
       /** Whether the action moved the pet at all — what decides whether a
        *  consumable spent on it is handed back (SPEC §13.2). */
       changed: boolean;
@@ -99,6 +103,7 @@ type Prepared =
 type AdvanceResult = {
   state: PetState;
   applied: number;
+  bonus?: ReduceResult["bonus"];
   /** Whether the input event moved the pet; true when there was no event. */
   changed: boolean;
   rejected: Exclude<ValidationResult, { ok: true }> | null;
@@ -205,6 +210,7 @@ export class PetEngine {
       const prepared = prepare(state, ctx);
       let applied = 0;
       let changed = true;
+      let bonus: ReduceResult["bonus"];
       let inputEvent: PetEvent | null = null;
       const eventMilestones: Milestone[] = [];
       if (prepared.kind === "reject") {
@@ -217,6 +223,7 @@ export class PetEngine {
         state = reduced.state;
         applied = reduced.applied;
         changed = reduced.changed;
+        bonus = reduced.bonus;
         toAppend.push({ event: inputEvent, extras: { applied, ...prepared.extras } });
         // Milestones produced by applying the event (RECOVERED, lullaby
         // SLEPT, WANT_FULFILLED) share its tick and fold cleanly after it.
@@ -310,7 +317,7 @@ export class PetEngine {
         await this.deps.redis.set(this.deps.key("snapshot-tick"), String(state.tick));
       }
 
-      return { state, applied, changed, rejected: null, eventMilestones };
+      return { state, applied, ...(bonus ? { bonus } : {}), changed, rejected: null, eventMilestones };
     });
   }
 
@@ -325,7 +332,7 @@ export class PetEngine {
     generation: Generation,
     action: CareAction,
     caretakerId: string,
-    options: { itemId?: string; performance?: number; minigameScore?: number } = {},
+    options: { itemId?: string; performance?: number; minigame?: MinigameId; minigameScore?: number } = {},
   ): Promise<CareOutcome> {
     const result = await this.advance(generation, (state, ctx) => {
       const verdict = canPerform(state, action, caretakerId, ctx, options.itemId);
@@ -344,11 +351,19 @@ export class PetEngine {
           caretakerId,
           ...(options.itemId !== undefined ? { itemId: options.itemId } : {}),
           ...(options.performance !== undefined ? { performance: options.performance } : {}),
+          ...(options.minigame !== undefined ? { minigame: options.minigame } : {}),
         }),
       };
     });
     if (result.rejected) return { ok: false, rejection: result.rejected };
-    return { ok: true, applied: result.applied, changed: result.changed, state: result.state, milestones: result.eventMilestones };
+    return {
+      ok: true,
+      applied: result.applied,
+      ...(result.bonus ? { bonus: result.bonus } : {}),
+      changed: result.changed,
+      state: result.state,
+      milestones: result.eventMilestones,
+    };
   }
 
   /** Install a communal toy for this generation (SPEC §13.2). */

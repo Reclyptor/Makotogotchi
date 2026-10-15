@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MINIGAMES, MINIGAME_COUNTDOWN_MS, type MinigameId } from "@/sim/minigames";
+import type { NeedKey } from "@/sim/tuning";
 import { loadSpriteSheet } from "@/game/engine/atlas";
 import { SPRITE_SHEET_URL } from "@/game/atlas.generated";
 import type { ReactNotice } from "@/app/hooks/usePetStream";
@@ -30,7 +31,10 @@ const CHEER_CAP = 6;
 
 type Cheer = { id: number; emoji: string; leftPercent: number };
 
-type Result = { score: number; applied: number; coins: number } | { error: string };
+// `bonus` is whatever the game restored beside joy, as the server's reducer
+// computed it (SPEC §13.3) — the Shell only reports it.
+type Scored = { score: number; applied: number; bonus?: { need: NeedKey; applied: number }; coins: number };
+type Result = Scored | { error: string };
 
 export type ShellProps = {
   gameId: MinigameId;
@@ -145,8 +149,7 @@ export default function Shell({ gameId, onClose, onReact }: ShellProps) {
       body: JSON.stringify({ phase: "finish", score, inputs }),
     }).catch(() => null);
     if (response?.ok) {
-      const body = (await response.json()) as { applied: number; coins: number; score: number };
-      setResult({ score: body.score, applied: body.applied, coins: body.coins });
+      setResult((await response.json()) as Scored);
     } else {
       const body = (await response?.json().catch(() => null)) as { error?: string; reason?: string } | null;
       setResult({
@@ -230,8 +233,9 @@ export default function Shell({ gameId, onClose, onReact }: ShellProps) {
               <p className="text-sm text-rose-300">{result.error}</p>
             ) : (
               <p className="text-sm">
-                Scored <strong>{result.score}</strong> — Makoto&apos;s joy +{(result.applied / 10_000).toFixed(1)}% · 🪙 +
-                {result.coins}
+                Scored <strong>{result.score}</strong> — Makoto&apos;s joy +{(result.applied / 10_000).toFixed(1)}%
+                {result.bonus && result.bonus.applied > 0 && ` · ${result.bonus.need} +${(result.bonus.applied / 10_000).toFixed(1)}%`} · 🪙
+                +{result.coins}
               </p>
             )}
             <button
