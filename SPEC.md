@@ -1870,6 +1870,22 @@ and in no pad's colour, and a pad lights only once it has been pressed. The
 first version lit the ordered pad as the order came, which turned a reaction
 game into "tap the bright one" and made the shouting decoration.
 
+**Bubble Bath Pop.** Bubbles foam up from the tub; tap one to pop it for a
+point, or press Space for whichever is closest to escaping off the top. The
+first version crowded every bubble into the left 60% of the board and drifted
+them all the same way, so half the tub sat empty and the other half was a
+scramble of small, fast targets — about 24 CSS px at phone width, half a
+touch target. Now **a bubble spawns anywhere across the tub and drifts either
+way, on a path chosen to keep the whole sprite on the board for its entire
+rise**, so the foam covers the board evenly and nothing is ever half off the
+edge. **A tap pops the bubble nearest to it**, within a reach that never drops
+below about 42 CSS px for the smallest bubble: reaches overlap at that size,
+and the topmost bubble that happened to contain the tap is not the one the
+player was aiming at. How many bubbles appear, and how fast, is unchanged, so
+the score envelope is too — the fix makes bubbles reachable, not more
+numerous. The rules are a pure module (`bubblePopRules.ts`) with the
+randomness injected, and the stays-on-the-board rule is a property test.
+
 Each game is scored client-side but validated server-side against a
 **per-game plausibility envelope** (`src/sim/minigames.ts`: max score, max
 score per second, minimum inputs per point), because a fully authoritative
