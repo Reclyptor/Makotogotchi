@@ -10,3 +10,6 @@ export type GameProps = {
   /** End the run exactly once with the final score and total input count. */
   finish: (score: number, inputs: number) => void;
 };
+
+/** A number in [0, 1), like Math.random — injected so game rules are testable. */
+export type Rng = () => number;

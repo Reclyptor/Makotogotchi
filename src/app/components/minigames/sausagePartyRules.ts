@@ -10,6 +10,7 @@
 // as failing for no reason, because it was.
 
 import type { FrameName } from "@/game/atlas.generated";
+import type { Rng } from "./types";
 
 export const SEATS = 3;
 
@@ -58,9 +59,6 @@ export type ServeOutcome =
   | { kind: "plating" }
   /** An empty or busy seat, or nobody at it who can be served. */
   | { kind: "unavailable" };
-
-/** A number in [0, 1), like Math.random — injected so the rules are testable. */
-export type Rng = () => number;
 
 const pickFrom = <T>(options: readonly T[], rng: Rng): T => options[Math.floor(rng() * options.length)]!;
 

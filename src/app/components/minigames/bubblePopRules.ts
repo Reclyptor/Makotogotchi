@@ -10,6 +10,7 @@
 
 import type { FrameName } from "@/game/atlas.generated";
 import { GAME_H, GAME_W } from "./engine";
+import type { Rng } from "./types";
 
 export const TAP_SLOP = 6; // extra px of forgiveness around a bubble's radius
 // The smallest bubble's tap target, in game px. At the 288 CSS px canvas a
@@ -28,9 +29,6 @@ export const TIERS: readonly { frame: FrameName; size: number; extraVy: number }
   { frame: "bubble2", size: 16, extraVy: 3 },
   { frame: "bubble3", size: 22, extraVy: 0 },
 ];
-
-/** A number in [0, 1), like Math.random — injected so the rules are testable. */
-export type Rng = () => number;
 
 /** A bubble's trajectory: everything needed to place it at any age. */
 export type Bubble = {
