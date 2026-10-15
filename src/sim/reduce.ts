@@ -7,7 +7,7 @@ import { phaseAt, type PetState, type ProjectionContext } from "./model";
 import { project } from "./project";
 import { drinkItem, foodItem, toysPlayBonusPercent, type Perks } from "./economy";
 import { quirkFoodPercent } from "./quirks";
-import { MINIGAMES } from "./minigames";
+import { minigameBonus } from "./minigames";
 import { budgetRemaining, caretakerRecord, pruneCaretakers, recordApplied } from "./score";
 import { careMultiplierPermille, presencePermilleOf } from "./difficulty";
 import {
@@ -240,7 +240,7 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
           // alone — toys and wishes are about joy — and only when the event
           // names the game: older logs carry the game as `itemId` too, and
           // must keep folding to what they always did (SPEC §13.3).
-          const secondary = event.action === "PLAY" && event.minigame !== undefined ? MINIGAMES[event.minigame].bonus : undefined;
+          const secondary = event.action === "PLAY" ? minigameBonus(event.minigame) : undefined;
           if (secondary) {
             const scaled = Math.floor((secondary.base * (event.performance ?? 100)) / 100);
             bonus = { need: secondary.need, applied: grant(secondary.need, scaled) };

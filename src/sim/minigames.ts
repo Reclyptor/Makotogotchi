@@ -191,6 +191,12 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
 export const isMinigameId = (value: unknown): value is MinigameId =>
   typeof value === "string" && (MINIGAME_IDS as readonly string[]).includes(value);
 
+/** A game's secondary effect, or none. Stored events are cast rather than
+ *  parsed, so an id the roster no longer knows (a renamed or retired game)
+ *  must read as "no bonus" instead of throwing in the fold. */
+export const minigameBonus = (id: string | undefined): MinigameDef["bonus"] =>
+  isMinigameId(id) ? MINIGAMES[id].bonus : undefined;
+
 /** The envelope check the server applies at finish (SPEC §13.3). `elapsedMs`
  *  is wall time since `start`, which opens with the pre-roll nobody can play
  *  through — the count comes off first, so every ceiling below still bounds

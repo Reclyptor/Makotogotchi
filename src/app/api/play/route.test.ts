@@ -11,7 +11,7 @@ import { PetEngine } from "@/server/engine/engine";
 import { CARETAKER_COOKIE, cookieFor } from "@/server/identity";
 import { startTestInfra, type TestInfra } from "@/server/testsetup";
 import type { Generation } from "@/sim/model";
-import type { MinigameId } from "@/sim/minigames";
+import { MINIGAMES, type MinigameId } from "@/sim/minigames";
 import { TICK_SECONDS } from "@/sim/tuning";
 
 const live = vi.hoisted(() => ({ engine: null as unknown, generation: null as unknown }));
@@ -22,6 +22,7 @@ vi.mock("@/server/runtime", () => ({
 import { POST } from "./route";
 
 const CARETAKER = "bather";
+const SCORE = 10;
 
 let infra: TestInfra;
 let engine: PetEngine;
@@ -46,7 +47,7 @@ const finishRun = async (game: MinigameId): Promise<{ status: number; body: Reco
     headers: { cookie: `${CARETAKER_COOKIE}=${cookieFor(CARETAKER)}`, "content-type": "application/json" },
     // `minigame` is not part of the body schema, so a client naming a game
     // here must change nothing.
-    body: JSON.stringify({ phase: "finish", score: 10, inputs: 20, minigame: "natsumi" }),
+    body: JSON.stringify({ phase: "finish", score: SCORE, inputs: 20, minigame: "natsumi" }),
   });
   const response = await POST(request);
   return { status: response.status, body: (await response.json()) as Record<string, unknown> };
@@ -78,15 +79,26 @@ afterAll(async () => {
 
 describe("POST /api/play finish", () => {
   it("writes the session's game onto the event and returns the hygiene applied", async () => {
+    const before = await engine.view(generation);
     const { status, body } = await finishRun("bubblepop");
     expect(status).toBe(200);
+    const after = await engine.view(generation);
 
     const event = await lastCare();
-    expect(event).toMatchObject({ type: "CARE", action: "PLAY", itemId: "bubblepop", minigame: "bubblepop", performance: 90 });
+    expect(event).toMatchObject({
+      type: "CARE",
+      action: "PLAY",
+      itemId: "bubblepop",
+      minigame: "bubblepop",
+      performance: MINIGAMES.bubblepop.performance(SCORE),
+    });
 
+    // The clock is frozen, so the only thing that moved hygiene is the bonus.
     const bonus = body.bonus as { need: string; applied: number };
     expect(bonus.need).toBe("hygiene");
     expect(bonus.applied).toBeGreaterThan(0);
+    expect(after.needs.hygiene - before.needs.hygiene).toBe(bonus.applied);
+    expect(after.lastActionTick.CLEAN).toBe(before.lastActionTick.CLEAN);
   });
 
   it("a game without a secondary effect still names itself but returns no bonus", async () => {

@@ -382,6 +382,17 @@ describe("economy items (SPEC §13)", () => {
       expect(result.state.needs.hygiene).toBe(hygiene);
     });
 
+    it("folds an event naming a game the roster no longer knows, without a bonus", () => {
+      const state = stateWith();
+      const log = new EventLog();
+      // Stored events are cast, not parsed, so a retired id can reach the fold.
+      const retired = { ...bath(log, "a", 100), minigame: "retired_game" } as unknown as ReturnType<typeof bath>;
+      const result = reduce(state, retired, ctx);
+      expect(result.bonus).toBeUndefined();
+      expect(result.state.needs.hygiene).toBe(hygiene);
+      expect(result.applied).toBeGreaterThan(0);
+    });
+
     it("is not a CLEAN: no cooldown is set and CLEAN stays available", () => {
       const state = stateWith();
       const log = new EventLog();

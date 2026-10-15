@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MINIGAMES, MINIGAME_COUNTDOWN_MS, type MinigameId } from "@/sim/minigames";
-import type { NeedKey } from "@/sim/tuning";
+import type { ReduceResult } from "@/sim/reduce";
 import { loadSpriteSheet } from "@/game/engine/atlas";
 import { SPRITE_SHEET_URL } from "@/game/atlas.generated";
 import type { ReactNotice } from "@/app/hooks/usePetStream";
@@ -33,7 +33,7 @@ type Cheer = { id: number; emoji: string; leftPercent: number };
 
 // `bonus` is whatever the game restored beside joy, as the server's reducer
 // computed it (SPEC §13.3) — the Shell only reports it.
-type Scored = { score: number; applied: number; bonus?: { need: NeedKey; applied: number }; coins: number };
+type Scored = { score: number; applied: number; bonus?: ReduceResult["bonus"]; coins: number };
 type Result = Scored | { error: string };
 
 export type ShellProps = {
@@ -149,7 +149,8 @@ export default function Shell({ gameId, onClose, onReact }: ShellProps) {
       body: JSON.stringify({ phase: "finish", score, inputs }),
     }).catch(() => null);
     if (response?.ok) {
-      setResult((await response.json()) as Scored);
+      const body = (await response.json()) as Scored;
+      setResult({ score: body.score, applied: body.applied, ...(body.bonus ? { bonus: body.bonus } : {}), coins: body.coins });
     } else {
       const body = (await response?.json().catch(() => null)) as { error?: string; reason?: string } | null;
       setResult({
