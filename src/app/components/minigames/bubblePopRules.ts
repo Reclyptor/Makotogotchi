@@ -12,12 +12,12 @@ import type { FrameName } from "@/game/atlas.generated";
 import { GAME_H, GAME_W } from "./engine";
 import type { Rng } from "./types";
 
-export const TAP_SLOP = 6; // extra px of forgiveness around a bubble's radius
+const TAP_SLOP = 6; // extra px of forgiveness around a bubble's radius
 // The smallest bubble's tap target, in game px. At the 288 CSS px canvas a
 // 360px phone gets, a game px is about 1.1 CSS px, so 19 makes the 10px
 // bubble a ~42px target — the usual touch guideline — rather than ~24.
 export const MIN_TAP_REACH = 19;
-export const SWAY_AMP = 6;
+const SWAY_AMP = 6;
 const MAX_DRIFT = 18; // px/s sideways, either way
 // Keeps the sprite just clear of the walls so float rounding can never
 // push an edge-hugging bubble a hair out.
@@ -44,8 +44,11 @@ export type Bubble = {
 
 export type Position = { x: number; y: number };
 
+/** Seconds to rise from `startY` until a bubble of `size` is wholly off the top. */
+const riseSeconds = (startY: number, size: number, vy: number): number => (startY + size) / -vy;
+
 /** How long a bubble takes to rise until it is wholly off the top. */
-export const lifetimeMs = (bubble: Bubble): number => ((bubble.startY + bubble.size) / -bubble.vy) * 1000;
+export const lifetimeMs = (bubble: Bubble): number => riseSeconds(bubble.startY, bubble.size, bubble.vy) * 1000;
 
 /**
  * A new bubble at the bottom of the tub. Its horizontal path is a straight
@@ -57,7 +60,7 @@ export const spawnBubble = (rng: Rng): Bubble => {
   const tier = TIERS[Math.floor(rng() * TIERS.length)]!;
   const startY = GAME_H - 8 - rng() * 6;
   const vy = -(28 + rng() * 10 + tier.extraVy);
-  const riseS = (startY + tier.size) / -vy;
+  const riseS = riseSeconds(startY, tier.size, vy);
 
   const min = tier.size / 2 + SWAY_AMP + EDGE_MARGIN;
   const max = GAME_W - min;
@@ -91,7 +94,10 @@ export const bubbleAt = (bubble: Bubble, ageMs: number): Position => {
   };
 };
 
-/** How far from its centre a tap still counts as a hit. */
+/**
+ * How far from its centre a tap still counts as a hit. With today's tiers
+ * the minimum dominates every one of them, so size no longer affects reach.
+ */
 export const tapReach = (size: number): number => Math.max(size / 2 + TAP_SLOP, MIN_TAP_REACH);
 
 /**
