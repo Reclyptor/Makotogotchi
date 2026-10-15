@@ -1,0 +1,128 @@
+import { describe, expect, it } from "vitest";
+import {
+  bubbleAt,
+  lifetimeMs,
+  MIN_TAP_REACH,
+  pickBubble,
+  spawnBubble,
+  tapReach,
+  TIERS,
+  type Bubble,
+  type Position,
+  type Rng,
+} from "./bubblePopRules";
+import { GAME_H, GAME_W } from "./engine";
+
+/** mulberry32 — small, seedable, good enough to spawn thousands of bubbles. */
+const seeded = (seed: number): Rng => {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+const SAMPLE_MS = 40;
+
+/** The bubble's centre at every sample from spawn until it is wholly off the top. */
+const flight = (bubble: Bubble): Position[] => {
+  const path: Position[] = [];
+  const end = lifetimeMs(bubble);
+  for (let ageMs = 0; ageMs < end; ageMs += SAMPLE_MS) path.push(bubbleAt(bubble, ageMs));
+  path.push(bubbleAt(bubble, end));
+  return path;
+};
+
+const expectOnBoard = (bubble: Bubble): void => {
+  for (const { x } of flight(bubble)) {
+    expect(x - bubble.size / 2).toBeGreaterThanOrEqual(0);
+    expect(x + bubble.size / 2).toBeLessThanOrEqual(GAME_W);
+  }
+};
+
+describe("spawning", () => {
+  it("keeps the whole sprite inside the board for the bubble's entire life", () => {
+    for (let seed = 1; seed <= 3000; seed++) expectOnBoard(spawnBubble(seeded(seed)));
+  });
+
+  it("keeps it there at the extremes of every roll, not just typical ones", () => {
+    const extremes = [0, 0.5, 0.999999999];
+    for (const first of extremes) {
+      for (const second of extremes) {
+        let call = 0;
+        expectOnBoard(spawnBubble(() => (call++ % 2 === 0 ? first : second)));
+      }
+    }
+  });
+
+  it("rises from the bottom of the tub and leaves off the top", () => {
+    for (let seed = 1; seed <= 500; seed++) {
+      const bubble = spawnBubble(seeded(seed));
+      const { y } = bubbleAt(bubble, 0);
+      expect(y).toBeGreaterThan(GAME_H - 16);
+      expect(y).toBeLessThan(GAME_H);
+      expect(bubbleAt(bubble, lifetimeMs(bubble)).y).toBeCloseTo(-bubble.size, 6);
+    }
+  });
+
+  it("fills every third of the board, so a drift back into one corner fails", () => {
+    const thirds = [0, 0, 0];
+    for (let seed = 1; seed <= 3000; seed++) {
+      for (const { x } of flight(spawnBubble(seeded(seed)))) {
+        thirds[Math.min(2, Math.floor((x / GAME_W) * 3))]! += 1;
+      }
+    }
+    const total = thirds.reduce((sum, count) => sum + count, 0);
+    for (const count of thirds) {
+      expect(count / total).toBeGreaterThan(0.28);
+      expect(count / total).toBeLessThan(0.4);
+    }
+  });
+
+  it("drifts both ways", () => {
+    const drifts = Array.from({ length: 500 }, (_, seed) => spawnBubble(seeded(seed + 1)).vx);
+    expect(drifts.some((vx) => vx < -1)).toBe(true);
+    expect(drifts.some((vx) => vx > 1)).toBe(true);
+  });
+});
+
+describe("tapping", () => {
+  const at = (x: number, y: number, size = 16) => ({ x, y, size });
+
+  it("gives even the smallest bubble at least the minimum reach", () => {
+    for (const tier of TIERS) expect(tapReach(tier.size)).toBeGreaterThanOrEqual(MIN_TAP_REACH);
+  });
+
+  it("pops a bubble from as far off as its reach and no further", () => {
+    const smallest = Math.min(...TIERS.map((tier) => tier.size));
+    const bubbles = [at(100, 60, smallest)];
+    expect(pickBubble(bubbles, 100 + MIN_TAP_REACH, 60)).toBe(0);
+    expect(pickBubble(bubbles, 100 + MIN_TAP_REACH + 0.5, 60)).toBe(-1);
+  });
+
+  it("returns -1 on a miss and on an empty tub", () => {
+    expect(pickBubble([at(40, 40), at(200, 80)], 120, 20)).toBe(-1);
+    expect(pickBubble([], 120, 20)).toBe(-1);
+  });
+
+  it("pops the nearest bubble when several are in reach, whatever their order", () => {
+    const near = at(100, 60);
+    const far = at(112, 60);
+    expect(pickBubble([near, far], 103, 60)).toBe(0);
+    expect(pickBubble([far, near], 103, 60)).toBe(1);
+  });
+
+  it("gives a tie to the bubble drawn on top", () => {
+    expect(pickBubble([at(90, 60), at(110, 60)], 100, 60)).toBe(1);
+  });
+
+  it("measures nearness to the centre, not to the edge of the sprite", () => {
+    const big = at(100, 60, 22);
+    const small = at(104, 60, 10);
+    expect(pickBubble([small, big], 102.5, 60)).toBe(0);
+    expect(pickBubble([small, big], 101.5, 60)).toBe(1);
+  });
+});

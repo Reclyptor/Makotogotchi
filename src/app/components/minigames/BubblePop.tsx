@@ -6,6 +6,7 @@
 
 import { useEffect, useRef } from "react";
 import type { FrameName } from "@/game/atlas.generated";
+import { type Bubble, bubbleAt, pickBubble, type Position, spawnBubble } from "./bubblePopRules";
 import { drawFrame, drawFrameAnchored, GAME_H, GAME_W, startGameLoop } from "./engine";
 import type { GameProps } from "./types";
 
@@ -13,30 +14,11 @@ const RUN_MS = 25_000;
 // Eight on screen at once caps the pop rate well under the server's 3/s
 // envelope even for a perfect player.
 const MAX_BUBBLES = 8;
-const TAP_SLOP = 6; // extra px of forgiveness around a bubble's radius
 const BURST_FRAME_MS = 120; // bubblePop1 then bubblePop2, each this long
 const BURST_SIZE = 20;
-const SWAY_AMP = 6;
 
-// Small bubbles ride the updraft a touch faster than big ones.
-const TIERS: readonly { frame: FrameName; size: number; extraVy: number }[] = [
-  { frame: "bubble1", size: 10, extraVy: 7 },
-  { frame: "bubble2", size: 16, extraVy: 3 },
-  { frame: "bubble3", size: 22, extraVy: 0 },
-];
-
-type Bubble = {
-  frame: FrameName;
-  size: number;
-  originX: number;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  swayFreq: number;
-  swayPhase: number;
-  ageMs: number;
-};
+// A bubble in flight: its trajectory, how long it has flown, and where that is.
+type Floating = Bubble & Position & { ageMs: number };
 
 type Burst = { x: number; y: number; ageMs: number };
 
@@ -51,7 +33,7 @@ export default function BubblePop({ sheet, reportScore, finish }: GameProps) {
     let score = 0;
     let inputs = 0;
     let elapsed = 0;
-    let bubbles: Bubble[] = [];
+    let bubbles: Floating[] = [];
     let bursts: Burst[] = [];
     let nextSpawn = 500;
 
@@ -71,15 +53,8 @@ export default function BubblePop({ sheet, reportScore, finish }: GameProps) {
       const rect = canvas.getBoundingClientRect();
       const tapX = ((event.clientX - rect.left) / rect.width) * GAME_W;
       const tapY = ((event.clientY - rect.top) / rect.height) * GAME_H;
-      // Walk back-to-front so overlapping bubbles pop the one drawn on top.
-      for (let i = bubbles.length - 1; i >= 0; i -= 1) {
-        const bubble = bubbles[i]!;
-        const reach = bubble.size / 2 + TAP_SLOP;
-        if (Math.hypot(bubble.x - tapX, bubble.y - tapY) <= reach) {
-          pop(i);
-          return;
-        }
-      }
+      const index = pickBubble(bubbles, tapX, tapY);
+      if (index !== -1) pop(index);
     };
     const onKey = (event: KeyboardEvent): void => {
       if (event.code !== "Space") return;
@@ -102,27 +77,16 @@ export default function BubblePop({ sheet, reportScore, finish }: GameProps) {
       nextSpawn -= dtMs;
       if (nextSpawn <= 0) {
         if (bubbles.length < MAX_BUBBLES) {
-          const tier = TIERS[Math.floor(Math.random() * TIERS.length)]!;
-          bubbles.push({
-            frame: tier.frame,
-            size: tier.size,
-            originX: 20 + Math.random() * 50,
-            x: 0,
-            y: GAME_H - 8 - Math.random() * 6,
-            vx: 6 + Math.random() * 14,
-            vy: -(28 + Math.random() * 10 + tier.extraVy),
-            swayFreq: 2 + Math.random() * 2,
-            swayPhase: Math.random() * Math.PI * 2,
-            ageMs: 0,
-          });
+          const bubble = spawnBubble(Math.random);
+          bubbles.push({ ...bubble, ...bubbleAt(bubble, 0), ageMs: 0 });
         }
         nextSpawn = 450 + Math.random() * 350;
       }
       for (const bubble of bubbles) {
         bubble.ageMs += dtMs;
-        const age = bubble.ageMs / 1000;
-        bubble.y += bubble.vy * (dtMs / 1000);
-        bubble.x = bubble.originX + bubble.vx * age + Math.sin(age * bubble.swayFreq + bubble.swayPhase) * SWAY_AMP;
+        const { x, y } = bubbleAt(bubble, bubble.ageMs);
+        bubble.x = x;
+        bubble.y = y;
       }
       // Escaping off the top costs nothing; the bubble just floats away.
       bubbles = bubbles.filter((bubble) => bubble.y > -bubble.size);
