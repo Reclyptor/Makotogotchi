@@ -6,6 +6,18 @@ follow [Semantic Versioning]. Pre-1.0, so game-rule changes are minor bumps.
 [Keep a Changelog]: https://keepachangelog.com/en/1.1.0/
 [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
 
+## [0.3.3] — 2026-10-15
+
+### Fixed
+
+- **An elder's brow tufts sit over the eyes, not above the head.** They hung
+  from the dip between the ears — the top of the skull — so their fur stood
+  above the head outline and read as a second, paler pair of ears. Each frame
+  now places them from its own eyes, and they never rise past the outline
+- **A worn hat no longer lands on the nightcap.** The sleeping art wears its
+  own nightcap, and the crown, cap or bow was drawn straight over it all
+  night. Asleep, Makoto wears only the nightcap
+
 ## [0.3.2] — 2026-09-27
 
 ### Fixed
