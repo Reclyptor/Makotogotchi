@@ -6,6 +6,50 @@ follow [Semantic Versioning]. Pre-1.0, so game-rule changes are minor bumps.
 [Keep a Changelog]: https://keepachangelog.com/en/1.1.0/
 [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
 
+## [0.6.0] — 2026-10-16
+
+Health you can read, and kinder rules around it. Every event log written
+before this folds byte-identically: the new rules start only at a `RULES`
+event (ruleset 2), and a log without one keeps ruleset 1. Rule changes from
+here on bump the ruleset version instead of adding an event type.
+
+### Added
+
+- **The status line says where health is going and why.** "Health is
+  falling: hunger is below 20%.", "Health is stuck: sickness stops it coming
+  back.", "Health is coming back." — with "dangerously low" whenever it is
+  and the headline has not said so, and no cause repeated that the headline
+  already names. An elder adds a muted `needs 72% · at 81%` (today's line,
+  then the average; one decimal only when the two would otherwise read the
+  same), with a full sentence for screen readers (`89fa2ad`, `6b57298`,
+  `9dbfa27`, `dd37d2b`, `22730b2`)
+- **A quiet tick at 20% on each need bar**, the line below which health
+  drains (`9749f53`)
+- `healthTerms` (`src/sim/health.ts`) — the per-tick health arithmetic as one
+  pure function the projection and the derived `HealthView` both read; the
+  `RULES` event and `rulesVersion` (`1f66bfa`, `e121a3e`, `61d769e`)
+
+### Changed
+
+- **Nights no longer scale with the crowd.** From midnight to 6am needs
+  decay at the two-person baseline whatever the community size; the day
+  keeps §23's scaling. Ordinary nights and lifespans in big rooms improve;
+  an eight-hour waking gap at 4× still kills an elder (`87fcd08`)
+- **FRAIL elders' line stops at 80%**, not 85% (`87fcd08`)
+- **An elder worn down by age is remembered as dying of old age**, even if
+  it was sick at the end. A critical need still names its own cause. A
+  sick-but-fed pet only stalls, so "died of illness" now belongs to a sick
+  elder at its line. The screen orders reasons by what a caretaker can fix —
+  need, sickness, age — so it points at the cure (`87fcd08`, `7623f12`)
+- The §16.2 difficulty dial runs under both rulesets (`92b09e2`)
+
+### Fixed
+
+- **Holding down in a minigame on a phone no longer loses the run.** A long
+  press started the browser's text selection (and Android's context menu),
+  which cancelled the touch the game was reading as a hold. Nothing in the
+  game window is selectable and the menu never opens (`8f05155`)
+
 ## [0.5.3] — 2026-10-16
 
 ### Changed
