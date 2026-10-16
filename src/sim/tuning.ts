@@ -36,6 +36,9 @@ export const HEALTH_DRAIN_SICK = 120_000_000;
 // ELDER-only age drain at zero vigour: ~9.65 elder days from full when the
 // elder is left entirely to itself. Care scales it away (SPEC §2.3).
 export const HEALTH_DRAIN_AGE = 12_000_000;
+// The hold line of the rule every history from before the ramp folds by. Frozen
+// on its own so that retuning the ramp can never re-fold an old log.
+export const LEGACY_ELDER_HOLD_MEAN = 600_000;
 // Old age is held off by care (SPEC §2.3), and the care asked for rises. The
 // age drain is scaled by the elder's vigour, which reads the mean of its four
 // needs against a hold line that climbs one step per day from the start of
@@ -49,7 +52,7 @@ export const elderHoldMean = (rampDay: number): number =>
   Math.min(ELDER_HOLD_CAP, ELDER_HOLD_START + ELDER_HOLD_STEP * rampDay);
 export const elderVigourPermille = (needs: Record<NeedKey, number>, rampDay: number | null): number => {
   const mean = Math.floor((needs.hunger + needs.energy + needs.hygiene + needs.joy) / 4);
-  const hold = rampDay === null ? ELDER_HOLD_START : elderHoldMean(rampDay);
+  const hold = rampDay === null ? LEGACY_ELDER_HOLD_MEAN : elderHoldMean(rampDay);
   const floor = rampDay === null ? CRITICAL_THRESHOLD : hold - ELDER_BAND;
   return Math.min(1000, Math.max(0, Math.floor(((mean - floor) * 1000) / (hold - floor))));
 };

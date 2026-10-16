@@ -16,6 +16,7 @@ import {
   elderVigourPermille,
   HEALTH_DRAIN_AGE,
   HEALTH_MAX,
+  LEGACY_ELDER_HOLD_MEAN,
   NEED_MAX,
   TICKS_PER_DAY,
 } from "./tuning";
@@ -79,6 +80,10 @@ describe("vigour", () => {
   it("reads the mean, not the weakest need", () => {
     const lopsided = { hunger: 1_000_000, energy: 700_000, hygiene: 900_000, joy: 800_000 };
     expect(elderVigourPermille(lopsided, 10)).toBe(1000);
+  });
+
+  it("pins the no-ramp line at 60%, whatever the ramp is tuned to", () => {
+    expect(LEGACY_ELDER_HOLD_MEAN).toBe(600_000);
   });
 
   it("keeps the flat 20%-to-60% slope when there is no ramp", () => {

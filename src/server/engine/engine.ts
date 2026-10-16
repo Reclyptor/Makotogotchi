@@ -433,6 +433,10 @@ export class PetEngine {
    * check reads, so a repeat call, a second leader or a restart all fold to a
    * clean skip. A generation alive when the ramp shipped gets its event at
    * release; a new one right after it hatches.
+   *
+   * Not published: clients keep projecting the flat rule until the next
+   * message or snapshot carries the field, at most ~30s, and the fold the
+   * server settles is authoritative either way.
    */
   async startElderRamp(generation: Generation): Promise<PetState> {
     const result = await this.advance(generation, (state) => {
