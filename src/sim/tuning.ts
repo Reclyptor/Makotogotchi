@@ -30,17 +30,25 @@ export const HEALTH_DRAIN_PER_NEED = 550;
 // overnight onset leaves the day shift a real chance to respond to the push
 // alert, matching the ~24h difficulty dial. Compounds with need deficits.
 export const HEALTH_DRAIN_SICK = 120_000_000;
-// ELDER-only unconditional drain: ~9.65 elder days from full under perfect
-// care. This is what makes old-age mortality a theorem (SPEC §2.3).
+// ELDER-only age drain at zero vigour: ~9.65 elder days from full when the
+// elder is left entirely to itself. Care scales it away (SPEC §2.3).
 export const HEALTH_DRAIN_AGE = 12_000_000;
-// Old age is held off by care (SPEC §2.3): the age drain is scaled by the
-// elder's vigour — how far the mean of its needs sits between the critical
-// line and this hold line, in per-mille. At the hold line age drains nothing.
-export const ELDER_HOLD_MEAN = 600_000;
-export const elderVigourPermille = (needs: Record<NeedKey, number>): number => {
+// Old age is held off by care (SPEC §2.3), and the care asked for rises. The
+// age drain is scaled by the elder's vigour, which reads the mean of its four
+// needs against a hold line that climbs one step per day from the start of
+// the ramp until it reaches the cap. At the line age drains nothing; a band
+// below it, the drain rises to its full rate.
+export const ELDER_HOLD_START = 600_000; // 60%
+export const ELDER_HOLD_STEP = 25_000; // 2.5 points a day
+export const ELDER_HOLD_CAP = 850_000; // 85%, reached on ramp day 10
+export const ELDER_BAND = 100_000; // 10 points
+export const elderHoldMean = (rampDay: number): number =>
+  Math.min(ELDER_HOLD_CAP, ELDER_HOLD_START + ELDER_HOLD_STEP * rampDay);
+export const elderVigourPermille = (needs: Record<NeedKey, number>, rampDay: number | null): number => {
   const mean = Math.floor((needs.hunger + needs.energy + needs.hygiene + needs.joy) / 4);
-  const span = ELDER_HOLD_MEAN - CRITICAL_THRESHOLD;
-  return Math.min(1000, Math.max(0, Math.floor(((mean - CRITICAL_THRESHOLD) * 1000) / span)));
+  const hold = rampDay === null ? ELDER_HOLD_START : elderHoldMean(rampDay);
+  const floor = rampDay === null ? CRITICAL_THRESHOLD : hold - ELDER_BAND;
+  return Math.min(1000, Math.max(0, Math.floor(((mean - floor) * 1000) / (hold - floor))));
 };
 // An elder held at full vigour regains health at a quarter of the adult rate:
 // about four days from empty to full.
@@ -57,6 +65,9 @@ export type LifeStage = "EGG" | "HATCHLING" | "PUP" | "JUVENILE" | "ADULT" | "EL
 export type AdultForm = "THRIVING" | "STEADY" | "FRAIL";
 export type SleepPhase = "WAKE" | "SLEEP";
 
+// When a pet becomes an elder, in ticks since hatch.
+export const ELDER_STARTS_AT = 21 * TICKS_PER_DAY;
+
 // Stage boundaries in ticks since hatch (EGG ends at the HATCHED event, whose
 // timing is external — the naming vote — so it is not a tick offset).
 export const STAGE_STARTS: readonly { stage: Exclude<LifeStage, "EGG">; atTick: number }[] = [
@@ -64,7 +75,7 @@ export const STAGE_STARTS: readonly { stage: Exclude<LifeStage, "EGG">; atTick: 
   { stage: "PUP", atTick: 1 * TICKS_PER_DAY },
   { stage: "JUVENILE", atTick: 3 * TICKS_PER_DAY },
   { stage: "ADULT", atTick: 7 * TICKS_PER_DAY },
-  { stage: "ELDER", atTick: 21 * TICKS_PER_DAY },
+  { stage: "ELDER", atTick: ELDER_STARTS_AT },
 ];
 
 // Base decay per tick while awake, in need units. Nominal time from full to

@@ -117,12 +117,25 @@ export const wantExpiredEventSchema = z.object({
   windowIndex: z.number().int().nonnegative(),
 });
 
+/**
+ * The leader starts this generation's elder ramp (SPEC §2.3). Like POPULATION
+ * this is a real fold input: whether a log was lived under the ramp is not
+ * derivable from time, so the rule's start enters the log and anything that
+ * predates it folds as it always did. Carries nothing beyond its tick, which
+ * is the start; a second one folds to nothing.
+ */
+export const elderRampEventSchema = z.object({
+  ...eventBase,
+  type: z.literal("ELDER_RAMP"),
+});
+
 export const petEventSchema = z.discriminatedUnion("type", [
   careEventSchema,
   hatchedEventSchema,
   toyAddedEventSchema,
   milestoneEventSchema,
   populationEventSchema,
+  elderRampEventSchema,
   wantOpenedEventSchema,
   wantExpiredEventSchema,
 ]);
@@ -132,6 +145,7 @@ export type HatchedEvent = z.infer<typeof hatchedEventSchema>;
 export type ToyAddedEvent = z.infer<typeof toyAddedEventSchema>;
 export type MilestoneEvent = z.infer<typeof milestoneEventSchema>;
 export type PopulationEvent = z.infer<typeof populationEventSchema>;
+export type ElderRampEvent = z.infer<typeof elderRampEventSchema>;
 export type WantOpenedEvent = z.infer<typeof wantOpenedEventSchema>;
 export type WantExpiredEvent = z.infer<typeof wantExpiredEventSchema>;
 export type PetEvent = z.infer<typeof petEventSchema>;

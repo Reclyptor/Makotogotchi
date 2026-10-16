@@ -127,6 +127,11 @@ const boot = async (): Promise<Runtime> => {
         const moment = isAlive(state) ? ambientAt(current.seed, state.tick, state.asleep) : null;
         if (moment) await engine.milestone(current, "AMBIENT", moment);
       }
+      if (!successor && isAlive(state) && state.elderRampFromTick === undefined) {
+        // The elder ramp (SPEC §2.3) starts once per generation. The engine
+        // re-checks under the lock, so a stale read here only costs a skip.
+        state = await engine.startElderRamp(current);
+      }
       if (!successor) {
         // The pet's asks (SPEC §25.2): expire a stale want, open this
         // window's. State-driven, so a leader outage settles late instead

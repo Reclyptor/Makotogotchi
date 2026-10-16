@@ -4,7 +4,7 @@
 // leak into game state is structurally impossible.
 
 import { careMultiplier, DIFFICULTY_BASELINE, presencePermilleOf } from "./difficulty";
-import { isAlive, stageAt, type PetState } from "./model";
+import { elderRampDayAt, isAlive, stageAt, type PetState } from "./model";
 import {
   AILMENT_THRESHOLDS,
   CRITICAL_THRESHOLD,
@@ -80,7 +80,7 @@ export const derive = (state: PetState): DerivedState => {
     state.healthRaw < HEALTH_CRITICAL || (state.sick && anyCritical) ? "CRITICAL" : anyCritical || state.sick ? "WARN" : "OK";
   // The same conditions under which project.ts lets health regenerate, and
   // sickness drains exactly what regen restores, so it stalls the climb.
-  const vigour = stage === "ELDER" ? elderVigourPermille(state.needs) : 1000;
+  const vigour = stage === "ELDER" ? elderVigourPermille(state.needs, elderRampDayAt(state, state.tick)) : 1000;
   const healing = !anyCritical && !state.sick && vigour === 1000;
   const fading = stage === "ELDER" && state.healthRaw < FADING_THRESHOLD && vigour < 1000;
   const vitality: Vitality =

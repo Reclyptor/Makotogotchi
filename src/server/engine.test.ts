@@ -193,6 +193,29 @@ describe("PetEngine", () => {
     expect(project(recovered.state, before.tick, ctx).state).toEqual(before);
   });
 
+  it("starts the elder ramp exactly once, however often it is asked (SPEC §2.3)", async () => {
+    advanceClockTicks(30);
+    const started = await engine.startElderRamp(generation);
+    expect(started.elderRampFromTick).toBe(started.tick);
+
+    // A second leader, a retry, a restart: every later call is a skip.
+    advanceClockTicks(60);
+    const again = await engine.startElderRamp(generation);
+    const other = await (await buildEngine()).startElderRamp(generation);
+    expect(again.elderRampFromTick).toBe(started.elderRampFromTick);
+    expect(other.elderRampFromTick).toBe(started.elderRampFromTick);
+
+    const log = await eventsSince(await db(), generation.id, -1);
+    expect(log.filter((event) => event.type === "ELDER_RAMP")).toHaveLength(1);
+
+    // And it survives losing the hot state: the start comes back from the log.
+    await infra.clearRedis();
+    const recovered = await engine.recover(generation);
+    expect(recovered.state.elderRampFromTick).toBe(started.elderRampFromTick);
+    expect((await engine.startElderRamp(generation)).elderRampFromTick).toBe(started.elderRampFromTick);
+    expect((await eventsSince(await db(), generation.id, -1)).filter((event) => event.type === "ELDER_RAMP")).toHaveLength(1);
+  });
+
   it("serializes concurrent care writes: unique contiguous seqs, replay-identical fold", async () => {
     advanceClockTicks(360); // give cooldowns room
     const caretakers = ["a1", "a2", "a3", "a4", "a5"];

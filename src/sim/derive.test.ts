@@ -62,6 +62,15 @@ describe("vitality", () => {
     expect(derive({ ...adult, healthRaw: HEALTH_MAX * 0.4, needs: thin.needs }).vitality).toBe("well");
   });
 
+  it("moves the fading line up with the elder ramp", () => {
+    const thin = { ...elder, healthRaw: HEALTH_MAX * 0.4, needs: { hunger: 700_000, energy: 700_000, hygiene: 700_000, joy: 700_000 } };
+    expect(derive(thin).vitality).toBe("well");
+    // Ten days into the ramp the line is at 85%, and the same needs are short of it.
+    const ramped = { ...thin, elderRampFromTick: elder.tick, tick: elder.tick + 10 * TICKS_PER_DAY };
+    expect(derive(ramped).vitality).toBe("fading");
+    expect(healthAfterOneTick(ramped)).toBeLessThan(ramped.healthRaw);
+  });
+
   it("calls a sick pet frail: the sickness drains exactly what regen restores", () => {
     const state = { ...nearDeath(adult), sick: true };
     expect(derive(state).vitality).toBe("frail");

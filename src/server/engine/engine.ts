@@ -427,6 +427,31 @@ export class PetEngine {
   }
 
   /**
+   * Start this generation's elder ramp (SPEC §2.3). Leader-only, and safe to
+   * call on every observation: the condition is re-checked under the write
+   * lock on the settled state, and the first append sets the very field the
+   * check reads, so a repeat call, a second leader or a restart all fold to a
+   * clean skip. A generation alive when the ramp shipped gets its event at
+   * release; a new one right after it hatches.
+   */
+  async startElderRamp(generation: Generation): Promise<PetState> {
+    const result = await this.advance(generation, (state) => {
+      if (!isAlive(state)) return { kind: "skip" };
+      if (state.elderRampFromTick !== undefined) return { kind: "skip" };
+      return {
+        kind: "event",
+        event: (seq, current): PetEvent => ({
+          type: "ELDER_RAMP",
+          generationId: generation.id,
+          seq,
+          tick: current.tick,
+        }),
+      };
+    });
+    return result.state;
+  }
+
+  /**
    * Open a window's want (SPEC §25.2). Leader-only; every condition is
    * re-checked here, under the write lock, on the settled state — so a
    * duplicate call, a racing leader, or a want granted between observation

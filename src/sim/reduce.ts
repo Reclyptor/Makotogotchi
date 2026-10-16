@@ -95,6 +95,13 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       return { state, milestones, applied: 0, changed: true };
     }
 
+    case "ELDER_RAMP": {
+      // The ticks projected above were lived under the old rule. The first
+      // event fixes the start for good, so a duplicate append is a no-op.
+      state.elderRampFromTick ??= event.tick;
+      return { state, milestones, applied: 0, changed: true };
+    }
+
     case "WANT_OPENED": {
       // A real fold input like POPULATION: whether the pet was awake for
       // this window is schedule knowledge the sim lacks, so the leader

@@ -2,7 +2,7 @@
 // what is stored here versus derived in derive.ts: nothing presentational
 // lives in this file, and nothing stored here is recomputable from the rest.
 
-import { STAGE_STARTS, type AdultForm, type CareAction, type LifeStage, type NeedKey, type SleepPhase } from "./tuning";
+import { ELDER_STARTS_AT, STAGE_STARTS, TICKS_PER_DAY, type AdultForm, type CareAction, type LifeStage, type NeedKey, type SleepPhase } from "./tuning";
 import type { WantKind } from "./wants";
 
 export type Needs = Record<NeedKey, number>;
@@ -107,6 +107,14 @@ export type PetState = {
    * can debit the same window twice (SPEC §25.2). Absent reads as −∞.
    */
   wantSettledWindow?: number | null;
+  /**
+   * The tick the leader recorded this generation's ELDER_RAMP event. From
+   * here the elder's hold line climbs (see `elderRampDayAt`). Absent in
+   * histories written before the ramp, which keep the flat line they were
+   * lived under — and absent, not null, so their serialized state is
+   * byte-identical to what it always was.
+   */
+  elderRampFromTick?: number;
 };
 
 /** Pure function of hatch time — never stored (SPEC §4.3). */
@@ -118,6 +126,19 @@ export const stageAt = (bornAtTick: number | null, tick: number): LifeStage => {
     if (sinceHatch >= start.atTick) stage = start.stage;
   }
   return stage;
+};
+
+/**
+ * Whole days into the elder ramp, or null while the pet still ages by the rule
+ * every history written before the ramp folds under (no ELDER_RAMP event yet).
+ * The ramp counts from the later of the event and the first elder day, so a
+ * pet that is young when the event lands carries the rule until it grows old
+ * and then ramps from its first day as an elder.
+ */
+export const elderRampDayAt = (state: PetState, tick: number): number | null => {
+  if (state.elderRampFromTick === undefined || state.bornAtTick === null) return null;
+  const rampStart = Math.max(state.elderRampFromTick, state.bornAtTick + ELDER_STARTS_AT);
+  return Math.max(0, Math.floor((tick - rampStart) / TICKS_PER_DAY));
 };
 
 export const isAlive = (state: PetState): boolean => state.bornAtTick !== null && state.diedAtTick === null;

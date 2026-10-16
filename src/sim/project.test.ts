@@ -161,8 +161,10 @@ describe("project", () => {
 
   // Old age is held off by care (SPEC §2.3, §16.2): the age drain scales
   // with the elder's vigour, the mean of its needs between the critical
-  // line and the hold line.
-  describe("old age", () => {
+  // line and the hold line. These elders carry no ELDER_RAMP event, so they
+  // age by the flat rule every earlier history was lived under; the ramp has
+  // its own tests (elder.test.ts).
+  describe("old age before the ramp", () => {
     const elderAt = (level: number): PetState => {
       const atElder = projectImmortal(hatchedState(ctx), 21 * TICKS_PER_DAY, ctx);
       return {
