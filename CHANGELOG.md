@@ -6,6 +6,15 @@ follow [Semantic Versioning]. Pre-1.0, so game-rule changes are minor bumps.
 [Keep a Changelog]: https://keepachangelog.com/en/1.1.0/
 [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
 
+## [0.5.2] — 2026-10-16
+
+### Changed
+
+- **Don't Get Sausaged is now Natsumi Says** 🗣️. The old name described the
+  fail state, not the game, which is doing what Natsumi says before she
+  finishes saying it. The id is unchanged, so history and records carry over
+  (`f5617ed`)
+
 ## [0.5.1] — 2026-10-16
 
 ### Changed
