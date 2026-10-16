@@ -12,7 +12,6 @@ import { CRITICAL_PERCENT } from "@/app/copy/health";
 import { CAUSE_OF_DEATH_TEXT } from "@/app/copy/death";
 import {
   ENERGY_SLEEP_RECOVERY,
-  HEALTH_MAX,
   NAP_WAKE_THRESHOLD,
   NEED_KEYS,
   NEED_MAX,
@@ -169,8 +168,8 @@ type Told = {
  * would otherwise bury, so when the headline did not say "dangerously weak"
  * the sentence carries it.
  */
-const healthSentence = ({ reason }: HealthView, told: Told, state: PetState, frail: boolean): string | null => {
-  const danger = frail && !told.weak;
+const healthSentence = ({ health: { reason }, vitality, percentages }: DerivedState, told: Told): string | null => {
+  const danger = vitality === "frail" && !told.weak;
   const falling = danger ? "Health is dangerously low and falling" : "Health is falling";
   switch (reason.kind) {
     case "need":
@@ -186,7 +185,7 @@ const healthSentence = ({ reason }: HealthView, told: Told, state: PetState, fra
     case "holding": {
       // Alive, holding means sickness exactly cancels recovery: sick, but fed.
       // At full health there is nothing to be stuck below, so it just holds.
-      if (state.healthRaw >= HEALTH_MAX) return "Health is holding steady.";
+      if (percentages.health === 100) return "Health is holding steady.";
       const stuck = danger ? "Health is dangerously low and stuck" : "Health is stuck";
       return told.ailments.includes("SICK") ? `${stuck}.` : `${stuck}: sickness stops it coming back.`;
     }
@@ -195,12 +194,24 @@ const healthSentence = ({ reason }: HealthView, told: Told, state: PetState, fra
   }
 };
 
+/**
+ * Two per-mille values as percentages: whole numbers, unless flooring would
+ * make them equal. A pet falling with age is below its line, and "needs 62%
+ * · at 62%" reads as though it were not, so a near miss gets one decimal.
+ */
+const percentPair = (a: number, b: number): [string, string] => {
+  const whole = (permille: number): number => Math.floor(permille / 10);
+  if (whole(a) !== whole(b)) return [String(whole(a)), String(whole(b))];
+  const tenth = (permille: number): string => (Math.floor(permille) / 10).toFixed(1);
+  return [tenth(a), tenth(b)];
+};
+
 /** An elder's hold line, then where the needs average now, whichever way health is moving. */
-const elderFragment = ({ elder }: HealthView): ElderFragment | null =>
-  elder && {
-    shown: `needs ${elder.linePercent}% · at ${elder.meanPercent}%`,
-    spoken: `Today's line is ${elder.linePercent}%; needs average ${elder.meanPercent}%.`,
-  };
+const elderFragment = ({ elder }: HealthView): ElderFragment | null => {
+  if (!elder) return null;
+  const [line, mean] = percentPair(elder.linePermille, elder.meanPermille);
+  return { shown: `needs ${line}% · at ${mean}%`, spoken: `Today's line is ${line}%; needs average ${mean}%.` };
+};
 
 /** The headline, and what it already told the reader. */
 type Headline = { text: string; told: Told };
@@ -239,6 +250,6 @@ export const statusLine = (
   const { stage } = derived;
   if (stage === "EGG") return { text: "The egg is incubating…", elder: null };
   const head = headline(petName, state, derived, stage, ctx);
-  const health = healthSentence(derived.health, head.told, state, derived.vitality === "frail");
+  const health = healthSentence(derived, head.told);
   return { text: health ? `${head.text} ${health}` : head.text, elder: elderFragment(derived.health) };
 };

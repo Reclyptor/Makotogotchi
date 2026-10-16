@@ -239,7 +239,7 @@ describe("the health sentence", () => {
     expect(say({ kind: "age" })).toBe("Makoto is doing fine. Health is falling with age.");
     expect(say({ kind: "regen" })).toBe("Makoto is doing fine. Health is coming back.");
     expect(say({ kind: "holding" })).toBe(`Makoto is doing fine.${HOLDING}`);
-    expect(say({ kind: "holding" }, hurt)).toBe("Makoto is doing fine. Health is stuck: sickness stops it coming back.");
+    expect(say({ kind: "holding" }, hurt, derive(hurt))).toBe("Makoto is doing fine. Health is stuck: sickness stops it coming back.");
     expect(say({ kind: "full" })).toBe("Makoto is doing fine.");
 
     // Sick, and a need the headline does not name: the need is still said.
@@ -294,6 +294,33 @@ describe("the elder fragment", () => {
     const state = { ...elder, healthRaw: HEALTH_MAX * 0.4, needs: thin };
     expect(line(state)).toBe("Makoto is fading. Health is falling with age.");
     expect(elderFragment(state)).toBe("needs 60% · at 30%");
+  });
+
+  describe("when the line and the average are close", () => {
+    const shownAt = (linePermille: number, meanPermille: number) => {
+      const base = derive(elder);
+      const view = statusLine("Makoto", elder, { ...base, health: { ...base.health, elder: { linePermille, meanPermille } } });
+      return view.elder;
+    };
+
+    it("rounds each down to a whole percent while they differ", () => {
+      expect(shownAt(600, 810)?.shown).toBe("needs 60% · at 81%");
+      expect(shownAt(625, 630)?.shown).toBe("needs 62% · at 63%");
+      expect(shownAt(600, 1000)?.shown).toBe("needs 60% · at 100%");
+    });
+
+    it("shows a tenth when flooring would make them look equal, whichever is higher", () => {
+      // Falling just short of the line, and sitting just over it.
+      expect(shownAt(625, 624)?.shown).toBe("needs 62.5% · at 62.4%");
+      expect(shownAt(624, 625)?.shown).toBe("needs 62.4% · at 62.5%");
+      expect(shownAt(625, 625)?.shown).toBe("needs 62.5% · at 62.5%");
+      expect(shownAt(600, 600)?.shown).toBe("needs 60.0% · at 60.0%");
+    });
+
+    it("reads the same numbers to a screen reader", () => {
+      expect(shownAt(625, 624)?.spoken).toBe("Today's line is 62.5%; needs average 62.4%.");
+      expect(shownAt(600, 810)?.spoken).toBe("Today's line is 60%; needs average 81%.");
+    });
   });
 
   it("has a whole-sentence reading for a screen reader", () => {
