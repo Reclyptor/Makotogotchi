@@ -611,9 +611,9 @@ way down, projection emits a `FADING` milestone — a crossing, like
 feed line, and while an elder's health is below the threshold and its needs
 average short of the day's hold line, the status line (§11.7) reads
 "Makoto is fading. Health is falling with age." rather than anything about
-doing fine, with the day's line and the average beside it (§11.7). Once the group lifts
-the average past the line the drift turns and the line says so ("Health is
-coming back.").
+doing fine, with the day's line and the average beside it (§11.7). Once the
+group lifts the average past the line the drift turns and the line says so
+("Health is coming back.").
 
 **Farewells.** During mourning any caretaker may leave one farewell for the
 generation that has just died. It is one line — 2 to 80 characters, letters,
@@ -1734,7 +1734,10 @@ caretaker reads the same words, and the tests are exact.
 moving, today's hold line and where the needs average now follow the
 sentence as a small muted fragment: "needs 72% · at 81%" (line, then
 average). The numbers live only there, so "falling with age" is a short
-sentence and the fragment says by how much. `statusLine()` returns
+sentence and the fragment says by how much. `HealthView.elder` carries them
+in per-mille and the UI formats: whole percents (floored), unless flooring
+would make the two equal, when both show one decimal ("needs 62.5% · at
+62.4%") so an elder below its line never reads as level with it. `statusLine()` returns
 `{ text, elder }` so the page can set the fragment quieter (smaller, 80%
 opacity, which keeps the muted text above AA contrast, tabular figures)
 without cutting it out of a string. It sits last on the line, after the
