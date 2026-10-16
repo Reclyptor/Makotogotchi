@@ -32,8 +32,15 @@ export const SLIPPING_BELOW = NEED_MAX / 2;
  */
 export type StatusView = {
   text: string;
-  /** "needs 72% · at 81%": today's hold line, then where the needs average now. */
-  elder: string | null;
+  elder: ElderFragment | null;
+};
+
+/** An elder's hold line and where the needs average now, in two readings. */
+export type ElderFragment = {
+  /** "needs 72% · at 81%": terse, for the eye. */
+  shown: string;
+  /** "Today's line is 72%; needs average 81%.": whole, for a screen reader. */
+  spoken: string;
 };
 
 /** Ailments as they read after "is", worst first. Sickness is worded on its own. */
@@ -189,8 +196,11 @@ const healthSentence = ({ reason }: HealthView, told: Told, state: PetState, fra
 };
 
 /** An elder's hold line, then where the needs average now, whichever way health is moving. */
-const elderFragment = ({ elder }: HealthView): string | null =>
-  elder && `needs ${elder.linePercent}% · at ${elder.meanPercent}%`;
+const elderFragment = ({ elder }: HealthView): ElderFragment | null =>
+  elder && {
+    shown: `needs ${elder.linePercent}% · at ${elder.meanPercent}%`,
+    spoken: `Today's line is ${elder.linePercent}%; needs average ${elder.meanPercent}%.`,
+  };
 
 /** The headline, and what it already told the reader. */
 type Headline = { text: string; told: Told };

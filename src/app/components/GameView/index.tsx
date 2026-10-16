@@ -603,21 +603,23 @@ export default function GameView() {
         </div>
         <p aria-live="polite" className="px-3 py-2 text-center text-sm text-muted">
           {status.text}
+          {/* An away day reads as an outing, not a bug (SPEC §22.8). */}
+          {venueLabel && ` 🧭 Out at ${venueLabel} today.`}
           {/* An elder's hold line and where the needs average now: there for
-              whoever looks, quiet for whoever does not. */}
+              whoever looks, quiet for whoever does not. Last, so it reads as
+              a footnote to the sentence rather than a break in it. The terse
+              form is for the eye; a screen reader gets the whole sentence,
+              because a tooltip is neither reliably exposed nor shown on
+              touch. 80% keeps the muted text above AA contrast. */}
           {status.elder && (
             <>
               {" "}
-              <span
-                title="Today's line for keeping an elder's health up, and where the needs average now"
-                className="whitespace-nowrap text-xs tabular-nums opacity-60"
-              >
-                {status.elder}
+              <span aria-hidden="true" className="whitespace-nowrap text-xs tabular-nums opacity-80">
+                {status.elder.shown}
               </span>
+              <span className="sr-only">{status.elder.spoken}</span>
             </>
           )}
-          {/* An away day reads as an outing, not a bug (SPEC §22.8). */}
-          {venueLabel && ` 🧭 Out at ${venueLabel} today.`}
         </p>
       </div>
 

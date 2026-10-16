@@ -35,7 +35,7 @@ const elder = contented(projectImmortal(born, 22 * TICKS_PER_DAY, ctx));
 const nearDeath = { ...adult, healthRaw: HEALTH_MAX / 100 };
 const thin = { hunger: 300_000, energy: 300_000, hygiene: 300_000, joy: 300_000 };
 const line = (state: PetState): string => statusLine("Makoto", state, derive(state)).text;
-const elderFragment = (state: PetState): string | null => statusLine("Makoto", state, derive(state)).elder;
+const elderFragment = (state: PetState): string | null => statusLine("Makoto", state, derive(state)).elder?.shown ?? null;
 const HOLDING = " Health is holding steady.";
 const sickFor = (ticks: number): PetState => ({ ...adult, sick: true, sickSinceTick: adult.tick - ticks });
 
@@ -294,6 +294,11 @@ describe("the elder fragment", () => {
     const state = { ...elder, healthRaw: HEALTH_MAX * 0.4, needs: thin };
     expect(line(state)).toBe("Makoto is fading. Health is falling with age.");
     expect(elderFragment(state)).toBe("needs 60% · at 30%");
+  });
+
+  it("has a whole-sentence reading for a screen reader", () => {
+    const { elder: fragment } = statusLine("Makoto", elder, derive(elder));
+    expect(fragment?.spoken).toBe("Today's line is 60%; needs average 100%.");
   });
 
   it("is kept while the elder sleeps", () => {
