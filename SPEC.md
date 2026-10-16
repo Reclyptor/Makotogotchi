@@ -610,8 +610,8 @@ way down, projection emits a `FADING` milestone — a crossing, like
 `CRITICAL`, so it fires once per descent. It is a push trigger (§12) and a
 feed line, and while an elder's health is below the threshold and its needs
 average short of the day's hold line, the status line (§11.7) reads
-"Makoto is fading. Health is falling with age: needs average 74%, today's
-line is 77%." rather than anything about doing fine. Once the group lifts
+"Makoto is fading. Health is falling with age." rather than anything about
+doing fine, with the day's line and the average beside it (§11.7). Once the group lifts
 the average past the line the drift turns and the line says so ("Health is
 coming back.").
 
@@ -1702,23 +1702,30 @@ The reason is the largest drain; ties go need, then sickness, then age.
 
 | `health.reason` | Sentence |
 | --- | --- |
-| need | "Health is falling: hunger is below 20%." — the worst need, and the percentage is `CRITICAL_THRESHOLD` |
-| sick | "Health is falling: sickness." |
-| age | "Health is falling with age: needs average 74%, today's line is 77%." (an elder, with both numbers) |
+| need | "Health is falling: hunger is below 20%." — the worst need, and the percentage is `CRITICAL_THRESHOLD`; just "Health is falling." when the headline already names that need as an ailment ("is starving") |
+| sick | "Health is falling: sickness."; just "Health is falling." when the headline already says the pet is sick |
+| age | "Health is falling with age." |
 | regen | "Health is coming back." |
 | holding | "Health is holding steady." — drains and recovery cancel out, as for a sick pet that is fed |
 | full | nothing |
+
+A cause is never said twice. The headline names an ailment only on the
+ailment line (rule 4), and a need can be below the critical line without
+being an ailment yet (hunger at 17% is short of "starving" at 15%), so the
+sentence names the need or the sickness exactly when the headline did not.
+A sleeping pet's headline names neither, so the sentence still does.
 
 Dead and egg lines carry none, so a dead pet's steady health is never
 reported. One fixed line per state, warm in tone, no rotation: every
 caretaker reads the same words, and the tests are exact.
 
-**The elder fragment.** For an elder, today's hold line and where the needs
-average now follow the sentence as a small muted fragment, even while health
-is rising: "needs 72% · at 81%" (line, then average). `statusLine()` returns
+**The elder fragment.** For every living elder, whichever way health is
+moving, today's hold line and where the needs average now follow the
+sentence as a small muted fragment: "needs 72% · at 81%" (line, then
+average). The numbers live only there, so "falling with age" is a short
+sentence and the fragment says by how much. `statusLine()` returns
 `{ text, elder }` so the page can set the fragment quieter (smaller, 60%
-opacity, tabular figures) without cutting it out of a string. It is hidden
-when the reason is age, because that sentence already carries both numbers.
+opacity, tabular figures) without cutting it out of a string.
 
 The venue clause ("Out at the shrine path today.", §22.8) follows on its own.
 

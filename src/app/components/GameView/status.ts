@@ -43,6 +43,12 @@ const AILMENT_WORD: Record<Exclude<Ailment, "SICK">, string> = {
   SAD: "sad",
 };
 const AILMENT_ORDER = ["STARVING", "EXHAUSTED", "FILTHY", "SAD"] as const;
+const NEED_AILMENT: Record<NeedKey, Exclude<Ailment, "SICK">> = {
+  hunger: "STARVING",
+  energy: "EXHAUSTED",
+  hygiene: "FILTHY",
+  joy: "SAD",
+};
 
 const SLIPPING_LINE: Record<NeedKey, string> = {
   hunger: "is getting hungry.",
@@ -138,17 +144,22 @@ const sleeping = (state: PetState, ctx?: ProjectionContext): string => {
   }
 };
 
-/** Which way health is moving and why; null when there is nothing to say. */
-const healthSentence = ({ reason, elder }: HealthView): string | null => {
+/**
+ * Which way health is moving and why; null when there is nothing to say. A
+ * cause the headline already named ("is starving", "just fell sick") is not
+ * said twice. A need below the line that is not yet an ailment still is: the
+ * headline has not mentioned it.
+ */
+const healthSentence = ({ reason }: HealthView, named: readonly Ailment[]): string | null => {
   switch (reason.kind) {
     case "need":
-      return `Health is falling: ${reason.need} is below ${CRITICAL_PERCENT}%.`;
+      return named.includes(NEED_AILMENT[reason.need])
+        ? "Health is falling."
+        : `Health is falling: ${reason.need} is below ${CRITICAL_PERCENT}%.`;
     case "sick":
-      return "Health is falling: sickness.";
+      return named.includes("SICK") ? "Health is falling." : "Health is falling: sickness.";
     case "age":
-      return elder
-        ? `Health is falling with age: needs average ${elder.meanPercent}%, today's line is ${elder.linePercent}%.`
-        : "Health is falling with age.";
+      return "Health is falling with age.";
     case "regen":
       return "Health is coming back.";
     case "holding":
@@ -158,12 +169,12 @@ const healthSentence = ({ reason, elder }: HealthView): string | null => {
   }
 };
 
-/**
- * An elder's line and average sit beside the health sentence, even while
- * health is rising. Falling with age already spells both numbers out.
- */
-const elderFragment = ({ reason, elder }: HealthView): string | null =>
-  elder && reason.kind !== "age" ? `needs ${elder.linePercent}% · at ${elder.meanPercent}%` : null;
+/** An elder's hold line, then where the needs average now, whichever way health is moving. */
+const elderFragment = ({ elder }: HealthView): string | null =>
+  elder && `needs ${elder.linePercent}% · at ${elder.meanPercent}%`;
+
+/** The headline, and which ailments it spelled out. */
+type Headline = { text: string; named: readonly Ailment[] };
 
 const headline = (
   petName: string,
@@ -171,16 +182,16 @@ const headline = (
   derived: DerivedState,
   stage: Exclude<LifeStage, "EGG">,
   ctx: ProjectionContext | undefined,
-): string => {
-  if (state.asleep) return `${petName} ${sleeping(state, ctx)}`;
+): Headline => {
+  if (state.asleep) return { text: `${petName} ${sleeping(state, ctx)}`, named: [] };
   const ailment = ailing(state, derived);
-  if (ailment) return `${petName} ${ailment}`;
-  if (derived.vitality === "fading") return `${petName} is fading.`;
-  if (derived.vitality === "recovering") return `${petName} is weak.`;
-  if (derived.vitality === "frail") return `${petName} is dangerously weak.`;
+  if (ailment) return { text: `${petName} ${ailment}`, named: derived.ailments };
+  if (derived.vitality === "fading") return { text: `${petName} is fading.`, named: [] };
+  if (derived.vitality === "recovering") return { text: `${petName} is weak.`, named: [] };
+  if (derived.vitality === "frail") return { text: `${petName} is dangerously weak.`, named: [] };
   const low = slipping(state);
-  if (low) return `${petName} ${SLIPPING_LINE[low]}`;
-  return `${petName} ${WELL_LINE[stage]}`;
+  if (low) return { text: `${petName} ${SLIPPING_LINE[low]}`, named: [] };
+  return { text: `${petName} ${WELL_LINE[stage]}`, named: [] };
 };
 
 export const statusLine = (
@@ -196,7 +207,7 @@ export const statusLine = (
   }
   const { stage } = derived;
   if (stage === "EGG") return { text: "The egg is incubating…", elder: null };
-  const health = healthSentence(derived.health);
   const head = headline(petName, state, derived, stage, ctx);
-  return { text: health ? `${head} ${health}` : head, elder: elderFragment(derived.health) };
+  const health = healthSentence(derived.health, head.named);
+  return { text: health ? `${head.text} ${health}` : head.text, elder: elderFragment(derived.health) };
 };
