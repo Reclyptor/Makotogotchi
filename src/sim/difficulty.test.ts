@@ -11,6 +11,7 @@ import { EventLog, hatchedState, projectImmortal, QUIET_SEED, replay, TEST_GENER
 import type { Generation, PetState, ProjectionContext } from "./model";
 import {
   CRITICAL_THRESHOLD,
+  CURRENT_RULES_VERSION,
   HEALTH_MAX,
   NEED_KEYS,
   NEED_MAX,
@@ -229,11 +230,20 @@ describe("community difficulty (SPEC §23)", () => {
   });
 });
 
-describe("the difficulty dial (SPEC §16.2)", () => {
+// The dial is a promise about the whole game, so it holds under every ruleset
+// a pet can be lived under: 1 for the histories that predate the RULES event,
+// and the one the leader records now. Nothing in either clock depends on the
+// ruleset except who is blamed for the illness path's death (SPEC §2.3).
+describe.each([1, CURRENT_RULES_VERSION])("the difficulty dial (SPEC §16.2), ruleset %i", (rules) => {
+  const dialPup = (generation: Generation): PetState => ({
+    ...fullPup(generation),
+    ...(rules > 1 ? { rulesVersion: rules } : {}),
+  });
+
   it("pure neglect: a full pet untouched from waking goes hunger-critical in 28–32h and starves in 42–52h", () => {
     // QUIET_SEED draws no sickness inside the horizon, isolating the
     // deficit-drain clock.
-    const start = fullPup(withSeed(QUIET_SEED));
+    const start = dialPup(withSeed(QUIET_SEED));
     const { state: dead, milestones } = project(start, start.tick + 8 * TICKS_PER_DAY, ctx);
 
     const critical = milestones.find((m) => m.kind === "CRITICAL" && m.detail === "hunger");
@@ -254,17 +264,21 @@ describe("the difficulty dial (SPEC §16.2)", () => {
     // filth → disease. Death comes sooner than the pure-neglect clock but
     // never absurdly fast: there is always at least a full night and day to
     // answer the push alert.
-    const start = fullPup(withSeed(42));
+    const start = dialPup(withSeed(42));
     const { state: dead, milestones } = project(start, start.tick + 8 * TICKS_PER_DAY, ctx);
 
     expect(milestones.some((m) => m.kind === "BECAME_SICK")).toBe(true);
     expect(dead.diedAtTick).not.toBeNull();
-    expect(dead.causeOfDeath).toBe("sickness");
+    // Ruleset 2 credits a pup that starves while ill to the starving.
+    expect(dead.causeOfDeath).toBe(rules > 1 ? "hunger" : "sickness");
     const deathHours = (dead.diedAtTick! - start.tick) / TICKS_PER_HOUR;
     expect(deathHours).toBeGreaterThanOrEqual(36);
     expect(deathHours).toBeLessThanOrEqual(44);
   });
 
+});
+
+describe("the lone caretaker (SPEC §16.2)", () => {
   it("a lone caretaker can rescue a collapsed pet within 30 minutes", () => {
     // Every need deep below critical, health half gone: the 3am nightmare.
     const base = projectImmortal(hatchedState(ctx), TICKS_PER_DAY, ctx);

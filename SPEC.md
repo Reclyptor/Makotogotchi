@@ -227,6 +227,23 @@ what it was. Histories from before ruleset 2 keep that largest-drain rule (tie
 order: needs, then sickness, then age), because the cause is stored in the
 folded state and an old log must fold to the state it always did.
 
+Illness on the memorial therefore becomes rare under ruleset 2, and that is
+accepted. A sick pet that is not an elder, with every need above critical,
+holds steady (sickness drains exactly what an adult regenerates), so any
+non-elder's death has a need below critical and is credited to that need.
+"Died of illness" survives only for a sick elder at its hold line, whose
+regeneration is a quarter of the sickness drain.
+
+**What the screen blames is ordered differently on purpose.** `derive`'s
+health view (`HealthView.reason`) names what a caretaker can fix first: under
+ruleset 2 a critical need, then sickness, then age, each only while it is
+actually draining. A sick adult with a need under 20% is told about the need,
+because sickness alone only stalls an adult and feeding is the cure; a sick
+elder below its line is told about the sickness, because medicine is, even
+though it will be buried as old age if it dies. The gravestone credits what the
+pet was, the screen what can be done. Ruleset 1 names the largest drain in both
+places.
+
 Consequences that fall out of this for free, rather than being special-cased:
 
 - A pet with one need slightly below critical loses health *slowly*. There is
@@ -2135,7 +2152,9 @@ the difficulty dial holds (both paths, on pinned seeds):
     pure neglect — a full PUP untouched from WAKE_HOUR on a sickness-quiet
     seed reaches CRITICAL hunger in 28–32h and starves in 42–52h
     with illness — on a seed that onsets sickness mid-abandonment, death
-    accelerates into the 36–44h band, never faster
+    accelerates into the 36–44h band, never faster (credited to sickness
+    under ruleset 1 and to hunger under ruleset 2; both dials run under
+    both rulesets)
 a lone caretaker can rescue:
     a greedy-optimal bot (acts the moment cooldowns and budget permit,
     choosing the action with max marginal health benefit) brings a starving
@@ -2161,7 +2180,8 @@ The last three encode §1.2's design goals as executable assertions — with the
 caretaker strategy pinned to a defined optimal bot, so the properties are
 decidable rather than aspirational. They are the reason the tuning constants
 can be changed safely. Measured values on the committed seeds: critical at
-30.1h, pure-neglect death at 45.6h, sickness-path death at 41.1h.
+30.1h, pure-neglect death at 45.6h, sickness-path death at 41.1h (those are
+ruleset 1's attribution; the times are the same under ruleset 2).
 
 ### 16.3 Golden Files
 
