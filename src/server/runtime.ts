@@ -18,7 +18,7 @@ import { latestGeneration, toGeneration } from "./db/repository";
 import { anonymousName, nicknameMap } from "./social";
 import { PushDispatcher } from "./push/dispatcher";
 import { pushConfigured, webPushSender } from "./push/sender";
-import { TICK_SECONDS, TICKS_PER_HOUR } from "@/sim/tuning";
+import { CURRENT_RULES_VERSION, TICK_SECONDS, TICKS_PER_HOUR } from "@/sim/tuning";
 import { ambientAt } from "@/sim/ambient";
 import { presencePermilleOf, worthRecording } from "@/sim/difficulty";
 import { activeCaretakers } from "./population";
@@ -27,7 +27,7 @@ import { primeRoomCache } from "./snapshot";
 import type { EngineMessage } from "./engine/messages";
 import { settleQuest } from "./quests";
 import { observeWants } from "./wants";
-import { isAlive, type Generation } from "@/sim/model";
+import { isAlive, rulesVersionOf, type Generation } from "@/sim/model";
 
 const GENERATION_TTL_MS = 10_000;
 const NAME_CACHE_TTL_MS = 30_000;
@@ -131,6 +131,11 @@ const boot = async (): Promise<Runtime> => {
         // The elder ramp (SPEC §2.3) starts once per generation. The engine
         // re-checks under the lock, so a stale read here only costs a skip.
         state = await engine.startElderRamp(current);
+      }
+      if (!successor && isAlive(state) && rulesVersionOf(state) < CURRENT_RULES_VERSION) {
+        // The ruleset (SPEC §23.2) is recorded once per generation, the same
+        // way: the engine re-checks under the lock.
+        state = await engine.recordRules(current);
       }
       if (!successor) {
         // The pet's asks (SPEC §25.2): expire a stale want, open this

@@ -3,7 +3,7 @@
 // function reproduces its exact state on any machine (SPEC §3.1) — the
 // determinism the golden-file test guards.
 
-import { phaseAt, type PetState, type ProjectionContext } from "./model";
+import { phaseAt, rulesVersionOf, type PetState, type ProjectionContext } from "./model";
 import { project } from "./project";
 import { drinkItem, foodItem, toysPlayBonusPercent, type Perks } from "./economy";
 import { quirkFoodPercent } from "./quirks";
@@ -99,6 +99,14 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       // The ticks projected above were lived under the old rule. The first
       // event fixes the start for good, so a duplicate append is a no-op.
       state.elderRampFromTick ??= event.tick;
+      return { state, milestones, applied: 0, changed: true };
+    }
+
+    case "RULES": {
+      // The ticks projected above were lived under the old rules. Only a
+      // newer version changes anything, so a duplicate or stale append folds
+      // to nothing — and an old log still carries no field at all.
+      if (event.version > rulesVersionOf(state)) state.rulesVersion = event.version;
       return { state, milestones, applied: 0, changed: true };
     }
 

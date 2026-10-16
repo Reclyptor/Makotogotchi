@@ -26,8 +26,8 @@ import { reduce, type ReduceResult } from "@/sim/reduce";
 import type { MinigameId } from "@/sim/minigames";
 import { canPerform, type ValidationResult } from "@/sim/validate";
 import { windowEndTick, windowIndexAt, type Want } from "@/sim/wants";
-import { isAlive, type Generation, type PetState, type ProjectionContext } from "@/sim/model";
-import { TICKS_PER_DAY, TICK_SECONDS, type CareAction } from "@/sim/tuning";
+import { isAlive, rulesVersionOf, type Generation, type PetState, type ProjectionContext } from "@/sim/model";
+import { CURRENT_RULES_VERSION, TICKS_PER_DAY, TICK_SECONDS, type CareAction } from "@/sim/tuning";
 import type { Milestone, MilestoneKind, PetEvent } from "@/sim/events";
 import type { EventExtras } from "../db/collections";
 import {
@@ -449,6 +449,32 @@ export class PetEngine {
           generationId: generation.id,
           seq,
           tick: current.tick,
+        }),
+      };
+    });
+    return result.state;
+  }
+
+  /**
+   * Record the ruleset this generation is lived under (SPEC §23.2). The same
+   * shape as `startElderRamp`: leader-only, re-checked under the write lock on
+   * the settled state, and the first append moves the very field the check
+   * reads, so a repeat call, a second leader or a restart all fold to a skip.
+   * A generation alive at a release that raises the version gets its event at
+   * release; a new one right after it hatches.
+   */
+  async recordRules(generation: Generation): Promise<PetState> {
+    const result = await this.advance(generation, (state) => {
+      if (!isAlive(state)) return { kind: "skip" };
+      if (rulesVersionOf(state) >= CURRENT_RULES_VERSION) return { kind: "skip" };
+      return {
+        kind: "event",
+        event: (seq, current): PetEvent => ({
+          type: "RULES",
+          generationId: generation.id,
+          seq,
+          tick: current.tick,
+          version: CURRENT_RULES_VERSION,
         }),
       };
     });

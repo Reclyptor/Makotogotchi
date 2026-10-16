@@ -3,6 +3,15 @@
 // are what hold the design intent invariant when they are tuned.
 
 export const TICK_SECONDS = 10;
+
+// The ruleset a generation is lived under (SPEC §23.2). A rule that changes
+// how a pet lives or dies is gated on `rulesVersion >= N` so that a log
+// written before it folds as it always did; the leader records the current
+// version once per generation in a RULES event. Shipping the next change
+// means raising this number — not adding an event type per change — and
+// gating the new rule on it. Version 1 is every history that predates the
+// event.
+export const CURRENT_RULES_VERSION = 2;
 export const TICKS_PER_HOUR = 360;
 export const TICKS_PER_DAY = 8640;
 

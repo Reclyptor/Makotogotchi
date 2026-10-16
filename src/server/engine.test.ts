@@ -16,7 +16,7 @@ import { reduce } from "@/sim/reduce";
 import { scheduleFor } from "./schedule";
 import { ambientAt } from "@/sim/ambient";
 import type { Generation, PetState } from "@/sim/model";
-import { CARE_ACTIONS, TICK_SECONDS } from "@/sim/tuning";
+import { CARE_ACTIONS, CURRENT_RULES_VERSION, TICK_SECONDS } from "@/sim/tuning";
 
 let infra: TestInfra;
 let engine: PetEngine;
@@ -214,6 +214,29 @@ describe("PetEngine", () => {
     expect(recovered.state.elderRampFromTick).toBe(started.elderRampFromTick);
     expect((await engine.startElderRamp(generation)).elderRampFromTick).toBe(started.elderRampFromTick);
     expect((await eventsSince(await db(), generation.id, -1)).filter((event) => event.type === "ELDER_RAMP")).toHaveLength(1);
+  });
+
+  it("records the ruleset exactly once, however often it is asked (SPEC §23.2)", async () => {
+    advanceClockTicks(30);
+    const recorded = await engine.recordRules(generation);
+    expect(recorded.rulesVersion).toBe(CURRENT_RULES_VERSION);
+
+    // A second leader, a retry, a restart: every later call is a skip.
+    advanceClockTicks(60);
+    const again = await engine.recordRules(generation);
+    const other = await (await buildEngine()).recordRules(generation);
+    expect(again.rulesVersion).toBe(CURRENT_RULES_VERSION);
+    expect(other.rulesVersion).toBe(CURRENT_RULES_VERSION);
+
+    const log = await eventsSince(await db(), generation.id, -1);
+    expect(log.filter((event) => event.type === "RULES")).toHaveLength(1);
+
+    // And it survives losing the hot state: the version comes back from the log.
+    await infra.clearRedis();
+    const recovered = await engine.recover(generation);
+    expect(recovered.state.rulesVersion).toBe(CURRENT_RULES_VERSION);
+    expect((await engine.recordRules(generation)).rulesVersion).toBe(CURRENT_RULES_VERSION);
+    expect((await eventsSince(await db(), generation.id, -1)).filter((event) => event.type === "RULES")).toHaveLength(1);
   });
 
   it("serializes concurrent care writes: unique contiguous seqs, replay-identical fold", async () => {

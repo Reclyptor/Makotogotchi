@@ -129,6 +129,19 @@ export const elderRampEventSchema = z.object({
   type: z.literal("ELDER_RAMP"),
 });
 
+/**
+ * The leader records the ruleset this generation is lived under (SPEC §2.3,
+ * §23.2). The rules that change how a pet lives or dies are gated on
+ * `PetState.rulesVersion`, so a log written before a change folds as it always
+ * did. A future change bumps `CURRENT_RULES_VERSION` rather than adding an
+ * event type of its own; the fold keeps the highest version it has seen.
+ */
+export const rulesEventSchema = z.object({
+  ...eventBase,
+  type: z.literal("RULES"),
+  version: z.number().int().positive(),
+});
+
 export const petEventSchema = z.discriminatedUnion("type", [
   careEventSchema,
   hatchedEventSchema,
@@ -136,6 +149,7 @@ export const petEventSchema = z.discriminatedUnion("type", [
   milestoneEventSchema,
   populationEventSchema,
   elderRampEventSchema,
+  rulesEventSchema,
   wantOpenedEventSchema,
   wantExpiredEventSchema,
 ]);
@@ -146,6 +160,7 @@ export type ToyAddedEvent = z.infer<typeof toyAddedEventSchema>;
 export type MilestoneEvent = z.infer<typeof milestoneEventSchema>;
 export type PopulationEvent = z.infer<typeof populationEventSchema>;
 export type ElderRampEvent = z.infer<typeof elderRampEventSchema>;
+export type RulesEvent = z.infer<typeof rulesEventSchema>;
 export type WantOpenedEvent = z.infer<typeof wantOpenedEventSchema>;
 export type WantExpiredEvent = z.infer<typeof wantExpiredEventSchema>;
 export type PetEvent = z.infer<typeof petEventSchema>;

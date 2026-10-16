@@ -115,7 +115,17 @@ export type PetState = {
    * byte-identical to what it always was.
    */
   elderRampFromTick?: number;
+  /**
+   * The ruleset this generation is lived under, as last recorded by a RULES
+   * event (SPEC §23.2). Absent in every history written before the event
+   * existed, where it reads as 1 and the rules fold exactly as they did.
+   * Never defaulted into genesis: that would change every fixture.
+   */
+  rulesVersion?: number;
 };
+
+/** The ruleset a state is lived under: a log with no RULES event is version 1. */
+export const rulesVersionOf = (state: PetState): number => state.rulesVersion ?? 1;
 
 /** Pure function of hatch time — never stored (SPEC §4.3). */
 export const stageAt = (bornAtTick: number | null, tick: number): LifeStage => {
