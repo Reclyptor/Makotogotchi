@@ -50,9 +50,14 @@ export const ELDER_HOLD_CAP = 850_000; // 85%, reached on ramp day 10
 export const ELDER_BAND = 100_000; // 10 points
 export const elderHoldMean = (rampDay: number): number =>
   Math.min(ELDER_HOLD_CAP, ELDER_HOLD_START + ELDER_HOLD_STEP * rampDay);
+export const needsMean = (needs: Record<NeedKey, number>): number =>
+  Math.floor((needs.hunger + needs.energy + needs.hygiene + needs.joy) / 4);
+/** Today's hold line: the legacy flat one before any ramp, the climbing one after. */
+export const elderHoldLine = (rampDay: number | null): number =>
+  rampDay === null ? LEGACY_ELDER_HOLD_MEAN : elderHoldMean(rampDay);
 export const elderVigourPermille = (needs: Record<NeedKey, number>, rampDay: number | null): number => {
-  const mean = Math.floor((needs.hunger + needs.energy + needs.hygiene + needs.joy) / 4);
-  const hold = rampDay === null ? LEGACY_ELDER_HOLD_MEAN : elderHoldMean(rampDay);
+  const mean = needsMean(needs);
+  const hold = elderHoldLine(rampDay);
   const floor = rampDay === null ? CRITICAL_THRESHOLD : hold - ELDER_BAND;
   return Math.min(1000, Math.max(0, Math.floor(((mean - floor) * 1000) / (hold - floor))));
 };

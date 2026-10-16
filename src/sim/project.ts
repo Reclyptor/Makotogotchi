@@ -16,7 +16,8 @@
 //   7. sickness onset draw (keyed by absolute tick, pre-drain health)
 //   8. health drain / regeneration, death check
 
-import { elderRampDayAt, isAlive, stageAt, type CauseOfDeath, type PetState, type ProjectionContext } from "./model";
+import { isAlive, stageAt, type CauseOfDeath, type PetState, type ProjectionContext } from "./model";
+import { healthTerms } from "./health";
 import { careMultiplierPermille, presencePermilleOf } from "./difficulty";
 import { draw32, RNG_PURPOSE } from "./rng";
 import {
@@ -26,14 +27,9 @@ import {
   EXHAUSTED_THRESHOLD,
   FORM_STEADY_AT,
   FORM_THRIVING_AT,
-  elderVigourPermille,
   FADING_THRESHOLD,
-  HEALTH_DRAIN_AGE,
   HEALTH_DRAIN_PER_NEED,
-  HEALTH_DRAIN_SICK,
   HEALTH_MAX,
-  HEALTH_REGEN,
-  HEALTH_REGEN_ELDER,
   NAP_WAKE_THRESHOLD,
   NEED_KEYS,
   NEED_MAX,
@@ -165,29 +161,9 @@ export const project = (input: PetState, toTick: number, ctx: ProjectionContext)
       }
     }
 
-    // 8. Health. Deficit drain and regeneration are mutually exclusive by
-    // construction (SPEC §2.3).
-    let deficitDrain = 0;
-    let worstNeed: CauseOfDeath = "hunger";
-    let worstDeficit = -1;
-    for (const need of NEED_KEYS) {
-      const deficit = CRITICAL_THRESHOLD - state.needs[need];
-      if (deficit > 0) {
-        deficitDrain += deficit;
-        if (deficit > worstDeficit) {
-          worstDeficit = deficit;
-          worstNeed = need;
-        }
-      }
-    }
-    const drainNeeds = HEALTH_DRAIN_PER_NEED * deficitDrain;
-    const drainSick = state.sick ? HEALTH_DRAIN_SICK : 0;
-    // Old age is held off by care (SPEC §2.3): the age drain scales with the
-    // elder's vigour — against a hold line that climbs once the leader has
-    // started the ramp — and an elder at full vigour regains health slowly.
-    const vigour = stage === "ELDER" ? elderVigourPermille(state.needs, elderRampDayAt(state, tick)) : 1000;
-    const drainAge = stage === "ELDER" ? Math.floor((HEALTH_DRAIN_AGE * (1000 - vigour)) / 1000) : 0;
-    const regen = deficitDrain !== 0 ? 0 : stage === "ELDER" ? (vigour === 1000 ? HEALTH_REGEN_ELDER : 0) : HEALTH_REGEN;
+    // 8. Health. The terms (and why deficit drain and regeneration never
+    // coexist) live in health.ts, shared with derive (SPEC §2.3).
+    const { drainNeeds, drainSick, drainAge, regen, worstNeed } = healthTerms(state, tick);
     const healthBefore = state.healthRaw;
     state.healthRaw = clampNeed(state.healthRaw - drainNeeds - drainSick - drainAge + regen, HEALTH_MAX);
     // An elder crossing below the fading line, once per descent (SPEC §2.10).
@@ -198,8 +174,8 @@ export const project = (input: PetState, toTick: number, ctx: ProjectionContext)
     if (state.healthRaw === 0) {
       // Cause: the largest drain source at the moment of death, with a
       // deterministic tie order of needs → sickness → age.
-      let cause: CauseOfDeath = worstDeficit > 0 ? worstNeed : "sickness";
-      let causeMagnitude = worstDeficit > 0 ? HEALTH_DRAIN_PER_NEED * worstDeficit : 0;
+      let cause: CauseOfDeath = worstNeed ?? "sickness";
+      let causeMagnitude = worstNeed ? HEALTH_DRAIN_PER_NEED * (CRITICAL_THRESHOLD - state.needs[worstNeed]) : 0;
       if (drainSick > causeMagnitude) {
         cause = "sickness";
         causeMagnitude = drainSick;

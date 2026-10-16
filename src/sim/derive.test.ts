@@ -86,3 +86,67 @@ describe("vitality", () => {
     expect(healthAfterOneTick(state)).toBeLessThan(state.healthRaw);
   });
 });
+
+describe("health view", () => {
+  const trendOf = (state: PetState): "rising" | "falling" | "steady" => {
+    const after = healthAfterOneTick(state);
+    return after > state.healthRaw ? "rising" : after < state.healthRaw ? "falling" : "steady";
+  };
+  const bare = (level: number) => ({ hunger: level, energy: level, hygiene: level, joy: level });
+
+  it("is steady at full health with nothing draining", () => {
+    expect(derive(adult).health).toEqual({ trend: "steady", reason: { kind: "full" }, elder: null });
+  });
+
+  it("is rising on regen, and names it", () => {
+    const view = derive(nearDeath(adult)).health;
+    expect(view).toEqual({ trend: "rising", reason: { kind: "regen" }, elder: null });
+    expect(trendOf(nearDeath(adult))).toBe("rising");
+  });
+
+  it("is steady and holding while sickness drains exactly what regen restores", () => {
+    const state = { ...nearDeath(adult), sick: true };
+    expect(derive(state).health).toEqual({ trend: "steady", reason: { kind: "holding" }, elder: null });
+    expect(trendOf(state)).toBe("steady");
+  });
+
+  it("blames the worst need when the deficits outweigh sickness", () => {
+    const state = { ...nearDeath(adult), sick: true, needs: { ...adult.needs, joy: 0, hunger: 100_000 } };
+    expect(derive(state).health).toEqual({ trend: "falling", reason: { kind: "need", need: "joy" }, elder: null });
+    expect(trendOf(state)).toBe("falling");
+  });
+
+  it("blames sickness over a need that drains less than it does", () => {
+    const state = { ...nearDeath(adult), sick: true, needs: { ...adult.needs, joy: 150_000 } };
+    expect(derive(state).health.reason).toEqual({ kind: "sick" });
+  });
+
+  it("blames sickness when it is the largest drain and no need is critical", () => {
+    const state = { ...nearDeath(elder), sick: true };
+    expect(derive(state).health.reason).toEqual({ kind: "sick" });
+    expect(derive(state).health.trend).toBe("falling");
+    expect(trendOf(state)).toBe("falling");
+  });
+
+  it("blames age for an elder below its line, and reports the line and the mean", () => {
+    const thin = { ...nearDeath(elder), needs: bare(500_000) };
+    expect(derive(thin).health).toEqual({ trend: "falling", reason: { kind: "age" }, elder: { linePercent: 60, meanPercent: 50 } });
+    expect(trendOf(thin)).toBe("falling");
+  });
+
+  it("reports an elder's line and mean even while health rises", () => {
+    const held = { ...nearDeath(elder), needs: bare(700_000) };
+    expect(derive(held).health).toEqual({ trend: "rising", reason: { kind: "regen" }, elder: { linePercent: 60, meanPercent: 70 } });
+    expect(trendOf(held)).toBe("rising");
+  });
+
+  it("moves the reported line up with the ramp", () => {
+    const ramped = { ...elder, elderRampFromTick: elder.tick, tick: elder.tick + 4 * TICKS_PER_DAY };
+    expect(derive(ramped).health.elder?.linePercent).toBe(70);
+  });
+
+  it("reads a dead pet as steady", () => {
+    const dead = { ...adult, healthRaw: 0, diedAtTick: adult.tick, causeOfDeath: "hunger" as const };
+    expect(derive(dead).health.trend).toBe("steady");
+  });
+});
