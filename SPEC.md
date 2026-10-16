@@ -138,6 +138,8 @@ regenPerTick = HEALTH_REGEN             if no need is below CRITICAL_THRESHOLD (
 hold(rampDay)       = min(ELDER_HOLD_CAP, ELDER_HOLD_START + ELDER_HOLD_STEP × rampDay)
                       ELDER_HOLD_START = 600_000 (60%), ELDER_HOLD_STEP = 25_000 (2.5 points a day),
                       ELDER_HOLD_CAP = 850_000 (85%, reached on ramp day 10)
+                      ELDER_HOLD_CAP_FRAIL = 800_000 (80%, reached on ramp day 8), for a FRAIL
+                      form, under ruleset 2 (§23.2)
 vigour (ELDER only) = clamp((mean(needs) − (hold − ELDER_BAND)) / ELDER_BAND, 0, 1)
                       ELDER_BAND = 100_000 (10 points); per-mille integer arithmetic
                       with no ramp (rampDay = null), the original rule:
@@ -196,16 +198,34 @@ idempotent: the engine re-checks the field under the write lock, and the first
 append sets the very field that check reads, so two leaders, a retry or a
 restart cannot double-append.
 
-`causeOfDeath` is the largest drain source at the moment of death — the need
-with the deepest deficit, sickness, or age — with a deterministic tie order
-(needs, then sickness, then age). Instantaneous attribution at the death tick
-keeps the rule a pure function of state; a rolling account would require
-per-tick history the state deliberately does not carry. A pet that dies of
-old age under devoted care is a *win*. Attribution is by the largest drain at
-the death tick, though, and a sick elder's illness drain (`HEALTH_DRAIN_SICK`)
-is ten times the age drain at its worst, so an elder worn down by age usually
-reads as dying of illness. That is how the rule stands, not a statement that
-sickness killed it.
+**A FRAIL elder is asked for less.** The form decided at the ADULT boundary
+(§2.8) follows the pet into old age: a FRAIL one's needs decay 15% faster than
+a STEADY one's, so the same line costs it more care. Its hold line therefore
+stops at 80% (`ELDER_HOLD_CAP_FRAIL`), reached on ramp day 8; every other form
+climbs on to 85%. The start and the step are the same for all of them, so the
+two lines coincide until day 8 and no log lived before then can tell them
+apart. The cap is read only under ruleset 2 (§23.2). In the targeted check,
+a 5-caretaker room kept a FRAIL elder alive for sixty days at 80% where it lost
+the same elder in 17–26 days at 85%.
+
+`causeOfDeath` is decided at the death tick from the same terms the health
+step used — instantaneous attribution keeps the rule a pure function of state;
+a rolling account would require per-tick history the state deliberately does
+not carry. Under ruleset 2 the order is:
+
+1. **A need deficit**, the worst need: starvation is still starvation, however
+   ill the pet also was.
+2. **Otherwise an elder below its hold line** (`vigour < 1`) dies of `age`,
+   *even if it is sick*.
+3. **Otherwise sickness.**
+
+A pet that dies of old age under devoted care is a *win*, and the old rule
+could not say so. It named the largest drain at the death tick, and a sick
+elder's illness drain (`HEALTH_DRAIN_SICK`) is ten times the age drain at its
+worst, so an elder worn down by age read as dying of illness. Now it reads as
+what it was. Histories from before ruleset 2 keep that largest-drain rule (tie
+order: needs, then sickness, then age), because the cause is stored in the
+folded state and an old log must fold to the state it always did.
 
 Consequences that fall out of this for free, rather than being special-cased:
 
@@ -413,7 +433,8 @@ Gating on energy alone told a caretaker their napping pet was wide awake.
 
 This gives the game a daily rhythm and — importantly — means the overnight
 window is the *least* dangerous time, not the most. Nobody is punished for
-sleeping.
+sleeping. (A crowded room used to break that promise; ruleset 2 restores it
+— §23.1.)
 
 **The night is six hours, not nine, and it crosses midnight.** The old
 22:00–07:00 window spent a third of every day in a state where `FEED`, `PLAY`
@@ -500,7 +521,7 @@ the tradeoff that was always doing the work.
 | `PUP` | Hatch +1 day | Full decay rate begins. |
 | `JUVENILE` | Hatch +3 days | Care quality is sampled here — this window determines the adult form. |
 | `ADULT` | Hatch +7 days | Branches on care quality (below). |
-| `ELDER` | Hatch +21 days | Faster decay (×1.2), slower regeneration, and an age drain held off by keeping the needs' mean above a hold line that rises daily to 85% (§2.3). |
+| `ELDER` | Hatch +21 days | Faster decay (×1.2), slower regeneration, and an age drain held off by keeping the needs' mean above a hold line that rises daily to 85% (80% for a FRAIL one) (§2.3). |
 
 A newly hatched pet starts with every need at `NEED_MAX` and full health.
 
@@ -3260,6 +3281,22 @@ larger community can actually supply more of (`MULTIPLIED_NEEDS` in
 that made it necessary. Energy recovery during sleep and health regeneration
 are untouched.
 
+**The night is exempt (ruleset 2).** During the schedule's SLEEP phase
+(midnight to 6am) need decay uses the baseline multiplier, 1000‰, whatever
+the population; the WAKE phase keeps the full scaling above. The reason is the
+one that exempts energy. §23's premise is that a bigger community can supply
+more care, and nobody can supply any to a sleeping pet: `FEED`, `PLAY` and
+`CLEAN` are refused while it sleeps (§2.5, §2.7). A night at 4× nevertheless
+cost an elder over a third of its hunger bar (`36 × 1.2 × 4 × 2,160` against a
+bar of 1,000,000), a bill that falls due in the one stretch of the day when
+nobody can pay it, and that the day's care then had to make up. The phase is
+read from the schedule, not from `asleep`, so a nap in the afternoon is still
+the day. This is the night only: a waking gap at 4× is as costly as it ever
+was, and an eight-hour one still kills an elder in a room of twenty.
+The table above barely moves: a pure-neglect pup runs out of its first need
+inside the first waking day, and the death times shift by under two hours at
+three to four caretakers and are unchanged from eight up.
+
 Each caretaker's weekly budget, however, **scales with it** (§2.5). An earlier
 draft of this section held the budget fixed per person on the grounds that "a
 larger community supplying more total care is the entire point" — which is
@@ -3302,6 +3339,30 @@ does — **as an event**.
   entries is integer arithmetic for the same reason — presence is measured in
   thousandths precisely so that no fraction of a caretaker ever becomes a
   float in `src/sim` (§4.2).
+
+**The ruleset version.** Some changes alter how a pet lives or dies, and an old
+log has to keep folding to the state it always folded to (§16.3). Each of
+those is gated on `PetState.rulesVersion`, which is optional, reads as 1 when
+absent, and is never defaulted into genesis (that would change every golden
+fixture). A leader-appended `RULES` event, carrying `version`, sets
+`rulesVersion = max(current, version)`; a lower or equal version is a fold to
+nothing. `CURRENT_RULES_VERSION` in `tuning.ts` is the version the leader
+records, and `RULES_SINCE` names the version that introduced each gated rule, so
+no call site carries a bare number.
+
+The append follows `ELDER_RAMP` (§2.3) exactly: the runtime offers it on each
+observation while the state's version is behind, and `engine.recordRules`
+re-checks under the write lock on the settled state, so two leaders, a retry
+or a restart cannot double-append, and losing Redis recovers the version from
+the log. A generation alive when a new version ships gets its event at release;
+a new one just after it hatches.
+
+**A future rule change bumps `CURRENT_RULES_VERSION` and gates on the new
+number. It does not add an event type of its own.** `ELDER_RAMP` stays as it
+is; it predates the convention and carries a tick, which a version cannot.
+
+Ruleset 2 (0.6.0) holds three rules: the night exemption (§23.1), the FRAIL
+elder's 80% cap and the cause-of-death order (§2.3).
 
 ### 23.3 Visibility
 
