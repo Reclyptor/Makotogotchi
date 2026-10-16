@@ -8,7 +8,7 @@
 
 import type { Ailment, DerivedState, HealthView } from "@/sim/derive";
 import type { PetState, ProjectionContext } from "@/sim/model";
-import { CRITICAL_PERCENT } from "@/app/components/Meters/critical";
+import { CRITICAL_PERCENT } from "@/app/copy/health";
 import { CAUSE_OF_DEATH_TEXT } from "@/app/copy/death";
 import {
   ENERGY_SLEEP_RECOVERY,

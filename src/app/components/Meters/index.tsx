@@ -7,7 +7,7 @@
 // alone.
 
 import type { DerivedState } from "@/sim/derive";
-import { CRITICAL_PERCENT } from "@/app/components/Meters/critical";
+import { CRITICAL_PERCENT } from "@/app/copy/health";
 import { NEED_KEYS, type NeedKey } from "@/sim/tuning";
 
 const METER_ROWS = [
