@@ -32,9 +32,9 @@ export default function AboutPage() {
           <li>Health drains while any need is below 20%, and slowly recovers when none is. At zero, it&apos;s over.</li>
           <li>Each of you can only do so much per week — Makoto genuinely needs more than one caretaker.</li>
           <li>It sleeps at night (US Central time). Let it. It recovers energy that way.</li>
-          <li>Sickness stops health from recovering, and it wears an elder down in about a day. Medicine cures it and restores a little health.</li>
+          <li>Sickness stops health from recovering, and it wears an elder down in a day or so. Medicine cures it and restores a little health.</li>
           <li>
-            An elder (three weeks old) needs its four needs to average above a line that rises every day, up to 85%.
+            An elder (three weeks old) must keep its needs averaging above a line that rises every day, up to 85%.
             Fall short and its health fades; stay above it and its health comes back.
           </li>
         </ul>

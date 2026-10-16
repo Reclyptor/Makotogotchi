@@ -141,7 +141,7 @@ hold(rampDay)       = min(ELDER_HOLD_CAP, ELDER_HOLD_START + ELDER_HOLD_STEP × 
 vigour (ELDER only) = clamp((mean(needs) − (hold − ELDER_BAND)) / ELDER_BAND, 0, 1)
                       ELDER_BAND = 100_000 (10 points); per-mille integer arithmetic
                       with no ramp (rampDay = null), the original rule:
-                      clamp((mean − CRITICAL_THRESHOLD) / (ELDER_HOLD_START − CRITICAL_THRESHOLD), 0, 1)
+                      clamp((mean − CRITICAL_THRESHOLD) / (LEGACY_ELDER_HOLD_MEAN − CRITICAL_THRESHOLD), 0, 1)
 ```
 
 **Old age is held off by care, not by a clock — and the care asked for rises.**
@@ -201,7 +201,11 @@ with the deepest deficit, sickness, or age — with a deterministic tie order
 (needs, then sickness, then age). Instantaneous attribution at the death tick
 keeps the rule a pure function of state; a rolling account would require
 per-tick history the state deliberately does not carry. A pet that dies of
-old age under devoted care is a *win*, and the memorial records it as such.
+old age under devoted care is a *win*. Attribution is by the largest drain at
+the death tick, though, and a sick elder's illness drain (`HEALTH_DRAIN_SICK`)
+is ten times the age drain at its worst, so an elder worn down by age usually
+reads as dying of illness. That is how the rule stands, not a statement that
+sickness killed it.
 
 Consequences that fall out of this for free, rather than being special-cased:
 
@@ -496,7 +500,7 @@ the tradeoff that was always doing the work.
 | `PUP` | Hatch +1 day | Full decay rate begins. |
 | `JUVENILE` | Hatch +3 days | Care quality is sampled here — this window determines the adult form. |
 | `ADULT` | Hatch +7 days | Branches on care quality (below). |
-| `ELDER` | Hatch +21 days | Faster decay, no health regeneration, and an unconditional per-tick health drain (§2.3). Mortality is now arithmetically certain; only the date is open. |
+| `ELDER` | Hatch +21 days | Faster decay (×1.2), slower regeneration, and an age drain held off by keeping the needs' mean above a hold line that rises daily to 85% (§2.3). |
 
 A newly hatched pet starts with every need at `NEED_MAX` and full health.
 
@@ -876,8 +880,9 @@ health (raw units; HEALTH_MAX = 10¹²):
                                       ; zero with the needs' mean at the hold line, full
                                       ; a band below it (~9.6 elder days from full when
                                       ; fully neglected)
-  ELDER_HOLD_START      = 600_000     ; the hold line on ramp day 0, and the whole of the
-                                      ; flat rule histories from before the ramp fold by
+  ELDER_HOLD_START      = 600_000     ; the hold line on ramp day 0
+  LEGACY_ELDER_HOLD_MEAN = 600_000    ; the flat rule histories from before the ramp fold
+                                      ; by; frozen apart from the ramp's tuning
   ELDER_HOLD_STEP       =  25_000     ; the line rises this much each ramp day…
   ELDER_HOLD_CAP        = 850_000     ; …to this ceiling, reached on day 10
   ELDER_BAND            = 100_000     ; how far under the line vigour falls to 0
