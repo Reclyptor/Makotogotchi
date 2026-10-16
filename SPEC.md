@@ -610,9 +610,10 @@ way down, projection emits a `FADING` milestone — a crossing, like
 `CRITICAL`, so it fires once per descent. It is a push trigger (§12) and a
 feed line, and while an elder's health is below the threshold and its needs
 average short of the day's hold line, the status line (§11.7) reads
-"Makoto is fading. A little more care each day brings it back." rather than
-anything about doing fine. Once the group lifts the average past the line
-the drift turns and the line says so ("is recovering").
+"Makoto is fading. Health is falling with age: needs average 74%, today's
+line is 77%." rather than anything about doing fine. Once the group lifts
+the average past the line the drift turns and the line says so ("Health is
+coming back.").
 
 **Farewells.** During mourning any caretaker may leave one farewell for the
 generation that has just died. It is one line — 2 to 80 characters, letters,
@@ -1568,6 +1569,12 @@ the gravestone wears nothing.
 └───────────────────────────────────────────────┘
 ```
 
+- **The critical line is drawn on each need bar.** A 1px tick at
+  `CRITICAL_THRESHOLD` (20%, read from `tuning.ts`, never hardcoded), painted
+  over the fill in `foreground` at about 35% so it shows on the dark track
+  and on a bright bar alike. It is a landmark and not a label: `aria-hidden`,
+  no text, and the health bar has none because health has no such line.
+  Players could see a need fall but not where "low" began.
 - Action buttons show live cooldowns and disable with a *reason* on hover and
   in an accessible label: "Makoto is still eating (23s)", "Makoto is asleep",
   "Makoto isn't sick".
@@ -1683,16 +1690,36 @@ wins:
 | 2 | egg | "The egg is incubating…" |
 | 3 | asleep | by `sleepReason`: "is asleep for the night." / "is napping until the energy comes back." / "was sung to sleep." |
 | 4 | any ailment | "is starving, filthy and sad" — worst first, in §2.9's order — with sickness dated last: "just fell sick" (under an hour), "has been sick for 5 hours", "since yesterday", "for 3 days" |
-| 5 | health below 25% (§2.3) | "is recovering." while health is climbing back; "is dangerously weak." while it is not — an elder, a sick pet, or a critical need |
+| 5 | health below 25% (§2.3) | "is weak." while health is climbing back; "is dangerously weak." while it is not — an elder, a sick pet, or a critical need. An elder fading below 50% reads "is fading." |
 | 6 | a need under 50% | the lowest one: "is getting hungry." / "is getting sleepy." / "could use a bath." / "is getting bored." |
 | 7 | well | by stage: "is small and curious." / "is full of beans." / "is growing fast." / "is doing fine." / "is taking it slow." |
 
-Rules 3 and 4 carry the health verdict as a second sentence when there is
-one: "Makoto is asleep for the night. Health is coming back." The verdict is
-`derive()`'s `vitality`, which mirrors exactly the conditions under which
-`project()` regenerates health, so the line never promises a recovery the
-simulation is not making. One fixed line per state, warm in tone, no
-rotation: every caretaker reads the same words, and the tests are exact.
+**The health sentence.** Rules 3 to 7 are followed by a second sentence that
+says which way health is moving and why, worded from `derive()`'s
+`health: HealthView` (the same `healthTerms()` the projection spends, so the
+line never promises a recovery or a decline the simulation is not making).
+The reason is the largest drain; ties go need, then sickness, then age.
+
+| `health.reason` | Sentence |
+| --- | --- |
+| need | "Health is falling: hunger is below 20%." — the worst need, and the percentage is `CRITICAL_THRESHOLD` |
+| sick | "Health is falling: sickness." |
+| age | "Health is falling with age: needs average 74%, today's line is 77%." (an elder, with both numbers) |
+| regen | "Health is coming back." |
+| holding | "Health is holding steady." — drains and recovery cancel out, as for a sick pet that is fed |
+| full | nothing |
+
+Dead and egg lines carry none, so a dead pet's steady health is never
+reported. One fixed line per state, warm in tone, no rotation: every
+caretaker reads the same words, and the tests are exact.
+
+**The elder fragment.** For an elder, today's hold line and where the needs
+average now follow the sentence as a small muted fragment, even while health
+is rising: "needs 72% · at 81%" (line, then average). `statusLine()` returns
+`{ text, elder }` so the page can set the fragment quieter (smaller, 60%
+opacity, tabular figures) without cutting it out of a string. It is hidden
+when the reason is age, because that sentence already carries both numbers.
+
 The venue clause ("Out at the shrine path today.", §22.8) follows on its own.
 
 ---
