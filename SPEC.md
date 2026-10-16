@@ -135,11 +135,12 @@ drainPerTick = HEALTH_DRAIN_PER_NEED × Σ max(0, CRITICAL_THRESHOLD − value) 
 regenPerTick = HEALTH_REGEN             if no need is below CRITICAL_THRESHOLD (not ELDER)
              = HEALTH_REGEN_ELDER       if ELDER, no need is below CRITICAL_THRESHOLD, and vigour = 1
 
-hold(rampDay)       = min(ELDER_HOLD_CAP, ELDER_HOLD_START + ELDER_HOLD_STEP × rampDay)
-                      ELDER_HOLD_START = 600_000 (60%), ELDER_HOLD_STEP = 25_000 (2.5 points a day),
-                      ELDER_HOLD_CAP = 850_000 (85%, reached on ramp day 10)
-                      ELDER_HOLD_CAP_FRAIL = 800_000 (80%, reached on ramp day 8), for a FRAIL
-                      form, under ruleset 2 (§23.2)
+hold(rampDay)       = min(cap, ELDER_HOLD_START + ELDER_HOLD_STEP × rampDay)
+                      ELDER_HOLD_START = 600_000 (60%), ELDER_HOLD_STEP = 25_000 (2.5 points a day)
+                      cap, ruleset 1: ELDER_HOLD_CAP = 850_000 (85%, reached on ramp day 10)
+                      cap, ruleset 2: ELDER_HOLD_CAP_FRAIL = 800_000 (80%, ramp day 8) for a FRAIL form
+                      cap, ruleset 3: ELDER_HOLD_CAP_V3 = 750_000 (75%, ramp day 6), and
+                                      ELDER_HOLD_CAP_FRAIL_V3 = 700_000 (70%, ramp day 4) for FRAIL (§23.2)
 vigour (ELDER only) = clamp((mean(needs) − (hold − ELDER_BAND)) / ELDER_BAND, 0, 1)
                       ELDER_BAND = 100_000 (10 points); per-mille integer arithmetic
                       with no ramp (rampDay = null), the original rule:
@@ -156,8 +157,9 @@ generation passed a month. So the line climbs: an elder stays technically
 keepable for good, but every day it takes a little more.
 
 `vigour` reads the *mean* of the four needs against a hold line that starts at
-60% and rises 2.5 points per elder day to a cap of 85%, which it reaches on
-the tenth day. At or above the line `vigour` is 1: age drains nothing and the
+60% and rises 2.5 points per elder day to a cap, which under ruleset 3 is 75%
+(§2.3, below) and which it reaches on the sixth day; the first two rulesets
+capped it at 85%, on the tenth. At or above the line `vigour` is 1: age drains nothing and the
 elder regains health slowly (`HEALTH_REGEN_ELDER`, a quarter of the adult rate
 — about four days from empty to full). Below it, `vigour` falls linearly across
 a fixed band, `ELDER_BAND`, ten points wide, and the age drain is
@@ -176,7 +178,12 @@ caretakers cannot hold one (§16.2); that is the group's job, which is the
 point. What it asks of that group is keen, though. Against the real
 simulation, the 85% line is held only by a bot that refeeds on every cooldown,
 minute by minute, for tens of thousands of actions a month; ten people looking
-in every half hour lose the elder within three weeks (§16.2).
+in every half hour lose the elder within three weeks (§16.2). That was too
+keen. Ordinary good care, five to twenty caretakers checking in every thirty to
+ninety minutes, lost the elder around elder day 16 to 21, and only
+near-continuous play survived. The intent stands (an elder that can be kept
+indefinitely, gets harder with age and punishes neglect) but "good care", not
+"perfect play", must be enough, and so ruleset 3 lowers the cap (below).
 
 **The ramp starts by event.** `rampDay` is the number of whole days since the
 ramp began, and when that was is part of the history, so it enters the fold
@@ -207,6 +214,15 @@ two lines coincide until day 8 and no log lived before then can tell them
 apart. The cap is read only under ruleset 2 (§23.2). In the targeted check,
 a 5-caretaker room kept a FRAIL elder alive for sixty days at 80% where it lost
 the same elder in 17–26 days at 85%.
+
+**The line caps at 75%, and FRAIL at 70% (ruleset 3).** The start and the step
+are unchanged, so the cap is reached on ramp day 6 (day 4 for FRAIL) and the
+first days read as they always did. The ten-point band and the age drain are
+unchanged. Against the real simulation under ruleset 3, with sickness on,
+two seeds and 45 elder days, a good human (a visit every 30 to 90 minutes, four
+moves each) kept the elder alive in rooms of 5, 10 and 20, with or without a
+weekly eight-hour waking gap, and a room that did nothing lost it inside a day
+(§16.2).
 
 `causeOfDeath` is decided at the death tick from the same terms the health
 step used — instantaneous attribution keeps the rule a pure function of state;
@@ -538,7 +554,7 @@ the tradeoff that was always doing the work.
 | `PUP` | Hatch +1 day | Full decay rate begins. |
 | `JUVENILE` | Hatch +3 days | Care quality is sampled here — this window determines the adult form. |
 | `ADULT` | Hatch +7 days | Branches on care quality (below). |
-| `ELDER` | Hatch +21 days | Faster decay (×1.2), slower regeneration, and an age drain held off by keeping the needs' mean above a hold line that rises daily to 85% (80% for a FRAIL one) (§2.3). |
+| `ELDER` | Hatch +21 days | Faster decay (×1.2), slower regeneration, and an age drain held off by keeping the needs' mean above a hold line that rises daily to 75% (70% for a FRAIL one) (§2.3). |
 
 A newly hatched pet starts with every need at `NEED_MAX` and full health.
 
@@ -923,7 +939,8 @@ health (raw units; HEALTH_MAX = 10¹²):
   LEGACY_ELDER_HOLD_MEAN = 600_000    ; the flat rule histories from before the ramp fold
                                       ; by; frozen apart from the ramp's tuning
   ELDER_HOLD_STEP       =  25_000     ; the line rises this much each ramp day…
-  ELDER_HOLD_CAP        = 850_000     ; …to this ceiling, reached on day 10
+  ELDER_HOLD_CAP        = 850_000     ; …to this ceiling, reached on day 10 (rulesets 1 and 2;
+                                      ; 750_000 on day 6 from ruleset 3, 700_000 for FRAIL)
   ELDER_BAND            = 100_000     ; how far under the line vigour falls to 0
   HEALTH_REGEN          = 120_000_000 ; per tick, only when nothing is critical
                                       ; (~23h from zero to full); adults only
@@ -3301,7 +3318,8 @@ never mid-day. It only ever falls that way, so no one can be stranded by it. Nee
 by:
 
 ```
-careMultiplier(P) = clamp( (max(P, 2) / 2) ^ 0.75 , 1 , 4 )
+careMultiplier(P) = clamp( (max(P, 2) / 2) ^ 0.75 , 1 , 4 )     ; rulesets 1 and 2
+careMultiplier(P) = clamp( (max(P, 2) / 2) ^ 0.75 , 1 , 2 )     ; ruleset 3, DIFFICULTY_CEILING_V3
 ```
 
 **Between whole caretakers the published table is interpolated**, in
@@ -3341,7 +3359,7 @@ Three properties are deliberate:
 - **A floor of 1×.** A shrinking community never gets an *easier* pet than
   the baseline. §2.5's premise — that one person cannot carry a week alone —
   survives at every population.
-- **A ceiling of 4×.** Past thirteen active caretakers the pet stops getting
+- **A ceiling of 4×.** (Ruleset 3 lowers it to 2×, below.) Past thirteen active caretakers the pet stops getting
   harder. Without a cap, a popular week would demand literal round-the-clock
   cover and punish the very success that produced it. (The cap was 3×, met
   at nine; the first community of ten sat on it and asked for more.)
@@ -3378,6 +3396,18 @@ true, and is about headcount, not about each person's cap. Holding the cap
 fixed while demand scaled meant the design's central ratio drifted from 1.75
 caretakers to 7.00 across this table's range. Total supply still rises with
 headcount; what no longer rises is the share of a week one person must carry.
+
+**The ceiling is 2× (ruleset 3).** From ruleset 3 `careMultiplierPermille`
+stops at `DIFFICULTY_CEILING_V3`, 2000‰, and the cap applies wherever the
+multiplier is read: need decay, the caretaker's weekly budget (so supply and
+demand stay matched, the same reason the budget scales at all) and the care
+quests' bar (which reads what decay reads). The table and the interpolation are
+unchanged below the cap, so the table's entries from six caretakers upward read
+2.00× under ruleset 3. The ceiling was lowered because at 4× one eight-hour
+waking gap starved an elder in a room of twenty, so the better the community
+did the less any lapse was survivable. The night exemption stays. A crowd past
+the cap is no longer worth a `POPULATION` event, since the multiplier it
+recorded would not move (`worthRecording` reads the ruleset too).
 
 ### 23.2 Determinism
 
@@ -3437,6 +3467,10 @@ is; it predates the convention and carries a tick, which a version cannot.
 
 Ruleset 2 (0.6.0) holds three rules: the night exemption (§23.1), the FRAIL
 elder's 80% cap and the cause-of-death order (§2.3).
+
+Ruleset 3 holds two: the community multiplier's 2× ceiling (§23.1) and the
+elder hold line's 75% cap, 70% for FRAIL (§2.3). It reaches a pet through the
+same `RULES` event, so a log without `RULES{3}` folds byte-identically.
 
 ### 23.3 Visibility
 

@@ -34,7 +34,7 @@ export default function AboutPage() {
           <li>It sleeps at night (US Central time). Let it. It recovers energy that way, and a bigger crowd doesn&apos;t make the night any harder.</li>
           <li>Sickness stops health from recovering, and it wears an elder down in a day or so. Medicine cures it and restores a little health.</li>
           <li>
-            An elder (three weeks old) must keep its needs averaging above a line that rises every day, up to 85% (80%
+            An elder (three weeks old) must keep its needs averaging above a line that rises every day, up to 75% (70%
             for one that grew up frail). Fall short and its health fades; stay above it and its health comes back.
           </li>
         </ul>
