@@ -6,6 +6,34 @@ follow [Semantic Versioning]. Pre-1.0, so game-rule changes are minor bumps.
 [Keep a Changelog]: https://keepachangelog.com/en/1.1.0/
 [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
 
+## [0.4.0] — 2026-10-15
+
+Two player reports on Bubble Bath Pop. Every event log written before this
+folds byte-identically: the bath's hygiene bonus keys on a new optional
+`minigame` field that older events do not carry.
+
+### Added
+
+- **A Bubble Bath Pop run cleans Makoto a little.** The run's score scales a
+  10% hygiene base exactly as it scales joy, then the ordinary curve and the
+  caretaker's hygiene allowance apply — about 5% for a par run on a
+  half-clean Makoto. It shares CLEAN's allowance but is not a CLEAN: no
+  cooldown, no wish, no extra coins. The result line shows it (`a47d5d7`,
+  `63b7121`)
+- `MinigameDef.bonus`, `minigameBonus`, `ReduceResult.bonus` and the optional
+  `minigame` field on `CARE` events, written by the play route from the
+  server-side session (`a47d5d7`)
+
+### Fixed
+
+- **Bubble Bath Pop uses the whole board.** Bubbles spawned in the left
+  quarter and only drifted right, so the game was played in a corner. They
+  now rise from the whole width, drift either way and never leave the
+  board, and a tap pops the nearest bubble within a target about 42 CSS px
+  across at phone width (was about 24) (`711fd19`, `d5686fd`)
+- An unknown game id on a stored event folds with no bonus instead of
+  throwing (`a63671c`)
+
 ## [0.3.3] — 2026-10-15
 
 ### Fixed
