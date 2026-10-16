@@ -5,13 +5,14 @@
 
 import { careMultiplier, DIFFICULTY_BASELINE, presencePermilleOf } from "./difficulty";
 import { healthTerms, type HealthTerms } from "./health";
-import { isAlive, stageAt, type PetState } from "./model";
+import { isAlive, rulesVersionOf, stageAt, type PetState } from "./model";
 import {
   AILMENT_THRESHOLDS,
   CRITICAL_THRESHOLD,
   FADING_THRESHOLD,
   HEALTH_MAX,
   NEED_KEYS,
+  RULES_SINCE,
   type NeedKey,
 } from "./tuning";
 
@@ -43,7 +44,11 @@ export type HealthReason =
 
 export type HealthView = {
   trend: "rising" | "falling" | "steady";
-  /** The dominant term; ties go need, then sickness, then age. */
+  /**
+   * The term to blame. Ruleset 1: the largest drain, ties to need, then
+   * sickness, then age. Ruleset 2: the first of need, sickness, age that is
+   * draining — the order of what a caretaker can fix (health.ts).
+   */
   reason: HealthReason;
   /** An elder's hold line and the needs' mean today, in thousandths of a bar (600 = 60%) so a half-point line is not rounded away. */
   elder: { linePermille: number; meanPermille: number } | null;
@@ -67,11 +72,25 @@ export type DerivedState = {
 
 const HEALTH_CRITICAL = HEALTH_MAX / 4; // 25% — the strongest push trigger
 
+const fallingReason = (state: PetState, terms: HealthTerms): HealthReason => {
+  const { worstNeed, drainNeeds, drainSick, drainAge } = terms;
+  if (rulesVersionOf(state) >= RULES_SINCE.ACTIONABLE_REASON) {
+    if (worstNeed !== null) return { kind: "need", need: worstNeed };
+    return drainSick > 0 ? { kind: "sick" } : { kind: "age" };
+  }
+  if (worstNeed !== null && drainNeeds >= drainSick && drainNeeds >= drainAge) return { kind: "need", need: worstNeed };
+  return drainSick >= drainAge ? { kind: "sick" } : { kind: "age" };
+};
+
 const healthViewOf = (state: PetState, terms: HealthTerms): HealthView => {
+  // Nothing is draining a pet that is not alive: an egg sits at full, a grave
+  // at none, and there is no hold line to report.
+  if (!isAlive(state)) {
+    return { trend: "steady", reason: { kind: state.healthRaw >= HEALTH_MAX ? "full" : "holding" }, elder: null };
+  }
   const elder = terms.elder
     ? { linePermille: terms.elder.holdPermille, meanPermille: terms.elder.meanPermille }
     : null;
-  if (!isAlive(state)) return { trend: "steady", reason: { kind: "holding" }, elder };
 
   const drain = terms.drainNeeds + terms.drainSick + terms.drainAge;
   const net = terms.regen - drain;
@@ -83,13 +102,7 @@ const healthViewOf = (state: PetState, terms: HealthTerms): HealthView => {
   if (net === 0) {
     return { trend: "steady", reason: drain === 0 && state.healthRaw >= HEALTH_MAX ? { kind: "full" } : { kind: "holding" }, elder };
   }
-  const reason: HealthReason =
-    terms.worstNeed !== null && terms.drainNeeds >= terms.drainSick && terms.drainNeeds >= terms.drainAge
-      ? { kind: "need", need: terms.worstNeed }
-      : terms.drainSick >= terms.drainAge
-        ? { kind: "sick" }
-        : { kind: "age" };
-  return { trend: "falling", reason, elder };
+  return { trend: "falling", reason: fallingReason(state, terms), elder };
 };
 
 export const derive = (state: PetState): DerivedState => {

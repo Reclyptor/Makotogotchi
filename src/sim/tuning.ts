@@ -18,6 +18,8 @@ export const RULES_SINCE = {
   AGE_CREDIT: 2,
   /** FRAIL elders' hold line stops at `ELDER_HOLD_CAP_FRAIL` (SPEC §2.3). */
   FRAIL_CAP: 2,
+  /** The health view blames a need, then sickness, then age (SPEC §2.3). */
+  ACTIONABLE_REASON: 2,
   /** No community scaling of need decay while the schedule says SLEEP (SPEC §23). */
   NIGHT_EXEMPT: 2,
 } as const;
@@ -70,17 +72,17 @@ export const ELDER_HOLD_CAP = 850_000; // 85%, reached on ramp day 10
 // ramp day 8. Only histories under ruleset 2 read it (`RULES_SINCE.FRAIL_CAP`).
 export const ELDER_HOLD_CAP_FRAIL = 800_000; // 80%
 export const ELDER_BAND = 100_000; // 10 points
-export const elderHoldMean = (rampDay: number, form: AdultForm | null = null): number =>
+export const elderHoldMean = (rampDay: number, form: AdultForm | null): number =>
   Math.min(form === "FRAIL" ? ELDER_HOLD_CAP_FRAIL : ELDER_HOLD_CAP, ELDER_HOLD_START + ELDER_HOLD_STEP * rampDay);
 export const needsMean = (needs: Record<NeedKey, number>): number =>
   Math.floor((needs.hunger + needs.energy + needs.hygiene + needs.joy) / 4);
 /** Today's hold line: the legacy flat one before any ramp, the climbing one after. */
-export const elderHoldLine = (rampDay: number | null, form: AdultForm | null = null): number =>
+export const elderHoldLine = (rampDay: number | null, form: AdultForm | null): number =>
   rampDay === null ? LEGACY_ELDER_HOLD_MEAN : elderHoldMean(rampDay, form);
 export const elderVigourPermille = (
   needs: Record<NeedKey, number>,
   rampDay: number | null,
-  form: AdultForm | null = null,
+  form: AdultForm | null,
 ): number => {
   const mean = needsMean(needs);
   const hold = elderHoldLine(rampDay, form);

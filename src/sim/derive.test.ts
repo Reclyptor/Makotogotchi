@@ -116,7 +116,7 @@ describe("health view", () => {
     expect(trendOf(state)).toBe("falling");
   });
 
-  it("blames sickness over a need that drains less than it does", () => {
+  it("blames sickness over a need that drains less than it does (ruleset 1)", () => {
     const state = { ...nearDeath(adult), sick: true, needs: { ...adult.needs, joy: 150_000 } };
     expect(derive(state).health.reason).toEqual({ kind: "sick" });
   });
@@ -150,8 +150,15 @@ describe("health view", () => {
     expect(derive(ramped).health.elder?.linePermille).toBe(625);
   });
 
-  it("reads a dead pet as steady", () => {
-    const dead = { ...adult, healthRaw: 0, diedAtTick: adult.tick, causeOfDeath: "hunger" as const };
-    expect(derive(dead).health.trend).toBe("steady");
+  it("reads a dead elder as steady, with no hold line to report", () => {
+    const dead = { ...nearDeath(elder), healthRaw: 0, diedAtTick: elder.tick, causeOfDeath: "age" as const };
+    expect(derive(dead).stage).toBe("ELDER");
+    expect(derive(dead).health).toEqual({ trend: "steady", reason: { kind: "holding" }, elder: null });
+  });
+
+  it("reads an egg as full, with no hold line either", () => {
+    expect(derive(hatchedState(ctx)).health.elder).toBeNull();
+    const egg = { ...hatchedState(ctx), bornAtTick: null };
+    expect(derive(egg).health).toEqual({ trend: "steady", reason: { kind: "full" }, elder: null });
   });
 });

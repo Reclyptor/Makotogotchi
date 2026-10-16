@@ -1,7 +1,16 @@
 // The health clock's arithmetic, one tick's worth (SPEC §2.3). project.ts
 // folds it into healthRaw; derive.ts reads the same terms to say which way
-// health is moving and why — so the screen can never disagree with the death
-// clock about what is draining it.
+// health is moving, so the screen and the death clock share one set of numbers.
+//
+// They do not share one ranking of the causes, and under ruleset 2 that is on
+// purpose. The screen is for the person looking at it, so it names what they
+// can fix first: a critical need, then sickness, then age. A sick adult with a
+// need under 20% is told about the need, because sickness alone only stalls an
+// adult and feeding is the cure; a sick elder below its line is told about the
+// sickness, because medicine is. The gravestone is for the pet, and `causeOfDeath`
+// credits what the pet was: a need, then age, then sickness, so an elder worn
+// down by age under devoted care reads as the win it was even when it was also
+// ill. Ruleset 1 ranks both by largest drain.
 
 import { elderRampDayAt, rulesVersionOf, stageAt, type CauseOfDeath, type PetState } from "./model";
 import {

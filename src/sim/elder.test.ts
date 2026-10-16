@@ -49,37 +49,37 @@ const lostInATick = (state: PetState): number => HEALTH_MAX - project(state, sta
 
 describe("the hold line", () => {
   it("starts at 60%, climbs 2.5 points a day, and stops at 85% on day ten", () => {
-    expect(elderHoldMean(0)).toBe(ELDER_HOLD_START);
-    expect(elderHoldMean(1)).toBe(ELDER_HOLD_START + ELDER_HOLD_STEP);
-    expect(elderHoldMean(9)).toBe(825_000);
-    expect(elderHoldMean(10)).toBe(ELDER_HOLD_CAP);
-    expect(elderHoldMean(11)).toBe(ELDER_HOLD_CAP);
-    expect(elderHoldMean(400)).toBe(ELDER_HOLD_CAP);
+    expect(elderHoldMean(0, null)).toBe(ELDER_HOLD_START);
+    expect(elderHoldMean(1, null)).toBe(ELDER_HOLD_START + ELDER_HOLD_STEP);
+    expect(elderHoldMean(9, null)).toBe(825_000);
+    expect(elderHoldMean(10, null)).toBe(ELDER_HOLD_CAP);
+    expect(elderHoldMean(11, null)).toBe(ELDER_HOLD_CAP);
+    expect(elderHoldMean(400, null)).toBe(ELDER_HOLD_CAP);
   });
 });
 
 describe("vigour", () => {
   it("is full at the hold line and falls to nothing a band below it", () => {
     const day = 10; // hold 85%, band floor 75%
-    expect(elderVigourPermille(level(850_000), day)).toBe(1000);
-    expect(elderVigourPermille(level(NEED_MAX), day)).toBe(1000);
-    expect(elderVigourPermille(level(800_000), day)).toBe(500);
-    expect(elderVigourPermille(level(850_000 - ELDER_BAND), day)).toBe(0);
-    expect(elderVigourPermille(level(500_000), day)).toBe(0);
+    expect(elderVigourPermille(level(850_000), day, null)).toBe(1000);
+    expect(elderVigourPermille(level(NEED_MAX), day, null)).toBe(1000);
+    expect(elderVigourPermille(level(800_000), day, null)).toBe(500);
+    expect(elderVigourPermille(level(850_000 - ELDER_BAND), day, null)).toBe(0);
+    expect(elderVigourPermille(level(500_000), day, null)).toBe(0);
   });
 
   it("moves the band with the line", () => {
-    expect(elderVigourPermille(level(600_000), 0)).toBe(1000);
-    expect(elderVigourPermille(level(550_000), 0)).toBe(500);
+    expect(elderVigourPermille(level(600_000), 0, null)).toBe(1000);
+    expect(elderVigourPermille(level(550_000), 0, null)).toBe(500);
     // Day 4: the line is at 70%, the band floor at 60%.
-    expect(elderVigourPermille(level(700_000), 4)).toBe(1000);
-    expect(elderVigourPermille(level(650_000), 4)).toBe(500);
-    expect(elderVigourPermille(level(600_000), 4)).toBe(0);
+    expect(elderVigourPermille(level(700_000), 4, null)).toBe(1000);
+    expect(elderVigourPermille(level(650_000), 4, null)).toBe(500);
+    expect(elderVigourPermille(level(600_000), 4, null)).toBe(0);
   });
 
   it("reads the mean, not the weakest need", () => {
     const lopsided = { hunger: 1_000_000, energy: 700_000, hygiene: 900_000, joy: 800_000 };
-    expect(elderVigourPermille(lopsided, 10)).toBe(1000);
+    expect(elderVigourPermille(lopsided, 10, null)).toBe(1000);
   });
 
   it("pins the no-ramp line at 60%, whatever the ramp is tuned to", () => {
@@ -87,10 +87,10 @@ describe("vigour", () => {
   });
 
   it("keeps the flat 20%-to-60% slope when there is no ramp", () => {
-    expect(elderVigourPermille(level(600_000), null)).toBe(1000);
-    expect(elderVigourPermille(level(400_000), null)).toBe(500);
-    expect(elderVigourPermille(level(200_000), null)).toBe(0);
-    expect(elderVigourPermille(level(100_000), null)).toBe(0);
+    expect(elderVigourPermille(level(600_000), null, null)).toBe(1000);
+    expect(elderVigourPermille(level(400_000), null, null)).toBe(500);
+    expect(elderVigourPermille(level(200_000), null, null)).toBe(0);
+    expect(elderVigourPermille(level(100_000), null, null)).toBe(0);
   });
 });
 

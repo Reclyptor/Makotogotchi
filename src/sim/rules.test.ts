@@ -81,7 +81,9 @@ const v2 = (state: PetState): PetState => ({ ...state, rulesVersion: 2 });
 describe("no community scaling at night", () => {
   const onset = 10 * TICKS_PER_DAY + AWAKE_HOURS * TICKS_PER_HOUR;
   const crowd = 20_000; // twenty caretakers, all week
-  // Five of the night's six hours: the last tick of the sixth is already the morning.
+  // Five hours, not the night's six: the last tick of the sixth is already the
+  // morning, and runs at the daytime rate.
+  const fiveHours = 5 * TICKS_PER_HOUR;
   const adultAt = (tick: number, populationPermille: number, asleep: boolean): PetState => ({
     ...projectImmortal(hatchedState(ctx), tick, ctx),
     needs: level(NEED_MAX),
@@ -97,22 +99,22 @@ describe("no community scaling at night", () => {
   };
 
   it("scales a night by the crowd under ruleset 1, as it always did", () => {
-    const crowded = lostOver(adultAt(onset, crowd, true), 5 * TICKS_PER_HOUR);
-    const quiet = lostOver(adultAt(onset, 2_000, true), 5 * TICKS_PER_HOUR);
+    const crowded = lostOver(adultAt(onset, crowd, true), fiveHours);
+    const quiet = lostOver(adultAt(onset, 2_000, true), fiveHours);
     expect(crowded.hunger).toBeGreaterThan(quiet.hunger * 3);
     expect(crowded.hygiene).toBeGreaterThan(quiet.hygiene * 3);
   });
 
   it("charges a crowded night the baseline under ruleset 2", () => {
-    const crowded = lostOver(v2(adultAt(onset, crowd, true)), 5 * TICKS_PER_HOUR);
-    expect(crowded).toEqual(lostOver(adultAt(onset, 2_000, true), 5 * TICKS_PER_HOUR));
+    const crowded = lostOver(v2(adultAt(onset, crowd, true)), fiveHours);
+    expect(crowded).toEqual(lostOver(adultAt(onset, 2_000, true), fiveHours));
   });
 
   it("keeps the full scaling by day under ruleset 2", () => {
     const morning = 10 * TICKS_PER_DAY;
-    const day = lostOver(v2(adultAt(morning, crowd, false)), 5 * TICKS_PER_HOUR);
-    expect(day).toEqual(lostOver(adultAt(morning, crowd, false), 5 * TICKS_PER_HOUR));
-    expect(day.hunger).toBeGreaterThan(lostOver(adultAt(morning, 2_000, false), 5 * TICKS_PER_HOUR).hunger * 3);
+    const day = lostOver(v2(adultAt(morning, crowd, false)), fiveHours);
+    expect(day).toEqual(lostOver(adultAt(morning, crowd, false), fiveHours));
+    expect(day.hunger).toBeGreaterThan(lostOver(adultAt(morning, 2_000, false), fiveHours).hunger * 3);
   });
 
   it("switches at the schedule boundary, not at the pet's own sleep", () => {
@@ -143,9 +145,9 @@ describe("the FRAIL elder's lower cap", () => {
   it("caps the line at 80% for FRAIL and 85% for everyone else", () => {
     expect(elderHoldMean(40, "FRAIL")).toBe(ELDER_HOLD_CAP_FRAIL);
     expect(elderHoldMean(40, "STEADY")).toBe(ELDER_HOLD_CAP);
-    expect(elderHoldMean(40)).toBe(ELDER_HOLD_CAP);
+    expect(elderHoldMean(40, null)).toBe(ELDER_HOLD_CAP);
     // The two lines part ways only once the climb passes 80%, on ramp day 8.
-    expect(elderHoldMean(7, "FRAIL")).toBe(elderHoldMean(7));
+    expect(elderHoldMean(7, "FRAIL")).toBe(elderHoldMean(7, null));
     expect(elderHoldMean(8, "FRAIL")).toBe(800_000);
     expect(elderHoldMean(9, "FRAIL")).toBe(800_000);
   });
@@ -207,5 +209,63 @@ describe("old age is credited to an elder below its line", () => {
     expect(diedOf(starving)).toBe("sickness");
     expect(diedOf(v2(starving))).toBe("hunger");
     expect(diedOf(v2(dyingElder({ needs: { ...level(500_000), joy: 0 } })))).toBe("joy");
+  });
+});
+
+describe("what the screen blames, and what the gravestone credits (SPEC §2.3)", () => {
+  const adult = projectImmortal(hatchedState(ctx), 10 * TICKS_PER_DAY, ctx);
+  const elder = projectImmortal(hatchedState(ctx), ELDER_STARTS_AT, ctx);
+  const ill = (state: PetState, needs: PetState["needs"]): PetState => ({
+    ...state,
+    needs,
+    sick: true,
+    asleep: false,
+    sleepReason: null,
+    healthRaw: HEALTH_MAX / 2,
+  });
+  const diedOf = (state: PetState): PetState["causeOfDeath"] => {
+    const after = project({ ...state, healthRaw: 1_000 }, state.tick + 1, ctx).state;
+    expect(after.diedAtTick).not.toBeNull();
+    return after.causeOfDeath;
+  };
+
+  it("keeps ruleset 1 on the largest drain: sickness outweighs a shallow deficit", () => {
+    const state = ill(adult, { ...level(NEED_MAX), joy: 150_000 });
+    expect(derive(state).health.reason).toEqual({ kind: "sick" });
+  });
+
+  it("tells a sick adult with a critical need about the need, however shallow", () => {
+    const state = v2(ill(adult, { ...level(NEED_MAX), joy: 150_000 }));
+    expect(derive(state).health).toMatchObject({ trend: "falling", reason: { kind: "need", need: "joy" } });
+    expect(diedOf(state)).toBe("joy");
+  });
+
+  it("holds the order across the point where the deficits' drain passes sickness's", () => {
+    // 550 a unit of deficit against 120M: hunger empty plus a joy deficit of
+    // 18,181 is 119,999,550 a tick, just under sickness; one more unit is over.
+    const under = ill(adult, { ...level(NEED_MAX), hunger: 0, joy: 181_819 });
+    const over = ill(adult, { ...level(NEED_MAX), hunger: 0, joy: 181_818 });
+    expect(derive(under).health.reason).toEqual({ kind: "sick" });
+    expect(derive(over).health.reason).toEqual({ kind: "need", need: "hunger" });
+    expect(derive(v2(under)).health.reason).toEqual({ kind: "need", need: "hunger" });
+    expect(derive(v2(over)).health.reason).toEqual({ kind: "need", need: "hunger" });
+  });
+
+  it("tells a sick elder below its line about the sickness, and buries it as old age", () => {
+    const state = v2(ill(elder, level(500_000)));
+    expect(derive(state).health.reason).toEqual({ kind: "sick" });
+    expect(diedOf(state)).toBe("age");
+  });
+
+  it("tells an unmedicated elder at its line about the sickness, and buries it as sick", () => {
+    const state = v2(ill(elder, level(700_000)));
+    expect(derive(state).health.reason).toEqual({ kind: "sick" });
+    expect(diedOf(state)).toBe("sickness");
+  });
+
+  it("tells a well elder below its line about age, and buries it as old age", () => {
+    const state = v2({ ...ill(elder, level(500_000)), sick: false });
+    expect(derive(state).health.reason).toEqual({ kind: "age" });
+    expect(diedOf(state)).toBe("age");
   });
 });
