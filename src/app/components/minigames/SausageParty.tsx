@@ -1,6 +1,6 @@
 "use client";
 
-// Sausage Party: a tea party, except it is sausages, except the sausages are
+// Tea Party: a tea party, except it is sausages, except the sausages are
 // the Makotos who misbehaved and nobody at the table knows it (SPEC §13.3.2).
 //
 // The tray holds one dish; tap the guest holding that dish up. Right guest

@@ -13,7 +13,7 @@ import { CAUSE_OF_DEATH_TEXT } from "@/app/copy/death";
 
 export const dynamic = "force-dynamic";
 
-/** "loved pizza, hated peppers, was best at Wheel Sprint" (SPEC §21.4). */
+/** "loved pizza, hated peppers, was best at Wheel Rhythm" (SPEC §21.4). */
 const quirkText = (quirks: Quirks | undefined): string | null =>
   quirks === undefined
     ? null

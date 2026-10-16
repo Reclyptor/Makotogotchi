@@ -1,6 +1,6 @@
 "use client";
 
-// Wheel Sprint: a 30-second rhythm game. Makoto runs inside the exercise
+// Wheel Rhythm: a 30-second rhythm game. Makoto runs inside the exercise
 // wheel while a spark orbits the ring; tap, click, or press space when the
 // spark crosses the top arc to score and build momentum. Momentum spins the
 // wheel and the spark faster but decays if you miss or hesitate. The Shell

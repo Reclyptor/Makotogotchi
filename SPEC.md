@@ -1782,17 +1782,24 @@ pet playing and the live score — spectating is the point, and it is the
 reason this is a realtime feature rather than a solo one. One run exists at a
 time, world-wide, by design.
 
+A game's title is display text, read from its roster entry everywhere it is
+shown; its id (`coffeerun`, `sausageparty`, …) is the stable key that event
+logs, wishes, quirks and records store, so a title can change without
+touching history. Three titles changed for that reason, to say what the game
+is: Coffee Run became Sneaky Brew, Wheel Sprint became Wheel Rhythm, and
+Sausage Party, where no sausage ever appears, became Tea Party.
+
 | Game | Play | Beats |
 | --- | --- | --- |
 | Dust Dash | 20s runner: hop the dust bunnies | one point per cleared bunny; collision ends the run |
 | Snack Catch | 25s: steer under falling meals, dodge the one thing that is not one | +1 per snack, −3 for the sock |
 | Bubble Bath Pop | 25s: pop the bath bubbles before they escape | +1 per pop |
 | Simon Squeaks | memory: repeat Makoto's pose sequence on four pads | +1 per completed round; a miss ends the run |
-| Wheel Sprint | 30s rhythm: tap as the spark crosses the wheel's top | +1 per on-beat hit |
+| Wheel Rhythm | 30s rhythm: tap as the spark crosses the wheel's top | +1 per on-beat hit |
 | Makoto Shuffle | shell game: keep your eye on Makoto under three shuffling bowls | +1 per correct bowl; a wrong pick ends the run |
 | Natsumi's Watch | 30s sneak: scurry for the treat only while Natsumi looks away | +1 per treat reached; caught moving means back to the start |
-| Coffee Run | 30s: brew a pot, and hide the machine before Natsumi reaches it | +1 per cup poured; a smashed machine costs the pot in progress |
-| Sausage Party | 35s: serve each guest the plate they are holding up | +1 per plate matched; a wrong plate costs that guest's patience |
+| Sneaky Brew | 30s: brew a pot, and hide the machine before Natsumi reaches it | +1 per cup poured; a smashed machine costs the pot in progress |
+| Tea Party | 35s: serve each guest the plate they are holding up | +1 per plate matched; a wrong plate costs that guest's patience |
 | Don't Get Sausaged | reaction: do what Natsumi says, before she finishes saying it | +1 per command obeyed; one miss and Makoto is a sausage |
 
 A game may also restore a second need beside joy — a `bonus` on its roster
@@ -1889,13 +1896,13 @@ which she resets Makoto herself and dangles the next one. Thirty seconds, no sco
 penalty for being caught — the punishment is the lost ground, which is
 punishment enough. It is the roster's only hold-and-release game.
 
-**Coffee Run.** The pot fills while the player holds, up to five cups, and
+**Sneaky Brew.** The pot fills while the player holds, up to five cups, and
 letting go pours it — banking those cups as points. Natsumi walks in from the
 right on her own schedule, and a pot still brewing when she arrives is a
 machine on the floor and a pot worth nothing. One button, and the only
 question it ever asks is when to stop: the roster's only press-your-luck game.
 
-**Sausage Party.** Guests around the table hold up what they want; serve the
+**Tea Party.** Guests around the table hold up what they want; serve the
 guest who wants the dish currently on the tray. A right guest is a point, a
 wrong one costs that guest's patience, and an empty patience bar ends their
 visit unserved. The tray takes a beat to plate the next dish, and that reload
@@ -2433,7 +2440,7 @@ and CareEvent the same way `toyBonus` traveled). Quirk multipliers live in
 `src/sim/economy.ts` beside the existing curves.
 
 The memorial records each generation's quirks when it ends ("loved pizza,
-hated peppers, was best at Wheel Sprint") — the memorial write path gains
+hated peppers, was best at Wheel Rhythm") — the memorial write path gains
 the three fields, computed at death from the seed.
 
 ### 21.5 Shared Rare Events (sim tick + presentation)

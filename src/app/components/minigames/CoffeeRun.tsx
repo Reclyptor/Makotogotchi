@@ -1,6 +1,6 @@
 "use client";
 
-// Coffee Run: Makoto brews a pot, and Natsumi destroys the drip machine every
+// Sneaky Brew: Makoto brews a pot, and Natsumi destroys the drip machine every
 // single time (SPEC §13.3.2). Hold to brew, release to pour — pouring banks
 // whatever is in the pot as cups. She walks in on her own schedule; be caught
 // mid-brew and she smashes the machine, taking the whole pot with it. One

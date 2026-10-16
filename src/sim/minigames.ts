@@ -104,7 +104,7 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
   },
   wheelsprint: {
     id: "wheelsprint",
-    title: "Wheel Sprint",
+    title: "Wheel Rhythm",
     emoji: "🎡",
     sessionLifetimeMs: 45_000,
     maxScorePerSecond: 2,
@@ -143,7 +143,7 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
   },
   coffeerun: {
     id: "coffeerun",
-    title: "Coffee Run",
+    title: "Sneaky Brew",
     emoji: "☕",
     sessionLifetimeMs: 45_000,
     // Her shortest round trip is 5.5s and the pot caps at five cups, so a
@@ -159,8 +159,8 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
   },
   sausageparty: {
     id: "sausageparty",
-    title: "Sausage Party",
-    emoji: "🥳",
+    title: "Tea Party",
+    emoji: "🫖",
     sessionLifetimeMs: 50_000,
     // The tray reloads between dishes, which is what paces the game: about
     // one serve a second flat out, over a 35s run.

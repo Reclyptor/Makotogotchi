@@ -1,4 +1,4 @@
-// Sausage Party's rules (SPEC §13.3.3), with no canvas in them: who is at
+// Tea Party's rules (SPEC §13.3.3), with no canvas in them: who is at
 // the table, what they are holding up, what is on the tray, and what a tap
 // does about it. The component renders a Table and feeds taps back in; the
 // randomness is injected so every rule here can be tested step by step.
