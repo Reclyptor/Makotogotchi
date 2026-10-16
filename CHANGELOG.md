@@ -6,6 +6,41 @@ follow [Semantic Versioning]. Pre-1.0, so game-rule changes are minor bumps.
 [Keep a Changelog]: https://keepachangelog.com/en/1.1.0/
 [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
 
+## [0.5.0] — 2026-10-16
+
+Old age becomes a real stake again. Every event log written before this
+folds byte-identically: the new rule starts only at an `ELDER_RAMP` event,
+and a log without one keeps the flat rule it was written under.
+
+### Changed
+
+- **An elder's hold line rises every day.** To keep its health, an elder's
+  four needs must average above a line that starts at 60% and rises 2.5
+  points a day to 85% (reached on elder day 10). Below the line, the age
+  drain reaches full strength within 10 points instead of across the whole
+  20–60% span. Skilled, near-continuous care keeps an elder alive
+  indefinitely; ordinary care loses it around elder day 16–21 (`3cdd0eb`)
+- **The ramp starts at an event, not at birth.** The leader appends one
+  `ELDER_RAMP` per generation. A pet already elderly at release starts the
+  ramp at 60% on release day; a new generation ramps from its first elder
+  day. The pre-ramp line is frozen as `LEGACY_ELDER_HOLD_MEAN` so retuning
+  the ramp can never re-fold old logs (`3cdd0eb`, `a0247b7`)
+- The §16.2 old-age property uses a net-gain bot (PET unless PLAY gains more
+  than its energy cost); the greedy bot overplays and no longer survives
+  the ramp (`f031ddb`)
+
+### Fixed
+
+- **The About page states the health rules as they are.** Untreated
+  sickness is not fatal within a day: it drains exactly what a healthy pet
+  regenerates, so on its own it only stalls recovery — except for an elder,
+  which it wears down in a day or so. The page now also covers the 20%
+  line, regeneration, medicine and the elder's rising line (`7cd61a4`,
+  `1cbbc93`)
+- SPEC §2.3, §2.10 and §16.2 describe the current rules; cause of death
+  remains the largest drain at the death tick, so an elder worn down by age
+  usually reads as dying of illness (`7c3d153`, `1cbbc93`)
+
 ## [0.4.0] — 2026-10-15
 
 Two player reports on Bubble Bath Pop. Every event log written before this
