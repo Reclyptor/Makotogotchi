@@ -1,6 +1,6 @@
 "use client";
 
-// Don't Get Sausaged: Natsumi barks a command and Makoto has a shrinking
+// Natsumi Says: Natsumi barks a command and Makoto has a shrinking
 // window to obey it. Obey and the window tightens; hesitate or hit the wrong
 // pad and she turns Makoto into a sausage, which is what she does to Makotos
 // who displease her (SPEC §13.3.2) — and the run is over.

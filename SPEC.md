@@ -1785,9 +1785,10 @@ time, world-wide, by design.
 A game's title is display text, read from its roster entry everywhere it is
 shown; its id (`coffeerun`, `sausageparty`, …) is the stable key that event
 logs, wishes, quirks and records store, so a title can change without
-touching history. Three titles changed for that reason, to say what the game
+touching history. Four titles changed for that reason, to say what the game
 is: Coffee Run became Sneaky Brew, Wheel Sprint became Wheel Rhythm, and
-Sausage Party, where no sausage ever appears, became Tea Party.
+Sausage Party, where no sausage ever appears, became Tea Party. Don't Get
+Sausaged, named for its fail state rather than its game, became Natsumi Says.
 
 | Game | Play | Beats |
 | --- | --- | --- |
@@ -1800,7 +1801,7 @@ Sausage Party, where no sausage ever appears, became Tea Party.
 | Natsumi's Watch | 30s sneak: scurry for the treat only while Natsumi looks away | +1 per treat reached; caught moving means back to the start |
 | Sneaky Brew | 30s: brew a pot, and hide the machine before Natsumi reaches it | +1 per cup poured; a smashed machine costs the pot in progress |
 | Tea Party | 35s: serve each guest the plate they are holding up | +1 per plate matched; a wrong plate costs that guest's patience |
-| Don't Get Sausaged | reaction: do what Natsumi says, before she finishes saying it | +1 per command obeyed; one miss and Makoto is a sausage |
+| Natsumi Says | reaction: do what Natsumi says, before she finishes saying it | +1 per command obeyed; one miss and Makoto is a sausage |
 
 A game may also restore a second need beside joy — a `bonus` on its roster
 entry, set only on Bubble Bath Pop (hygiene, `BATH_HYGIENE_BASE` = 10%). The
@@ -1930,7 +1931,7 @@ indistinguishable from one that is random. The rules are a pure module
 (`sausagePartyRules.ts`) with the randomness injected, and the no-dead-dish
 rule is a property test over thousands of random steps.
 
-**Don't Get Sausaged.** Natsumi gives a command — sit, spin, sleep, cheer —
+**Natsumi Says.** Natsumi gives a command — sit, spin, sleep, cheer —
 and Makoto has a shrinking window to obey it on the four pads. Obeying is a
 point and the window tightens; one wrong move or one hesitation and she turns
 Makoto into a sausage on a plate, which ends the run. It is Simon Squeaks' pads

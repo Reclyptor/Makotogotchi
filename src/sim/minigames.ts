@@ -172,8 +172,8 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
   },
   sausaged: {
     id: "sausaged",
-    title: "Don't Get Sausaged",
-    emoji: "🌭",
+    title: "Natsumi Says",
+    emoji: "🗣️",
     // One miss ends it, so a long run is a good run: the session is generous
     // and the rate cap is what bounds farming.
     sessionLifetimeMs: 90_000,
