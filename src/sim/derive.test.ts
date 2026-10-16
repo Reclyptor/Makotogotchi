@@ -130,19 +130,24 @@ describe("health view", () => {
 
   it("blames age for an elder below its line, and reports the line and the mean", () => {
     const thin = { ...nearDeath(elder), needs: bare(500_000) };
-    expect(derive(thin).health).toEqual({ trend: "falling", reason: { kind: "age" }, elder: { linePercent: 60, meanPercent: 50 } });
+    expect(derive(thin).health).toEqual({ trend: "falling", reason: { kind: "age" }, elder: { linePermille: 600, meanPermille: 500 } });
     expect(trendOf(thin)).toBe("falling");
   });
 
   it("reports an elder's line and mean even while health rises", () => {
     const held = { ...nearDeath(elder), needs: bare(700_000) };
-    expect(derive(held).health).toEqual({ trend: "rising", reason: { kind: "regen" }, elder: { linePercent: 60, meanPercent: 70 } });
+    expect(derive(held).health).toEqual({ trend: "rising", reason: { kind: "regen" }, elder: { linePermille: 600, meanPermille: 700 } });
     expect(trendOf(held)).toBe("rising");
   });
 
   it("moves the reported line up with the ramp", () => {
     const ramped = { ...elder, elderRampFromTick: elder.tick, tick: elder.tick + 4 * TICKS_PER_DAY };
-    expect(derive(ramped).health.elder?.linePercent).toBe(70);
+    expect(derive(ramped).health.elder?.linePermille).toBe(700);
+  });
+
+  it("keeps the half-point lines of odd ramp days", () => {
+    const ramped = { ...elder, elderRampFromTick: elder.tick, tick: elder.tick + 1 * TICKS_PER_DAY };
+    expect(derive(ramped).health.elder?.linePermille).toBe(625);
   });
 
   it("reads a dead pet as steady", () => {

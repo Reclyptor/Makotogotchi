@@ -154,15 +154,15 @@ describe("the FRAIL elder's lower cap", () => {
     const frail = elderAt("FRAIL", 820_000, 12);
     expect(lostInATick(frail)).toBeGreaterThan(0);
     expect(lostInATick(v2(frail))).toBe(0);
-    expect(derive(frail).health.elder?.linePercent).toBe(85);
-    expect(derive(v2(frail)).health.elder?.linePercent).toBe(80);
+    expect(derive(frail).health.elder?.linePermille).toBe(850);
+    expect(derive(v2(frail)).health.elder?.linePermille).toBe(800);
   });
 
   it("leaves every other form at 85% under both", () => {
     const steady = elderAt("STEADY", 820_000, 12);
     expect(lostInATick(v2(steady))).toBe(lostInATick(steady));
     expect(lostInATick(v2(steady))).toBeGreaterThan(0);
-    expect(derive(v2(steady)).health.elder?.linePercent).toBe(85);
+    expect(derive(v2(steady)).health.elder?.linePermille).toBe(850);
   });
 
   it("is no different before ramp day 8", () => {

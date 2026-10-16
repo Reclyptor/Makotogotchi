@@ -45,8 +45,8 @@ export type HealthView = {
   trend: "rising" | "falling" | "steady";
   /** The dominant term; ties go need, then sickness, then age. */
   reason: HealthReason;
-  /** An elder's hold line and the needs' mean today, whole percentages 0–100. */
-  elder: { linePercent: number; meanPercent: number } | null;
+  /** An elder's hold line and the needs' mean today, in thousandths of a bar (600 = 60%) so a half-point line is not rounded away. */
+  elder: { linePermille: number; meanPermille: number } | null;
 };
 
 export type DerivedState = {
@@ -69,7 +69,7 @@ const HEALTH_CRITICAL = HEALTH_MAX / 4; // 25% — the strongest push trigger
 
 const healthViewOf = (state: PetState, terms: HealthTerms): HealthView => {
   const elder = terms.elder
-    ? { linePercent: Math.floor(terms.elder.holdPermille / 10), meanPercent: Math.floor(terms.elder.meanPermille / 10) }
+    ? { linePermille: terms.elder.holdPermille, meanPermille: terms.elder.meanPermille }
     : null;
   if (!isAlive(state)) return { trend: "steady", reason: { kind: "holding" }, elder };
 
