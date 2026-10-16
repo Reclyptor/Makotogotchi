@@ -40,7 +40,7 @@ const COMMANDS: readonly Command[] = [
   { label: "Cheer", colour: "#34d399", pose: "cheer1" },
 ];
 
-export default function DontGetSausaged({ sheet, reportScore, finish }: GameProps) {
+export default function NatsumiSays({ sheet, reportScore, finish }: GameProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [order, setOrder] = useState<number | null>(null);
   const [pose, setPose] = useState<FrameName>("idleFront1");

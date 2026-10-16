@@ -13,7 +13,7 @@ import {
   WRONG_COST_MS,
   type Dish,
   type Table,
-} from "./sausagePartyRules";
+} from "./teaPartyRules";
 import { seeded } from "./testkit";
 import type { Rng } from "./types";
 

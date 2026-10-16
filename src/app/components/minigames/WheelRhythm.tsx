@@ -23,7 +23,7 @@ const BASE_ORBIT_MS = 1400;
 
 const WHEEL_FRAMES = ["wheel1", "wheel2", "wheel3"] as const;
 
-export default function WheelSprint({ sheet, reportScore, finish }: GameProps) {
+export default function WheelRhythm({ sheet, reportScore, finish }: GameProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {

@@ -42,7 +42,7 @@ const CARAFE = { x: 12 / 22, y: 12 / 23, w: 8 / 22, h: 7 / 23 };
 const between = ([low, high]: readonly [number, number]): number => low + Math.random() * (high - low);
 const lerp = (from: number, to: number, t: number): number => from + (to - from) * t;
 
-export default function CoffeeRun({ sheet, reportScore, finish }: GameProps) {
+export default function SneakyBrew({ sheet, reportScore, finish }: GameProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {

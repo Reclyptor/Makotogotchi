@@ -8,7 +8,7 @@
 // guest whose patience runs out storms off unserved. One tap, three things
 // to read at once — the roster's only matching game.
 //
-// The rules live in sausagePartyRules.ts. This file is the board: it draws a
+// The rules live in teaPartyRules.ts. This file is the board: it draws a
 // Table, turns taps into serves, and makes every outcome visible — a wrong
 // plate, a walkout, a tap while the kitchen is still plating. The first
 // version kept all three silent, and a game whose failures are silent reads
@@ -17,7 +17,7 @@
 import { useEffect, useRef } from "react";
 import type { FrameName } from "@/game/atlas.generated";
 import { drawFrame, drawFrameAnchored, GAME_H, GAME_W, startGameLoop } from "./engine";
-import { advance, createTable, PATIENCE_MS, serve, type Table } from "./sausagePartyRules";
+import { advance, createTable, PATIENCE_MS, serve, type Table } from "./teaPartyRules";
 import type { GameProps } from "./types";
 
 const RUN_MS = 35_000;
@@ -45,7 +45,7 @@ const GOLD = "#fff261";
 const ROSE = "#fb7185";
 const GREEN = "#34d399";
 
-export default function SausageParty({ sheet, reportScore, finish }: GameProps) {
+export default function TeaParty({ sheet, reportScore, finish }: GameProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {

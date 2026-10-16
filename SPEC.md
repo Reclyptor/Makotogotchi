@@ -1928,7 +1928,7 @@ sits centre-front under a `SERVE` label; the guests' orders are small speech
 bubbles. Four look-alike dish icons with the authoritative one in a corner
 read as pure chance, and a game whose failures are silent is
 indistinguishable from one that is random. The rules are a pure module
-(`sausagePartyRules.ts`) with the randomness injected, and the no-dead-dish
+(`teaPartyRules.ts`) with the randomness injected, and the no-dead-dish
 rule is a property test over thousands of random steps.
 
 **Natsumi Says.** Natsumi gives a command — sit, spin, sleep, cheer —
@@ -3748,7 +3748,7 @@ lock does not eat the secret.
 The listener is inert unless every one of these holds:
 
 - **No dialog owns the keyboard.** Five of the ten minigames bind arrow
-  keys (`DustDash`, `SnackCatch`, `SausageParty`, `NatsumisWatch`,
+  keys (`DustDash`, `SnackCatch`, `TeaParty`, `NatsumisWatch`,
   `MakotoShuffle`), and the shop
   is a modal. A live game must never half-arm the buffer, so the hook takes
   an `enabled` flag and `GameView` passes `!playing && !shopOpen`.

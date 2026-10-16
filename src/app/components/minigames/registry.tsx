@@ -9,12 +9,12 @@ import DustDash from "./DustDash";
 import SnackCatch from "./SnackCatch";
 import BubblePop from "./BubblePop";
 import SimonSqueaks from "./SimonSqueaks";
-import WheelSprint from "./WheelSprint";
+import WheelRhythm from "./WheelRhythm";
 import MakotoShuffle from "./MakotoShuffle";
 import NatsumisWatch from "./NatsumisWatch";
-import CoffeeRun from "./CoffeeRun";
-import SausageParty from "./SausageParty";
-import DontGetSausaged from "./DontGetSausaged";
+import SneakyBrew from "./SneakyBrew";
+import TeaParty from "./TeaParty";
+import NatsumiSays from "./NatsumiSays";
 
 export type GameEntry = {
   Component: ComponentType<GameProps>;
@@ -26,10 +26,10 @@ export const GAMES: Record<MinigameId, GameEntry> = {
   snackcatch: { Component: SnackCatch, hint: "Move with your pointer or arrow keys — catch the food, dodge the sock!" },
   bubblepop: { Component: BubblePop, hint: "Tap or click the bubbles before they float away — a good bath leaves Makoto cleaner!" },
   simon: { Component: SimonSqueaks, hint: "Watch Makoto's moves, then repeat them on the pads!" },
-  wheelsprint: { Component: WheelSprint, hint: "Tap, click, or press space when the spark crosses the top!" },
+  wheelsprint: { Component: WheelRhythm, hint: "Tap, click, or press space when the spark crosses the top!" },
   shuffle: { Component: MakotoShuffle, hint: "Watch which bowl Makoto hides under, then tap it — or press 1, 2, 3!" },
   natsumi: { Component: NatsumisWatch, hint: "Hold to scurry for the treat — let go before Natsumi turns around!" },
-  coffeerun: { Component: CoffeeRun, hint: "Hold to brew, let go to pour — don't be brewing when Natsumi walks in!" },
-  sausageparty: { Component: SausageParty, hint: "Serve the dish on the tray to the guest holding it up — wrong guests lose patience and walk out!" },
-  sausaged: { Component: DontGetSausaged, hint: "Do what Natsumi says, fast — hesitate and you're a sausage!" },
+  coffeerun: { Component: SneakyBrew, hint: "Hold to brew, let go to pour — don't be brewing when Natsumi walks in!" },
+  sausageparty: { Component: TeaParty, hint: "Serve the dish on the tray to the guest holding it up — wrong guests lose patience and walk out!" },
+  sausaged: { Component: NatsumiSays, hint: "Do what Natsumi says, fast — hesitate and you're a sausage!" },
 };

@@ -6,17 +6,21 @@
 
 import { BATH_HYGIENE_BASE, type NeedKey } from "./tuning";
 
+// Permanent storage keys, not names: event logs, wishes, quirks and records
+// store them, so they never change, and neither does their order (a
+// generation's favourite game is drawn by index). Four of them predate a
+// rename (SPEC §13.3); the title on each roster entry is what players see.
 export const MINIGAME_IDS = [
   "dustdash",
   "snackcatch",
   "bubblepop",
   "simon",
-  "wheelsprint",
+  "wheelsprint", // Wheel Rhythm
   "shuffle",
   "natsumi",
-  "coffeerun",
-  "sausageparty",
-  "sausaged",
+  "coffeerun", // Sneaky Brew
+  "sausageparty", // Tea Party
+  "sausaged", // Natsumi Says
 ] as const;
 export type MinigameId = (typeof MINIGAME_IDS)[number];
 
