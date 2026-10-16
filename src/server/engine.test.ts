@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, db } from "./db/client";
 import { closeRedis, key, redis } from "./redis/client";
-import { eventsSince } from "./db/repository";
+import { createGeneration, eventsSince } from "./db/repository";
 import { Lease } from "./redis/lock";
 import { PetEngine } from "./engine/engine";
 import { startTestInfra, type TestInfra } from "./testsetup";
@@ -237,6 +237,15 @@ describe("PetEngine", () => {
     expect(recovered.state.rulesVersion).toBe(CURRENT_RULES_VERSION);
     expect((await engine.recordRules(generation)).rulesVersion).toBe(CURRENT_RULES_VERSION);
     expect((await eventsSince(await db(), generation.id, -1)).filter((event) => event.type === "RULES")).toHaveLength(1);
+  });
+
+  it("records no ruleset for an egg: the version waits for a pet that lives under it", async () => {
+    const egg: Generation = { id: "gen-rules-egg", ordinal: 90, seed: 7, genesisEpochMs: fakeNowMs, name: null };
+    await createGeneration(await db(), egg);
+    const state = await engine.recordRules(egg);
+    expect(state.bornAtTick).toBeNull();
+    expect(state.rulesVersion).toBeUndefined();
+    expect(await eventsSince(await db(), egg.id, -1)).toEqual([]);
   });
 
   it("serializes concurrent care writes: unique contiguous seqs, replay-identical fold", async () => {
