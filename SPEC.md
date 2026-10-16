@@ -1737,14 +1737,14 @@ average). The numbers live only there, so "falling with age" is a short
 sentence and the fragment says by how much. `HealthView.elder` carries them
 in per-mille and the UI formats: whole percents (floored), unless flooring
 would make the two equal, when both show one decimal ("needs 62.5% · at
-62.4%") so an elder below its line never reads as level with it. `statusLine()` returns
-`{ text, elder }` so the page can set the fragment quieter (smaller, 80%
-opacity, which keeps the muted text above AA contrast, tabular figures)
-without cutting it out of a string. It sits last on the line, after the
-venue clause, as a footnote to the sentence. The terse form is
-`aria-hidden`; a screen-reader-only sibling reads the whole of it ("Today's
-line is 72%; needs average 81%."), because a `title` tooltip is neither
-reliably exposed nor shown on touch.
+62.4%") so an elder below its line never reads as level with it.
+`statusLine()` returns `{ text, elder }` so the page can set the fragment
+quieter (smaller, 80% opacity, which keeps the muted text above AA contrast,
+tabular figures) without cutting it out of a string. It sits last on the
+line, after the venue clause, as a footnote to the sentence. The terse form
+is `aria-hidden`; a screen-reader-only sibling reads the whole of it
+("Today's line is 72%; needs average 81%."), because a `title` tooltip is
+neither reliably exposed nor shown on touch.
 
 The venue clause ("Out at the shrine path today.", §22.8) comes before the
 fragment, on its own.
