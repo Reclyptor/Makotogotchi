@@ -24,11 +24,13 @@ const flight = (bubble: Bubble): Position[] => {
   return path;
 };
 
+// One assertion per bubble on the extremes of its path, not two per sample:
+// the property sweep checks thousands of flights, and half a million
+// `expect` calls outran the default test timeout on CI.
 const expectOnBoard = (bubble: Bubble): void => {
-  for (const { x } of flight(bubble)) {
-    expect(x - bubble.size / 2).toBeGreaterThanOrEqual(0);
-    expect(x + bubble.size / 2).toBeLessThanOrEqual(GAME_W);
-  }
+  const xs = flight(bubble).map(({ x }) => x);
+  expect(Math.min(...xs) - bubble.size / 2).toBeGreaterThanOrEqual(0);
+  expect(Math.max(...xs) + bubble.size / 2).toBeLessThanOrEqual(GAME_W);
 };
 
 describe("spawning", () => {
