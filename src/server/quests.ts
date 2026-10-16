@@ -10,7 +10,7 @@
 
 import type { Collection, Db } from "mongodb";
 import { derive } from "@/sim/derive";
-import { isAlive, type Generation, type PetState } from "@/sim/model";
+import { isAlive, rulesVersionOf, type Generation, type PetState } from "@/sim/model";
 import { HOUR_BEFORE_SLEEP, NEED_KEYS } from "@/sim/tuning";
 import { questFor, questProgress, QUEST_REWARD_COINS, type QuestDef, type QuestStatus } from "@/sim/quests";
 import { events, isDuplicateKeyError } from "./db/collections";
@@ -101,6 +101,7 @@ export const questView = async (
     presencePermille: population.presencePermille,
     eveningReached: state.tick >= day.eveningTick,
     population: population.population,
+    rules: rulesVersionOf(state),
   });
 
   return { ...status, dayIndex: day.dayIndex, quest, contributors };

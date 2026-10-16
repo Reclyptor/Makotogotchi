@@ -12,10 +12,20 @@
 // bar as though they were there all seven was how one crowded afternoon
 // pinned a pet at 4× for the following week (§23.1).
 
+import { rulesVersionOf, type PetState } from "./model";
+import { RULES_SINCE } from "./tuning";
+
 /** The community size the original balance was tuned for. */
 export const DIFFICULTY_BASELINE = 2;
 /** How far the multiplier must move before the leader records it (§23.2). */
 export const DIFFICULTY_STEP_PERMILLE = 100;
+/**
+ * From ruleset 3 the multiplier stops here, 2×, wherever it is read: decay and
+ * the caretaker's weekly allowance alike, so supply and demand stay matched.
+ * At the table's own 4× one 8-hour waking gap starved an elder in a room of
+ * twenty (SPEC §23).
+ */
+export const DIFFICULTY_CEILING_V3 = 2000;
 /** Presence is carried in thousandths of a caretaker, so it stays integral. */
 export const PRESENCE_SCALE = 1000;
 
@@ -57,15 +67,16 @@ const MULTIPLIER_PERMILLE: readonly number[] = [
  * exactly on its table entry, so a history recorded before presence weighting
  * replays to the identical multiplier.
  */
-export const careMultiplierPermille = (presencePermille: number | undefined): number => {
+export const careMultiplierPermille = (presencePermille: number | undefined, rules: number): number => {
+  const ceiling = rules >= RULES_SINCE.GENTLE_CEILING ? DIFFICULTY_CEILING_V3 : Infinity;
   if (presencePermille === undefined || !Number.isFinite(presencePermille)) return 1000;
   const milli = Math.max(0, Math.floor(presencePermille));
   const last = MULTIPLIER_PERMILLE.length - 1;
   const whole = Math.floor(milli / PRESENCE_SCALE);
-  if (whole >= last) return MULTIPLIER_PERMILLE[last]!;
+  if (whole >= last) return Math.min(ceiling, MULTIPLIER_PERMILLE[last]!);
   const from = MULTIPLIER_PERMILLE[whole]!;
   const to = MULTIPLIER_PERMILLE[whole + 1]!;
-  return from + Math.floor(((to - from) * (milli % PRESENCE_SCALE)) / PRESENCE_SCALE);
+  return Math.min(ceiling, from + Math.floor(((to - from) * (milli % PRESENCE_SCALE)) / PRESENCE_SCALE));
 };
 
 /**
@@ -80,10 +91,15 @@ export const careMultiplierPermille = (presencePermille: number | undefined): nu
 export const presencePermilleOf = (state: { population?: number; populationPermille?: number }): number =>
   state.populationPermille ?? (state.population ?? DIFFICULTY_BASELINE) * PRESENCE_SCALE;
 
+/** The multiplier a pet is living under: its presence, read by its ruleset. */
+export const careMultiplierOf = (state: PetState): number =>
+  careMultiplierPermille(presencePermilleOf(state), rulesVersionOf(state));
+
 /** The same multiplier as a number, for display (SPEC §23.3). */
-export const careMultiplier = (presencePermille: number | undefined): number =>
-  careMultiplierPermille(presencePermille) / 1000;
+export const careMultiplier = (presencePermille: number | undefined, rules: number): number =>
+  careMultiplierPermille(presencePermille, rules) / 1000;
 
 /** Whether a newly measured presence is worth recording as an event. */
-export const worthRecording = (recorded: number | undefined, measured: number): boolean =>
-  Math.abs(careMultiplierPermille(measured) - careMultiplierPermille(recorded)) >= DIFFICULTY_STEP_PERMILLE;
+export const worthRecording = (recorded: number | undefined, measured: number, rules: number): boolean =>
+  Math.abs(careMultiplierPermille(measured, rules) - careMultiplierPermille(recorded, rules)) >=
+  DIFFICULTY_STEP_PERMILLE;

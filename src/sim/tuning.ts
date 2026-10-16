@@ -11,7 +11,7 @@ export const TICK_SECONDS = 10;
 // means raising this number — not adding an event type per change — and
 // gating the new rule on it. Version 1 is every history that predates the
 // event.
-export const CURRENT_RULES_VERSION = 2;
+export const CURRENT_RULES_VERSION = 3;
 /** The ruleset that introduced each gated rule, so no call site carries a bare number. */
 export const RULES_SINCE = {
   /** An elder dying with no need critical, below its line, dies of age (SPEC §2.3). */
@@ -22,6 +22,10 @@ export const RULES_SINCE = {
   ACTIONABLE_REASON: 2,
   /** No community scaling of need decay while the schedule says SLEEP (SPEC §23). */
   NIGHT_EXEMPT: 2,
+  /** The community multiplier stops at `DIFFICULTY_CEILING_V3`, wherever it is read (SPEC §23). */
+  GENTLE_CEILING: 3,
+  /** The elder hold line stops at 75%, FRAIL at 70% (SPEC §2.3). */
+  LOWER_HOLD_CAP: 3,
 } as const;
 export const TICKS_PER_HOUR = 360;
 export const TICKS_PER_DAY = 8640;
@@ -71,21 +75,32 @@ export const ELDER_HOLD_CAP = 850_000; // 85%, reached on ramp day 10
 // a STEADY one's, so the same line costs it more care. Its line stops here, on
 // ramp day 8. Only histories under ruleset 2 read it (`RULES_SINCE.FRAIL_CAP`).
 export const ELDER_HOLD_CAP_FRAIL = 800_000; // 80%
+// Ruleset 3 lowers both caps so that good care, not perfect play, keeps an
+// elder alive (`RULES_SINCE.LOWER_HOLD_CAP`): ramp day 6, and day 4 for FRAIL.
+export const ELDER_HOLD_CAP_V3 = 750_000; // 75%
+export const ELDER_HOLD_CAP_FRAIL_V3 = 700_000; // 70%
 export const ELDER_BAND = 100_000; // 10 points
-export const elderHoldMean = (rampDay: number, form: AdultForm | null): number =>
-  Math.min(form === "FRAIL" ? ELDER_HOLD_CAP_FRAIL : ELDER_HOLD_CAP, ELDER_HOLD_START + ELDER_HOLD_STEP * rampDay);
+/** Where the hold line stops for a form, under the ruleset the pet is living by. */
+const elderHoldCap = (form: AdultForm | null, rules: number): number => {
+  const frail = form === "FRAIL" && rules >= RULES_SINCE.FRAIL_CAP;
+  if (rules >= RULES_SINCE.LOWER_HOLD_CAP) return frail ? ELDER_HOLD_CAP_FRAIL_V3 : ELDER_HOLD_CAP_V3;
+  return frail ? ELDER_HOLD_CAP_FRAIL : ELDER_HOLD_CAP;
+};
+export const elderHoldMean = (rampDay: number, form: AdultForm | null, rules: number): number =>
+  Math.min(elderHoldCap(form, rules), ELDER_HOLD_START + ELDER_HOLD_STEP * rampDay);
 export const needsMean = (needs: Record<NeedKey, number>): number =>
   Math.floor((needs.hunger + needs.energy + needs.hygiene + needs.joy) / 4);
 /** Today's hold line: the legacy flat one before any ramp, the climbing one after. */
-export const elderHoldLine = (rampDay: number | null, form: AdultForm | null): number =>
-  rampDay === null ? LEGACY_ELDER_HOLD_MEAN : elderHoldMean(rampDay, form);
+export const elderHoldLine = (rampDay: number | null, form: AdultForm | null, rules: number): number =>
+  rampDay === null ? LEGACY_ELDER_HOLD_MEAN : elderHoldMean(rampDay, form, rules);
 export const elderVigourPermille = (
   needs: Record<NeedKey, number>,
   rampDay: number | null,
   form: AdultForm | null,
+  rules: number,
 ): number => {
   const mean = needsMean(needs);
-  const hold = elderHoldLine(rampDay, form);
+  const hold = elderHoldLine(rampDay, form, rules);
   const floor = rampDay === null ? CRITICAL_THRESHOLD : hold - ELDER_BAND;
   return Math.min(1000, Math.max(0, Math.floor(((mean - floor) * 1000) / (hold - floor))));
 };

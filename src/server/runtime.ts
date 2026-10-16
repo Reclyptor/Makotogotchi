@@ -153,7 +153,7 @@ const boot = async (): Promise<Runtime> => {
         const measured = await activeCaretakers(database, state.tick);
         // Difficulty follows presence, so presence is what decides whether the
         // measurement is worth a log entry (SPEC §23.2).
-        if (worthRecording(presencePermilleOf(state), measured.presencePermille)) {
+        if (worthRecording(presencePermilleOf(state), measured.presencePermille, rulesVersionOf(state))) {
           await engine.population(current, measured);
         }
       }

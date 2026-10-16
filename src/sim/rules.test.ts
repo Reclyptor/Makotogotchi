@@ -3,17 +3,22 @@
 // folding as it always did.
 
 import { describe, expect, it } from "vitest";
+import { careMultiplierOf, careMultiplierPermille, DIFFICULTY_CEILING_V3, PRESENCE_SCALE, worthRecording } from "./difficulty";
 import { derive } from "./derive";
 import { petEventSchema, type RulesEvent } from "./events";
 import { rulesVersionOf, type PetState } from "./model";
 import { project } from "./project";
+import { QUESTS, questTarget } from "./quests";
 import { reduce } from "./reduce";
+import { allowanceRemaining } from "./score";
 import { hatchedState, projectImmortal, TEST_GENERATION, testCtx } from "./testkit";
 import {
   AWAKE_HOURS,
   CURRENT_RULES_VERSION,
   ELDER_HOLD_CAP,
   ELDER_HOLD_CAP_FRAIL,
+  ELDER_HOLD_CAP_FRAIL_V3,
+  ELDER_HOLD_CAP_V3,
   ELDER_STARTS_AT,
   elderHoldMean,
   HEALTH_MAX,
@@ -77,6 +82,7 @@ describe("the RULES event", () => {
 
 const level = (value: number): PetState["needs"] => ({ hunger: value, energy: value, hygiene: value, joy: value });
 const v2 = (state: PetState): PetState => ({ ...state, rulesVersion: 2 });
+const v3 = (state: PetState): PetState => ({ ...state, rulesVersion: 3 });
 
 describe("no community scaling at night", () => {
   const onset = 10 * TICKS_PER_DAY + AWAKE_HOURS * TICKS_PER_HOUR;
@@ -125,6 +131,87 @@ describe("no community scaling at night", () => {
   });
 });
 
+describe("the community multiplier's ceiling (SPEC §23)", () => {
+  const whole = (caretakers: number): number => caretakers * PRESENCE_SCALE;
+
+  it("stops at 2× from ruleset 3 and at the table's 4× before", () => {
+    for (const caretakers of [13, 20, 500]) {
+      expect(careMultiplierPermille(whole(caretakers), 2)).toBe(4000);
+      expect(careMultiplierPermille(whole(caretakers), 3)).toBe(DIFFICULTY_CEILING_V3);
+    }
+    expect(DIFFICULTY_CEILING_V3).toBe(2000);
+  });
+
+  it("leaves the table and its interpolation alone below the cap", () => {
+    for (const presence of [0, whole(2), whole(3), whole(4), whole(4) + 500, whole(5)]) {
+      expect(careMultiplierPermille(presence, 3)).toBe(careMultiplierPermille(presence, 2));
+    }
+    expect(careMultiplierPermille(whole(5), 3)).toBe(1988);
+  });
+
+  it("clamps the interpolation too, between the last whole caretaker under the cap and the next", () => {
+    expect(careMultiplierPermille(whole(5) + 100, 2)).toBe(2017);
+    expect(careMultiplierPermille(whole(5) + 100, 3)).toBe(2000);
+  });
+
+  it("is read off the state's own ruleset", () => {
+    const crowded = { ...hatchedState(ctx), populationPermille: whole(20) };
+    expect(careMultiplierOf(crowded)).toBe(4000);
+    expect(careMultiplierOf(v2(crowded))).toBe(4000);
+    expect(careMultiplierOf(v3(crowded))).toBe(2000);
+  });
+
+  it("caps decay in a crowd at the rate of a room that has just reached 2×", () => {
+    const morning = 10 * TICKS_PER_DAY;
+    const adultAt = (populationPermille: number, rulesVersion: number): PetState => ({
+      ...projectImmortal(hatchedState(ctx), morning, ctx),
+      needs: level(NEED_MAX),
+      healthRaw: HEALTH_MAX,
+      populationPermille,
+      rulesVersion,
+      asleep: false,
+      sleepReason: null,
+      sick: false,
+    });
+    const hungerAfter = (state: PetState): number => project(state, state.tick + 2 * TICKS_PER_HOUR, ctx).state.needs.hunger;
+    expect(hungerAfter(adultAt(whole(20), 3))).toBe(hungerAfter(adultAt(whole(6), 3)));
+    expect(hungerAfter(adultAt(whole(20), 2))).toBeLessThan(hungerAfter(adultAt(whole(20), 3)));
+  });
+
+  it("caps the caretaker's weekly allowance with it, so supply keeps pace with demand", () => {
+    const fed = (rulesVersion: number): PetState => {
+      const state = {
+        ...hatchedState(ctx),
+        needs: { ...level(NEED_MAX), hunger: 300_000 },
+        populationPermille: whole(20),
+        rulesVersion,
+      };
+      const event = {
+        type: "CARE" as const,
+        generationId: TEST_GENERATION.id,
+        seq: 1,
+        tick: state.tick + 1,
+        action: "FEED" as const,
+        caretakerId: "a",
+      };
+      return reduce(state, event, ctx).state;
+    };
+    const left = (state: PetState): number => allowanceRemaining(state, "a", state.tick).hunger;
+    expect(left(fed(3))).toBeLessThan(left(fed(2)));
+    expect(left(fed(3))).toBe(left({ ...fed(3), populationPermille: whole(6) }));
+  });
+
+  it("caps the care quests' bar with it, which reads what decay reads", () => {
+    expect(questTarget(QUESTS["feast-day"], 13, whole(13), 2)).toBe(40);
+    expect(questTarget(QUESTS["feast-day"], 13, whole(13), 3)).toBe(20);
+  });
+
+  it("stops recording a crowd once it no longer moves the multiplier", () => {
+    expect(worthRecording(whole(6), whole(20), 2)).toBe(true);
+    expect(worthRecording(whole(6), whole(20), 3)).toBe(false);
+  });
+});
+
 describe("the FRAIL elder's lower cap", () => {
   const elderAt = (form: "FRAIL" | "STEADY", needs: number, rampDay: number): PetState => {
     const start = projectImmortal(hatchedState(ctx), ELDER_STARTS_AT, ctx);
@@ -143,13 +230,13 @@ describe("the FRAIL elder's lower cap", () => {
   const lostInATick = (state: PetState): number => state.healthRaw - project(state, state.tick + 1, ctx).state.healthRaw;
 
   it("caps the line at 80% for FRAIL and 85% for everyone else", () => {
-    expect(elderHoldMean(40, "FRAIL")).toBe(ELDER_HOLD_CAP_FRAIL);
-    expect(elderHoldMean(40, "STEADY")).toBe(ELDER_HOLD_CAP);
-    expect(elderHoldMean(40, null)).toBe(ELDER_HOLD_CAP);
+    expect(elderHoldMean(40, "FRAIL", 2)).toBe(ELDER_HOLD_CAP_FRAIL);
+    expect(elderHoldMean(40, "STEADY", 2)).toBe(ELDER_HOLD_CAP);
+    expect(elderHoldMean(40, null, 2)).toBe(ELDER_HOLD_CAP);
     // The two lines part ways only once the climb passes 80%, on ramp day 8.
-    expect(elderHoldMean(7, "FRAIL")).toBe(elderHoldMean(7, null));
-    expect(elderHoldMean(8, "FRAIL")).toBe(800_000);
-    expect(elderHoldMean(9, "FRAIL")).toBe(800_000);
+    expect(elderHoldMean(7, "FRAIL", 2)).toBe(elderHoldMean(7, null, 2));
+    expect(elderHoldMean(8, "FRAIL", 2)).toBe(800_000);
+    expect(elderHoldMean(9, "FRAIL", 2)).toBe(800_000);
   });
 
   it("holds a FRAIL elder at 82% under ruleset 2 where ruleset 1 still drains it", () => {
@@ -170,6 +257,44 @@ describe("the FRAIL elder's lower cap", () => {
   it("is no different before ramp day 8", () => {
     const frail = elderAt("FRAIL", 700_000, 6);
     expect(lostInATick(v2(frail))).toBe(lostInATick(frail));
+  });
+
+  it("caps the line at 75% for everyone and 70% for FRAIL from ruleset 3, reached on ramp days 6 and 4", () => {
+    expect(ELDER_HOLD_CAP_V3).toBe(750_000);
+    expect(ELDER_HOLD_CAP_FRAIL_V3).toBe(700_000);
+    expect(elderHoldMean(40, "STEADY", 3)).toBe(ELDER_HOLD_CAP_V3);
+    expect(elderHoldMean(40, "THRIVING", 3)).toBe(ELDER_HOLD_CAP_V3);
+    expect(elderHoldMean(40, null, 3)).toBe(ELDER_HOLD_CAP_V3);
+    expect(elderHoldMean(40, "FRAIL", 3)).toBe(ELDER_HOLD_CAP_FRAIL_V3);
+    expect(elderHoldMean(5, "STEADY", 3)).toBe(725_000);
+    expect(elderHoldMean(6, "STEADY", 3)).toBe(750_000);
+    expect(elderHoldMean(3, "FRAIL", 3)).toBe(675_000);
+    expect(elderHoldMean(4, "FRAIL", 3)).toBe(700_000);
+  });
+
+  it("starts the climb where it always did, so the early days are unchanged", () => {
+    for (const form of ["FRAIL", "STEADY", null] as const) {
+      for (const day of [0, 1, 2, 3]) expect(elderHoldMean(day, form, 3)).toBe(elderHoldMean(day, form, 2));
+    }
+  });
+
+  it("holds an elder at 76% under ruleset 3 where ruleset 2 still drains it", () => {
+    const steady = elderAt("STEADY", 760_000, 12);
+    expect(lostInATick(v2(steady))).toBeGreaterThan(0);
+    expect(lostInATick(v3(steady))).toBe(0);
+    expect(derive(v2(steady)).health.elder?.linePermille).toBe(850);
+    expect(derive(v3(steady)).health.elder?.linePermille).toBe(750);
+  });
+
+  it("holds a FRAIL elder at 72% under ruleset 3 where ruleset 2 still drains it", () => {
+    const frail = elderAt("FRAIL", 720_000, 12);
+    expect(lostInATick(v2(frail))).toBeGreaterThan(0);
+    expect(lostInATick(v3(frail))).toBe(0);
+    expect(derive(v3(frail)).health.elder?.linePermille).toBe(700);
+  });
+
+  it("still drains an elder under the new line", () => {
+    expect(lostInATick(v3(elderAt("STEADY", 740_000, 12)))).toBeGreaterThan(0);
   });
 });
 

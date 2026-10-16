@@ -28,6 +28,8 @@ const facts = (overrides: Partial<QuestFacts> = {}): QuestFacts => {
     lowestMeterPercent: 0,
     eveningReached: false,
     population: undefined,
+    // Ruleset 2 is the last one with the table's full 4×, which these numbers are.
+    rules: 2,
     ...overrides,
   };
   return {
@@ -98,16 +100,16 @@ describe("the daily communal quest (SPEC §21.7)", () => {
 
 describe("the bar the room's size sets (SPEC §21.7)", () => {
   it("grows the count quests by the §23 care multiplier", () => {
-    expect(questTarget(QUESTS["feast-day"], 2, 2000)).toBe(10);
-    expect(questTarget(QUESTS["feast-day"], 4, 4000)).toBe(17);
-    expect(questTarget(QUESTS["feast-day"], 13, 13000)).toBe(40);
-    expect(questTarget(QUESTS["game-night"], 2, 2000)).toBe(40);
-    expect(questTarget(QUESTS["game-night"], 4, 4000)).toBe(67);
-    expect(questTarget(QUESTS["game-night"], 13, 13000)).toBe(160);
+    expect(questTarget(QUESTS["feast-day"], 2, 2000, 2)).toBe(10);
+    expect(questTarget(QUESTS["feast-day"], 4, 4000, 2)).toBe(17);
+    expect(questTarget(QUESTS["feast-day"], 13, 13000, 2)).toBe(40);
+    expect(questTarget(QUESTS["game-night"], 2, 2000, 2)).toBe(40);
+    expect(questTarget(QUESTS["game-night"], 4, 4000, 2)).toBe(67);
+    expect(questTarget(QUESTS["game-night"], 13, 13000, 2)).toBe(160);
   });
 
   it("leaves the meter percentage alone — there is nothing to multiply", () => {
-    for (const population of [2, 4, 9, 30]) expect(questTarget(QUESTS["full-bellies"], population, population * 1000)).toBe(70);
+    for (const population of [2, 4, 9, 30]) expect(questTarget(QUESTS["full-bellies"], population, population * 1000, 2)).toBe(70);
   });
 
   it("asks half the room for hands, between two and five", () => {
@@ -116,8 +118,8 @@ describe("the bar the room's size sets (SPEC §21.7)", () => {
   });
 
   it("reads an unrecorded population as the baseline, so quiet rooms keep today's numbers", () => {
-    expect(questTarget(QUESTS["feast-day"], undefined, undefined)).toBe(10);
-    expect(questTarget(QUESTS["game-night"], undefined, undefined)).toBe(40);
+    expect(questTarget(QUESTS["feast-day"], undefined, undefined, 2)).toBe(10);
+    expect(questTarget(QUESTS["game-night"], undefined, undefined, 2)).toBe(40);
     expect(questHands(undefined)).toBe(2);
     expect(questHands(Number.NaN)).toBe(2);
   });

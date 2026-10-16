@@ -109,13 +109,18 @@ export const questHands = (population?: number): number => {
 };
 
 /** Today's bar for a quest, at the community size the day opened with. */
-export const questTarget = (quest: QuestDef, population: number | undefined, presencePermille: number | undefined): number => {
+export const questTarget = (
+  quest: QuestDef,
+  population: number | undefined,
+  presencePermille: number | undefined,
+  rules: number,
+): number => {
   switch (quest.growth) {
     case "care":
       // A care bar rises with the care the pet demands, so it reads exactly
       // what decay reads. The integer arithmetic decayRates uses, for the
       // reason §23.2 gives: two engines must agree on the bar to the unit.
-      return Math.round((quest.base * careMultiplierPermille(presencePermille)) / 1000);
+      return Math.round((quest.base * careMultiplierPermille(presencePermille, rules)) / 1000);
     case "hands":
       return questHands(population);
     case "none":
@@ -139,6 +144,8 @@ export type QuestFacts = {
   population: number | undefined;
   /** Their presence-weighted total in thousandths (SPEC §23.1), if recorded. */
   presencePermille: number | undefined;
+  /** The ruleset the pet is living by, which sets the multiplier's ceiling (SPEC §23). */
+  rules: number;
 };
 
 export type QuestStatus = {
@@ -162,7 +169,7 @@ export const questProgress = (quest: QuestDef, facts: QuestFacts): QuestStatus =
         : quest.id === "many-hands"
           ? facts.caretakers
           : facts.feeds;
-  const target = questTarget(quest, facts.population, facts.presencePermille);
+  const target = questTarget(quest, facts.population, facts.presencePermille, facts.rules);
   const handsTarget = questHands(facts.population);
   const reached = current >= target && facts.caretakers >= handsTarget;
   return {

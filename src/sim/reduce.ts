@@ -9,7 +9,7 @@ import { drinkItem, foodItem, toysPlayBonusPercent, type Perks } from "./economy
 import { quirkFoodPercent } from "./quirks";
 import { minigameBonus } from "./minigames";
 import { budgetRemaining, caretakerRecord, pruneCaretakers, recordApplied } from "./score";
-import { careMultiplierPermille, presencePermilleOf } from "./difficulty";
+import { careMultiplierOf } from "./difficulty";
 import {
   diminishedMagnitude,
   HEALTH_MAX,
@@ -175,7 +175,7 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       const grant = (need: NeedKey, base: number): number => {
         const given = Math.min(
           diminishedMagnitude(base, state.needs[need]),
-          budgetRemaining(record, need, event.tick, careMultiplierPermille(presencePermilleOf(state))),
+          budgetRemaining(record, need, event.tick, careMultiplierOf(state)),
         );
         state.needs[need] = clamp(state.needs[need] + given, NEED_MAX);
         recordApplied(record, need, event.tick, given);

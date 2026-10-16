@@ -160,7 +160,7 @@ export const derive = (state: PetState): DerivedState => {
     vitality,
     percentages,
     population: state.population ?? DIFFICULTY_BASELINE,
-    careMultiplier: careMultiplier(presencePermilleOf(state)),
+    careMultiplier: careMultiplier(presencePermilleOf(state), rulesVersionOf(state)),
     health: healthViewOf(state, terms),
   };
 };

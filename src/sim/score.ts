@@ -20,7 +20,7 @@ import {
   type CareAction,
   type NeedKey,
 } from "./tuning";
-import { careMultiplierPermille, presencePermilleOf } from "./difficulty";
+import { careMultiplierOf } from "./difficulty";
 
 export const petDay = (tick: number): number => Math.floor(tick / TICKS_PER_DAY);
 
@@ -119,7 +119,7 @@ export const contributionScore = (action: CareAction, applied: number): number =
  */
 export const allowanceRemaining = (state: PetState, caretakerId: string, tick: number): Record<NeedKey, number> => {
   const record = findCaretaker(state, caretakerId);
-  const permille = careMultiplierPermille(presencePermilleOf(state));
+  const permille = careMultiplierOf(state);
   const left = {} as Record<NeedKey, number>;
   for (const need of NEED_KEYS) {
     left[need] =
@@ -157,7 +157,7 @@ export const zeroApplyReason = (
   const magnitude = MAGNITUDE_ACTIONS[action];
   if (!magnitude) return null; // MEDICATE is flat: neither curved nor budgeted.
   const record = findCaretaker(state, caretakerId);
-  const permille = careMultiplierPermille(presencePermilleOf(state));
+  const permille = careMultiplierOf(state);
   if (record !== null && budgetRemaining(record, magnitude.need, tick, permille) === 0) return "SPENT";
   return diminishedMagnitude(magnitude.base, state.needs[magnitude.need]) === 0 ? "SATED" : null;
 };

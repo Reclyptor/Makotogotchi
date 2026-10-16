@@ -62,12 +62,11 @@ export const healthTerms = (state: PetState, tick: number): HealthTerms => {
   let elder: HealthTerms["elder"] = null;
   if (stageAt(state.bornAtTick, tick) === "ELDER") {
     const rampDay = elderRampDayAt(state, tick);
-    // The FRAIL cap only exists for a history lived under the rules that added it.
-    const form = rulesVersionOf(state) >= RULES_SINCE.FRAIL_CAP ? state.form : null;
+    const rules = rulesVersionOf(state);
     elder = {
-      holdPermille: Math.floor(elderHoldLine(rampDay, form) / 1000),
+      holdPermille: Math.floor(elderHoldLine(rampDay, state.form, rules) / 1000),
       meanPermille: Math.floor(needsMean(state.needs) / 1000),
-      vigour: elderVigourPermille(state.needs, rampDay, form),
+      vigour: elderVigourPermille(state.needs, rampDay, state.form, rules),
     };
   }
 

@@ -18,7 +18,7 @@
 
 import { isAlive, rulesVersionOf, stageAt, type PetState, type ProjectionContext } from "./model";
 import { causeOfDeath, healthTerms } from "./health";
-import { careMultiplierPermille, presencePermilleOf } from "./difficulty";
+import { careMultiplierOf } from "./difficulty";
 import { draw32, RNG_PURPOSE } from "./rng";
 import {
   BASELINE_CARE_PERMILLE,
@@ -72,7 +72,7 @@ export const project = (input: PetState, toTick: number, ctx: ProjectionContext)
   // How hard the community has made the pet (SPEC §23). It is fixed for the
   // whole projection: only a POPULATION event changes it, and events are
   // folded between projections, never during one.
-  const difficultyPermille = careMultiplierPermille(presencePermilleOf(state));
+  const difficultyPermille = careMultiplierOf(state);
   // Under ruleset 2 the night is exempt from it (SPEC §23): only a RULES event
   // changes this, and events fold between projections.
   const nightExempt = rulesVersionOf(state) >= RULES_SINCE.NIGHT_EXEMPT;

@@ -11,7 +11,7 @@
 import { describe, expect, it } from "vitest";
 import type { PetEvent } from "./events";
 import type { PetState } from "./model";
-import { careMultiplierPermille } from "./difficulty";
+import { careMultiplierOf } from "./difficulty";
 import { project } from "./project";
 import { reduce } from "./reduce";
 import { budgetRemaining, findCaretaker } from "./score";
@@ -19,6 +19,7 @@ import { hatchedState, projectImmortal, TEST_GENERATION, testCtx } from "./testk
 import { canPerform } from "./validate";
 import {
   COOLDOWNS,
+  CURRENT_RULES_VERSION,
   diminishedMagnitude,
   ELDER_STARTS_AT,
   HEALTH_MAX,
@@ -54,7 +55,7 @@ const bestCaretaker = (state: PetState, ids: readonly string[], action: CareActi
 
 /** The net-gain bot's next move: what the action restores less what it costs the pet. */
 const netGainChoice = (state: PetState, ids: readonly string[]): { action: CareAction; caretakerId: string } | null => {
-  const permille = careMultiplierPermille(state.populationPermille);
+  const permille = careMultiplierOf(state);
   let best: { action: CareAction; caretakerId: string; gain: number } | null = null;
   for (const action of NET_GAIN_ACTIONS) {
     const magnitude = MAGNITUDE_ACTIONS[action]!;
@@ -74,7 +75,7 @@ const netGainChoice = (state: PetState, ids: readonly string[]): { action: CareA
 };
 
 /** An elder on its first day, full of everything, with the ramp starting now. */
-const startOfRamp = (level: number, caretakers: number): PetState => {
+const startOfRamp = (level: number, caretakers: number, rules = 1): PetState => {
   const atElder = projectImmortal(hatchedState(ctx), ELDER_STARTS_AT, ctx);
   return {
     ...atElder,
@@ -87,6 +88,7 @@ const startOfRamp = (level: number, caretakers: number): PetState => {
     population: caretakers,
     populationPermille: caretakers * 1000,
     elderRampFromTick: atElder.tick,
+    ...(rules > 1 ? { rulesVersion: rules } : {}),
   };
 };
 
@@ -124,8 +126,8 @@ const outcomeOf = (state: PetState, start: number, lowestHealth: number): Outcom
  * Ten (or however many) people caring for a fresh elder, each look at the pet
  * taking up to `perLook` of the bot's moves. Sickness is off (see `projectWell`).
  */
-const careForElder = (opts: { caretakers: number; days: number; every: number; perLook: number }): Outcome => {
-  let state = startOfRamp(NEED_MAX, opts.caretakers);
+const careForElder = (opts: { caretakers: number; days: number; every: number; perLook: number; rules?: number }): Outcome => {
+  let state = startOfRamp(NEED_MAX, opts.caretakers, opts.rules);
   const ids = Array.from({ length: opts.caretakers }, (_, index) => `carer-${String(index).padStart(2, "0")}`);
   const start = state.tick;
   const end = start + opts.days * TICKS_PER_DAY;
@@ -180,12 +182,20 @@ describe("old age is held off by care (SPEC §16.2)", () => {
     expect(run.lowestHealth).toBeGreaterThanOrEqual(HEALTH_MAX / 2);
   });
 
-  it("ten people looking in every half hour for a few moves each lose the elder to old age within three weeks", () => {
+  it("ten people looking in every half hour for a few moves each lose the elder to old age within three weeks, under the rules before ruleset 3", () => {
     const run = careForElder({ caretakers: 10, days: 21, every: 180, perLook: 4 });
     expect(run.cause).toBe("age");
     expect(run.diedAfterDays).not.toBeNull();
     expect(run.diedAfterDays!).toBeGreaterThanOrEqual(8);
     expect(run.diedAfterDays!).toBeLessThanOrEqual(18);
+  });
+
+  it("ten people looking in every half hour keep the elder alive for thirty days under ruleset 3", { timeout: 20_000 }, () => {
+    // Good care, not perfect play (SPEC §2.3): the 75% line is within reach of
+    // a look every half hour, which the 85% line was not.
+    const run = careForElder({ caretakers: 10, days: 30, every: 180, perLook: 4, rules: CURRENT_RULES_VERSION });
+    expect(run.diedAfterDays).toBeNull();
+    expect(run.lowestHealth).toBeGreaterThanOrEqual(HEALTH_MAX / 2);
   });
 
   it("an elder held at a 90% mean keeps above 90% health across thirty days", () => {
