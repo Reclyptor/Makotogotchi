@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { SLIPPING_BELOW, statusLine, ticksUntilWake, untilWakeText } from "./status";
-import { derive, type DerivedState, type HealthReason, type HealthView } from "@/sim/derive";
+import { derive, type DerivedState, type HealthReason } from "@/sim/derive";
 import type { PetState } from "@/sim/model";
 import { hatchedState, projectImmortal, testCtx } from "@/sim/testkit";
 import {
@@ -179,8 +179,47 @@ describe("the health sentence", () => {
     expect(line(hurt)).toBe("Makoto is doing fine. Health is coming back.");
   });
 
-  it("says health is holding when sickness and recovery cancel out", () => {
-    expect(line({ ...hurt, sick: true, sickSinceTick: hurt.tick })).toBe(`Makoto just fell sick.${HOLDING}`);
+  it("says health is holding steady when sickness cancels recovery at full health", () => {
+    expect(line({ ...adult, sick: true, sickSinceTick: adult.tick })).toBe(`Makoto just fell sick.${HOLDING}`);
+  });
+
+  it("says health is stuck, and why, when sickness cancels recovery below full", () => {
+    const sick = { ...hurt, sick: true, sickSinceTick: hurt.tick };
+    expect(line(sick)).toBe("Makoto just fell sick. Health is stuck.");
+    expect(line({ ...sick, asleep: true, sleepReason: "NIGHT" })).toBe(
+      "Makoto is asleep for the night. Health is stuck: sickness stops it coming back.",
+    );
+  });
+
+  // A sick pet at 1% used to be told "Health is dangerously low."; a headline
+  // about sleep or sickness must not bury that.
+  it("keeps the danger in the sentence when the headline does not say it", () => {
+    const frail = { ...adult, healthRaw: HEALTH_MAX / 100 };
+    const sick = { ...frail, sick: true, sickSinceTick: frail.tick };
+    expect(line(sick)).toBe("Makoto just fell sick. Health is dangerously low and stuck.");
+    expect(line({ ...sick, asleep: true, sleepReason: "NIGHT" })).toBe(
+      "Makoto is asleep for the night. Health is dangerously low and stuck: sickness stops it coming back.",
+    );
+    expect(line({ ...frail, needs: { ...frail.needs, hunger: 0 } })).toBe(
+      "Makoto is starving. Health is dangerously low and falling.",
+    );
+    expect(line({ ...frail, asleep: true, sleepReason: "NIGHT", needs: { ...frail.needs, hunger: 170_000 } })).toBe(
+      "Makoto is asleep for the night. Health is dangerously low and falling: hunger is below 20%.",
+    );
+    expect(line({ ...sick, needs: { ...frail.needs, hunger: 170_000 } })).toBe(
+      "Makoto just fell sick. Health is dangerously low and falling.",
+    );
+    const frailElder = { ...elder, healthRaw: HEALTH_MAX / 100, needs: thin, asleep: true, sleepReason: "NIGHT" as const };
+    expect(line(frailElder)).toBe("Makoto is asleep for the night. Health is dangerously low and falling with age.");
+  });
+
+  it("does not say it twice when the headline already does", () => {
+    const weak = { ...elder, healthRaw: HEALTH_MAX / 100, needs: thin };
+    expect(line(weak)).toBe("Makoto is dangerously weak. Health is falling with age.");
+    // And a recovering pet is not in danger: it is on its way back.
+    expect(line({ ...adult, healthRaw: HEALTH_MAX / 100, asleep: true, sleepReason: "NIGHT" })).toBe(
+      "Makoto is asleep for the night. Health is coming back.",
+    );
   });
 
   it("puts an elder's decline down to age, without the numbers", () => {
@@ -200,6 +239,7 @@ describe("the health sentence", () => {
     expect(say({ kind: "age" })).toBe("Makoto is doing fine. Health is falling with age.");
     expect(say({ kind: "regen" })).toBe("Makoto is doing fine. Health is coming back.");
     expect(say({ kind: "holding" })).toBe(`Makoto is doing fine.${HOLDING}`);
+    expect(say({ kind: "holding" }, hurt)).toBe("Makoto is doing fine. Health is stuck: sickness stops it coming back.");
     expect(say({ kind: "full" })).toBe("Makoto is doing fine.");
 
     // Sick, and a need the headline does not name: the need is still said.

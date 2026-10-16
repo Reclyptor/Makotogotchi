@@ -12,6 +12,7 @@ import { CRITICAL_PERCENT } from "@/app/copy/health";
 import { CAUSE_OF_DEATH_TEXT } from "@/app/copy/death";
 import {
   ENERGY_SLEEP_RECOVERY,
+  HEALTH_MAX,
   NAP_WAKE_THRESHOLD,
   NEED_KEYS,
   NEED_MAX,
@@ -144,26 +145,44 @@ const sleeping = (state: PetState, ctx?: ProjectionContext): string => {
   }
 };
 
+/** What the headline already told the reader, so the health sentence need not. */
+type Told = {
+  /** Ailments it spelled out ("is starving", "just fell sick"). */
+  ailments: readonly Ailment[];
+  /** It said "dangerously weak"; if not, a frail pet's sentence has to. */
+  weak: boolean;
+};
+
 /**
  * Which way health is moving and why; null when there is nothing to say. A
- * cause the headline already named ("is starving", "just fell sick") is not
- * said twice. A need below the line that is not yet an ailment still is: the
- * headline has not mentioned it.
+ * cause the headline already named is not said twice. A need below the line
+ * that is not yet an ailment still is: the headline has not mentioned it.
+ *
+ * Health under a quarter is the one thing a headline about sleep or sickness
+ * would otherwise bury, so when the headline did not say "dangerously weak"
+ * the sentence carries it.
  */
-const healthSentence = ({ reason }: HealthView, named: readonly Ailment[]): string | null => {
+const healthSentence = ({ reason }: HealthView, told: Told, state: PetState, frail: boolean): string | null => {
+  const danger = frail && !told.weak;
+  const falling = danger ? "Health is dangerously low and falling" : "Health is falling";
   switch (reason.kind) {
     case "need":
-      return named.includes(NEED_AILMENT[reason.need])
-        ? "Health is falling."
-        : `Health is falling: ${reason.need} is below ${CRITICAL_PERCENT}%.`;
+      return told.ailments.includes(NEED_AILMENT[reason.need])
+        ? `${falling}.`
+        : `${falling}: ${reason.need} is below ${CRITICAL_PERCENT}%.`;
     case "sick":
-      return named.includes("SICK") ? "Health is falling." : "Health is falling: sickness.";
+      return told.ailments.includes("SICK") ? `${falling}.` : `${falling}: sickness.`;
     case "age":
-      return "Health is falling with age.";
+      return `${falling} with age.`;
     case "regen":
       return "Health is coming back.";
-    case "holding":
-      return "Health is holding steady.";
+    case "holding": {
+      // Alive, holding means sickness exactly cancels recovery: sick, but fed.
+      // At full health there is nothing to be stuck below, so it just holds.
+      if (state.healthRaw >= HEALTH_MAX) return "Health is holding steady.";
+      const stuck = danger ? "Health is dangerously low and stuck" : "Health is stuck";
+      return told.ailments.includes("SICK") ? `${stuck}.` : `${stuck}: sickness stops it coming back.`;
+    }
     case "full":
       return null;
   }
@@ -173,8 +192,10 @@ const healthSentence = ({ reason }: HealthView, named: readonly Ailment[]): stri
 const elderFragment = ({ elder }: HealthView): string | null =>
   elder && `needs ${elder.linePercent}% · at ${elder.meanPercent}%`;
 
-/** The headline, and which ailments it spelled out. */
-type Headline = { text: string; named: readonly Ailment[] };
+/** The headline, and what it already told the reader. */
+type Headline = { text: string; told: Told };
+
+const NOTHING_TOLD: Told = { ailments: [], weak: false };
 
 const headline = (
   petName: string,
@@ -183,15 +204,15 @@ const headline = (
   stage: Exclude<LifeStage, "EGG">,
   ctx: ProjectionContext | undefined,
 ): Headline => {
-  if (state.asleep) return { text: `${petName} ${sleeping(state, ctx)}`, named: [] };
+  if (state.asleep) return { text: `${petName} ${sleeping(state, ctx)}`, told: NOTHING_TOLD };
   const ailment = ailing(state, derived);
-  if (ailment) return { text: `${petName} ${ailment}`, named: derived.ailments };
-  if (derived.vitality === "fading") return { text: `${petName} is fading.`, named: [] };
-  if (derived.vitality === "recovering") return { text: `${petName} is weak.`, named: [] };
-  if (derived.vitality === "frail") return { text: `${petName} is dangerously weak.`, named: [] };
+  if (ailment) return { text: `${petName} ${ailment}`, told: { ailments: derived.ailments, weak: false } };
+  if (derived.vitality === "fading") return { text: `${petName} is fading.`, told: NOTHING_TOLD };
+  if (derived.vitality === "recovering") return { text: `${petName} is weak.`, told: NOTHING_TOLD };
+  if (derived.vitality === "frail") return { text: `${petName} is dangerously weak.`, told: { ailments: [], weak: true } };
   const low = slipping(state);
-  if (low) return { text: `${petName} ${SLIPPING_LINE[low]}`, named: [] };
-  return { text: `${petName} ${WELL_LINE[stage]}`, named: [] };
+  if (low) return { text: `${petName} ${SLIPPING_LINE[low]}`, told: NOTHING_TOLD };
+  return { text: `${petName} ${WELL_LINE[stage]}`, told: NOTHING_TOLD };
 };
 
 export const statusLine = (
@@ -208,6 +229,6 @@ export const statusLine = (
   const { stage } = derived;
   if (stage === "EGG") return { text: "The egg is incubating…", elder: null };
   const head = headline(petName, state, derived, stage, ctx);
-  const health = healthSentence(derived.health, head.named);
+  const health = healthSentence(derived.health, head.told, state, derived.vitality === "frail");
   return { text: health ? `${head.text} ${health}` : head.text, elder: elderFragment(derived.health) };
 };
