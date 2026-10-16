@@ -1693,7 +1693,7 @@ wins:
 | 2 | egg | "The egg is incubating…" |
 | 3 | asleep | by `sleepReason`: "is asleep for the night." / "is napping until the energy comes back." / "was sung to sleep." |
 | 4 | any ailment | "is starving, filthy and sad" — worst first, in §2.9's order — with sickness dated last: "just fell sick" (under an hour), "has been sick for 5 hours", "since yesterday", "for 3 days" |
-| 5 | health below 25% (§2.3) | "is weak." while health is climbing back; "is dangerously weak." while it is not — an elder, a sick pet, or a critical need. Fading takes over only between 25% and 50%, once health has left this band: an elder there reads "is fading." |
+| 5 | health below 25% (§2.3) | "is weak." while health is climbing back; "is dangerously weak." while it is not — an elder, a sick pet, or a critical need. Fading takes over only between 25% and 50%: an elder in that band reads "is fading." |
 | 6 | a need under 50% | the lowest one: "is getting hungry." / "is getting sleepy." / "could use a bath." / "is getting bored." |
 | 7 | well | by stage: "is small and curious." / "is full of beans." / "is growing fast." / "is doing fine." / "is taking it slow." |
 
