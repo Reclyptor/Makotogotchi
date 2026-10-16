@@ -2,10 +2,13 @@
 // used to read only the ailments, and health is not an ailment: a pet nursed
 // back from the brink has every need met and a 1% health meter, and was
 // "doing fine" for the day it took to climb back. Now the line is built from
-// the whole of the pet's state, most important fact first.
+// the whole of the pet's state, most important fact first. Health gets its
+// own sentence after that — which way it is moving and why — so a player can
+// see what to fix rather than watch the meter and guess.
 
-import type { Ailment, DerivedState, Vitality } from "@/sim/derive";
+import type { Ailment, DerivedState, HealthView } from "@/sim/derive";
 import type { PetState, ProjectionContext } from "@/sim/model";
+import { CRITICAL_PERCENT } from "@/app/components/Meters/critical";
 import { CAUSE_OF_DEATH_TEXT } from "@/app/copy/death";
 import {
   ENERGY_SLEEP_RECOVERY,
@@ -21,11 +24,15 @@ import {
 /** A need this far down gets a mention before it becomes an ailment. */
 export const SLIPPING_BELOW = NEED_MAX / 2;
 
-const HEALTH_TAIL: Record<Vitality, string> = {
-  well: "",
-  fading: " Health is fading with age.",
-  recovering: " Health is coming back.",
-  frail: " Health is dangerously low.",
+/**
+ * The status line as the page lays it out: a sentence, and for elders a small
+ * fragment the page sets quieter than the sentence. Two fields rather than one
+ * string so the page never has to cut a styled piece back out of the text.
+ */
+export type StatusView = {
+  text: string;
+  /** "needs 72% · at 81%": today's hold line, then where the needs average now. */
+  elder: string | null;
 };
 
 /** Ailments as they read after "is", worst first. Sickness is worded on its own. */
@@ -131,26 +138,65 @@ const sleeping = (state: PetState, ctx?: ProjectionContext): string => {
   }
 };
 
+/** Which way health is moving and why; null when there is nothing to say. */
+const healthSentence = ({ reason, elder }: HealthView): string | null => {
+  switch (reason.kind) {
+    case "need":
+      return `Health is falling: ${reason.need} is below ${CRITICAL_PERCENT}%.`;
+    case "sick":
+      return "Health is falling: sickness.";
+    case "age":
+      return elder
+        ? `Health is falling with age: needs average ${elder.meanPercent}%, today's line is ${elder.linePercent}%.`
+        : "Health is falling with age.";
+    case "regen":
+      return "Health is coming back.";
+    case "holding":
+      return "Health is holding steady.";
+    case "full":
+      return null;
+  }
+};
+
+/**
+ * An elder's line and average sit beside the health sentence, even while
+ * health is rising. Falling with age already spells both numbers out.
+ */
+const elderFragment = ({ reason, elder }: HealthView): string | null =>
+  elder && reason.kind !== "age" ? `needs ${elder.linePercent}% · at ${elder.meanPercent}%` : null;
+
+const headline = (
+  petName: string,
+  state: PetState,
+  derived: DerivedState,
+  stage: Exclude<LifeStage, "EGG">,
+  ctx: ProjectionContext | undefined,
+): string => {
+  if (state.asleep) return `${petName} ${sleeping(state, ctx)}`;
+  const ailment = ailing(state, derived);
+  if (ailment) return `${petName} ${ailment}`;
+  if (derived.vitality === "fading") return `${petName} is fading.`;
+  if (derived.vitality === "recovering") return `${petName} is weak.`;
+  if (derived.vitality === "frail") return `${petName} is dangerously weak.`;
+  const low = slipping(state);
+  if (low) return `${petName} ${SLIPPING_LINE[low]}`;
+  return `${petName} ${WELL_LINE[stage]}`;
+};
+
 export const statusLine = (
   petName: string,
   state: PetState,
   derived: DerivedState,
   /** Optional: with it, a sleeping pet says how long it has left. */
   ctx?: ProjectionContext,
-): string => {
+): StatusView => {
   if (state.diedAtTick !== null) {
     const how = state.causeOfDeath ? CAUSE_OF_DEATH_TEXT[state.causeOfDeath] : "has died";
-    return `${petName} ${how}. A new egg will appear soon.`;
+    return { text: `${petName} ${how}. A new egg will appear soon.`, elder: null };
   }
-  if (derived.stage === "EGG") return "The egg is incubating…";
-  const tail = HEALTH_TAIL[derived.vitality];
-  if (state.asleep) return `${petName} ${sleeping(state, ctx)}${tail}`;
-  const ailment = ailing(state, derived);
-  if (ailment) return `${petName} ${ailment}${tail}`;
-  if (derived.vitality === "fading") return `${petName} is fading. A little more care each day brings it back.`;
-  if (derived.vitality === "recovering") return `${petName} is recovering.`;
-  if (derived.vitality === "frail") return `${petName} is dangerously weak.`;
-  const low = slipping(state);
-  if (low) return `${petName} ${SLIPPING_LINE[low]}`;
-  return `${petName} ${WELL_LINE[derived.stage]}`;
+  const { stage } = derived;
+  if (stage === "EGG") return { text: "The egg is incubating…", elder: null };
+  const health = healthSentence(derived.health);
+  const head = headline(petName, state, derived, stage, ctx);
+  return { text: health ? `${head} ${health}` : head, elder: elderFragment(derived.health) };
 };

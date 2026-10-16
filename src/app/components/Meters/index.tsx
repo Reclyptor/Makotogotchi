@@ -7,7 +7,8 @@
 // alone.
 
 import type { DerivedState } from "@/sim/derive";
-import { CRITICAL_THRESHOLD, NEED_KEYS, NEED_MAX, type NeedKey } from "@/sim/tuning";
+import { CRITICAL_PERCENT } from "@/app/components/Meters/critical";
+import { NEED_KEYS, type NeedKey } from "@/sim/tuning";
 
 const METER_ROWS = [
   { key: "hunger", label: "Hunger", emoji: "🍖", hue: "#fb923c" },
@@ -16,8 +17,6 @@ const METER_ROWS = [
   { key: "joy", label: "Joy", emoji: "💛", hue: "#a78bfa" },
   { key: "health", label: "Health", emoji: "❤️", hue: "#fb7185" },
 ] as const;
-
-const CRITICAL_PERCENT = (CRITICAL_THRESHOLD / NEED_MAX) * 100;
 
 /** The allowance is per need, and these are the same emoji the rows use. */
 const ALLOWANCE_EMOJI: Record<NeedKey, string> = {

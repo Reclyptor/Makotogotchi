@@ -482,7 +482,7 @@ export default function GameView() {
     return venueId === "home" ? null : venueSpec(venueId).label;
   })();
 
-  const statusText = ui ? statusLine(petName, ui.state, ui.derived, ctx ?? undefined) : "Connecting…";
+  const status = ui ? statusLine(petName, ui.state, ui.derived, ctx ?? undefined) : { text: "Connecting…", elder: null };
 
   return (
     <div className="flex w-full max-w-xl flex-col items-center gap-3">
@@ -602,7 +602,20 @@ export default function GameView() {
           <PetCanvas stream={stream} localSecret={localSecret} />
         </div>
         <p aria-live="polite" className="px-3 py-2 text-center text-sm text-muted">
-          {statusText}
+          {status.text}
+          {/* An elder's hold line and where the needs average now: there for
+              whoever looks, quiet for whoever does not. */}
+          {status.elder && (
+            <>
+              {" "}
+              <span
+                title="Today's line for keeping an elder's health up, and where the needs average now"
+                className="whitespace-nowrap text-xs tabular-nums opacity-60"
+              >
+                {status.elder}
+              </span>
+            </>
+          )}
           {/* An away day reads as an outing, not a bug (SPEC §22.8). */}
           {venueLabel && ` 🧭 Out at ${venueLabel} today.`}
         </p>

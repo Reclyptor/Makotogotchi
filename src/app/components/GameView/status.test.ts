@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { SLIPPING_BELOW, statusLine, ticksUntilWake, untilWakeText } from "./status";
-import { derive } from "@/sim/derive";
+import { derive, type DerivedState, type HealthReason, type HealthView } from "@/sim/derive";
 import type { PetState } from "@/sim/model";
 import { hatchedState, projectImmortal, testCtx } from "@/sim/testkit";
 import {
@@ -33,21 +33,25 @@ const born = hatchedState(ctx);
 const adult = contented(projectImmortal(born, 10 * TICKS_PER_DAY, ctx));
 const elder = contented(projectImmortal(born, 22 * TICKS_PER_DAY, ctx));
 const nearDeath = { ...adult, healthRaw: HEALTH_MAX / 100 };
-const line = (state: PetState): string => statusLine("Makoto", state, derive(state));
+const thin = { hunger: 300_000, energy: 300_000, hygiene: 300_000, joy: 300_000 };
+const line = (state: PetState): string => statusLine("Makoto", state, derive(state)).text;
+const elderFragment = (state: PetState): string | null => statusLine("Makoto", state, derive(state)).elder;
+const HOLDING = " Health is holding steady.";
 const sickFor = (ticks: number): PetState => ({ ...adult, sick: true, sickSinceTick: adult.tick - ticks });
 
 describe("the status line", () => {
   it("says fine only when health agrees", () => {
     expect(line(adult)).toBe("Makoto is doing fine.");
-    expect(line(nearDeath)).toBe("Makoto is recovering.");
-    expect(line({ ...elder, healthRaw: HEALTH_MAX / 100 })).toBe("Makoto is recovering.");
-    const thin = { hunger: 300_000, energy: 300_000, hygiene: 300_000, joy: 300_000 };
-    expect(line({ ...elder, healthRaw: HEALTH_MAX / 100, needs: thin })).toBe("Makoto is dangerously weak.");
+    expect(line(nearDeath)).toBe("Makoto is weak. Health is coming back.");
+    expect(line({ ...elder, healthRaw: HEALTH_MAX / 100 })).toBe("Makoto is weak. Health is coming back.");
+    expect(line({ ...elder, healthRaw: HEALTH_MAX / 100, needs: thin })).toBe(
+      "Makoto is dangerously weak. Health is falling with age: needs average 30%, today's line is 60%.",
+    );
     expect(line({ ...elder, healthRaw: HEALTH_MAX * 0.4, needs: thin })).toBe(
-      "Makoto is fading. A little more care each day brings it back.",
+      "Makoto is fading. Health is falling with age: needs average 30%, today's line is 60%.",
     );
     expect(line({ ...elder, healthRaw: HEALTH_MAX * 0.4, needs: thin, asleep: true, sleepReason: "NIGHT" })).toBe(
-      "Makoto is asleep for the night. Health is fading with age.",
+      "Makoto is asleep for the night. Health is falling with age: needs average 30%, today's line is 60%.",
     );
   });
 
@@ -78,23 +82,23 @@ describe("the status line", () => {
   });
 
   it("dates the sickness", () => {
-    expect(line(sickFor(0))).toBe("Makoto just fell sick.");
-    expect(line(sickFor(TICKS_PER_HOUR))).toBe("Makoto has been sick for 1 hour.");
-    expect(line(sickFor(5 * TICKS_PER_HOUR + 7))).toBe("Makoto has been sick for 5 hours.");
-    expect(line(sickFor(TICKS_PER_DAY + 3 * TICKS_PER_HOUR))).toBe("Makoto has been sick since yesterday.");
-    expect(line(sickFor(3 * TICKS_PER_DAY))).toBe("Makoto has been sick for 3 days.");
+    expect(line(sickFor(0))).toBe(`Makoto just fell sick.${HOLDING}`);
+    expect(line(sickFor(TICKS_PER_HOUR))).toBe(`Makoto has been sick for 1 hour.${HOLDING}`);
+    expect(line(sickFor(5 * TICKS_PER_HOUR + 7))).toBe(`Makoto has been sick for 5 hours.${HOLDING}`);
+    expect(line(sickFor(TICKS_PER_DAY + 3 * TICKS_PER_HOUR))).toBe(`Makoto has been sick since yesterday.${HOLDING}`);
+    expect(line(sickFor(3 * TICKS_PER_DAY))).toBe(`Makoto has been sick for 3 days.${HOLDING}`);
     // A history that never recorded the onset reads as just now, not as NaN.
-    expect(line({ ...adult, sick: true, sickSinceTick: null })).toBe("Makoto just fell sick.");
+    expect(line({ ...adult, sick: true, sickSinceTick: null })).toBe(`Makoto just fell sick.${HOLDING}`);
   });
 
   it("lists every ailment worst first, with the sickness last", () => {
     const wreck = { ...adult, needs: { hunger: 0, energy: NEED_MAX, hygiene: 0, joy: 0 } };
-    expect(line(wreck)).toBe("Makoto is starving, filthy and sad.");
-    expect(line({ ...wreck, needs: { ...wreck.needs, joy: NEED_MAX } })).toBe("Makoto is starving and filthy.");
+    const why = " Health is falling: hunger is below 20%.";
+    expect(line(wreck)).toBe(`Makoto is starving, filthy and sad.${why}`);
+    expect(line({ ...wreck, needs: { ...wreck.needs, joy: NEED_MAX } })).toBe(`Makoto is starving and filthy.${why}`);
     expect(line({ ...wreck, ...sickFor(2 * TICKS_PER_DAY), needs: wreck.needs })).toBe(
-      "Makoto is starving, filthy and sad, and has been sick for 2 days.",
+      `Makoto is starving, filthy and sad, and has been sick for 2 days.${why}`,
     );
-    expect(line({ ...sickFor(0), healthRaw: HEALTH_MAX / 100 })).toBe("Makoto just fell sick. Health is dangerously low.");
   });
 
   it("speaks up for the lowest need before it becomes an ailment", () => {
@@ -105,8 +109,10 @@ describe("the status line", () => {
     expect(line({ ...adult, needs: { ...adult.needs, hygiene: NEED_MAX / 3 } })).toBe("Makoto could use a bath.");
     expect(line({ ...adult, needs: { ...adult.needs, joy: NEED_MAX / 3 } })).toBe("Makoto is getting bored.");
     // Low health outranks a slipping need; an ailment outranks both.
-    expect(line({ ...sleepy, healthRaw: HEALTH_MAX / 100 })).toBe("Makoto is recovering.");
-    expect(line({ ...sleepy, needs: { ...sleepy.needs, hygiene: 0 } })).toBe("Makoto is filthy.");
+    expect(line({ ...sleepy, healthRaw: HEALTH_MAX / 100 })).toBe("Makoto is weak. Health is coming back.");
+    expect(line({ ...sleepy, needs: { ...sleepy.needs, hygiene: 0 } })).toBe(
+      "Makoto is filthy. Health is falling: hygiene is below 20%.",
+    );
   });
 
   it("gives a well pet a line for its age", () => {
@@ -123,6 +129,106 @@ describe("the status line", () => {
       expect(line(state)).toBe(expected[stage]);
     }
     expect(line(contented(born))).toBe(expected.HATCHLING);
+  });
+});
+
+// Health gets a sentence of its own: which way it is moving and why, worded
+// from derive's HealthView. Real states first, so the wiring is exercised end
+// to end; the copy for each reason is then pinned on its own.
+describe("the health sentence", () => {
+  const hurt = { ...adult, healthRaw: HEALTH_MAX / 2 };
+
+  it("says nothing while health is full and nothing is pulling on it", () => {
+    expect(line(adult)).toBe("Makoto is doing fine.");
+  });
+
+  it("names the need that is dragging health down", () => {
+    for (const need of ["hunger", "energy", "hygiene", "joy"] as const) {
+      const state = { ...hurt, needs: { ...hurt.needs, [need]: 0 } };
+      expect(line(state)).toContain(`Health is falling: ${need} is below 20%.`);
+    }
+  });
+
+  it("blames sickness when that is the bigger drain", () => {
+    const state = { ...hurt, sick: true, sickSinceTick: hurt.tick - 3 * TICKS_PER_HOUR, needs: { ...hurt.needs, hunger: 190_000 } };
+    expect(line(state)).toBe("Makoto has been sick for 3 hours. Health is falling: sickness.");
+  });
+
+  it("says health is coming back while it recovers", () => {
+    expect(line(hurt)).toBe("Makoto is doing fine. Health is coming back.");
+  });
+
+  it("says health is holding when sickness and recovery cancel out", () => {
+    expect(line({ ...hurt, sick: true, sickSinceTick: hurt.tick })).toBe(`Makoto just fell sick.${HOLDING}`);
+  });
+
+  it("explains an elder's decline with its own numbers", () => {
+    const state = { ...elder, healthRaw: HEALTH_MAX * 0.4, needs: thin };
+    expect(line(state)).toBe(
+      "Makoto is fading. Health is falling with age: needs average 30%, today's line is 60%.",
+    );
+  });
+
+  it("words every reason, whatever the pet is doing", () => {
+    const base = derive(adult);
+    const health = (reason: HealthReason, elder: HealthView["elder"] = null): DerivedState => ({
+      ...base,
+      health: { trend: "steady", reason, elder },
+    });
+    const say = (reason: HealthReason, elder?: HealthView["elder"]): string =>
+      statusLine("Makoto", adult, health(reason, elder)).text;
+    expect(say({ kind: "need", need: "hunger" })).toBe("Makoto is doing fine. Health is falling: hunger is below 20%.");
+    expect(say({ kind: "need", need: "joy" })).toBe("Makoto is doing fine. Health is falling: joy is below 20%.");
+    expect(say({ kind: "sick" })).toBe("Makoto is doing fine. Health is falling: sickness.");
+    expect(say({ kind: "age" }, { linePercent: 77, meanPercent: 74 })).toBe(
+      "Makoto is doing fine. Health is falling with age: needs average 74%, today's line is 77%.",
+    );
+    expect(say({ kind: "age" })).toBe("Makoto is doing fine. Health is falling with age.");
+    expect(say({ kind: "regen" })).toBe("Makoto is doing fine. Health is coming back.");
+    expect(say({ kind: "holding" })).toBe(`Makoto is doing fine.${HOLDING}`);
+    expect(say({ kind: "full" })).toBe("Makoto is doing fine.");
+  });
+
+  it("keeps the sentence out of the death and egg lines", () => {
+    const dying = { ...hurt, diedAtTick: hurt.tick, causeOfDeath: "hunger" as const };
+    expect(line(dying)).toBe("Makoto starved. A new egg will appear soon.");
+    expect(elderFragment(dying)).toBeNull();
+    const egg = { ...hurt, bornAtTick: null };
+    expect(line(egg)).toBe("The egg is incubating…");
+    expect(elderFragment(egg)).toBeNull();
+  });
+});
+
+// An elder's hold line and the needs' average ride beside the sentence as a
+// fragment the page sets quieter, so it comes back as its own field.
+describe("the elder fragment", () => {
+  it("shows the line, then the average, even while health is rising", () => {
+    const state = { ...elder, healthRaw: HEALTH_MAX / 2 };
+    expect(line(state)).toBe("Makoto is taking it slow. Health is coming back.");
+    expect(elderFragment(state)).toBe("needs 60% · at 100%");
+  });
+
+  it("is there when nothing is moving, and when sickness is the cause", () => {
+    expect(elderFragment(elder)).toBe("needs 60% · at 100%");
+    const sick = { ...elder, healthRaw: HEALTH_MAX / 2, sick: true, sickSinceTick: elder.tick, needs: { ...elder.needs, hunger: 190_000 } };
+    expect(line(sick)).toContain("Health is falling: sickness.");
+    expect(elderFragment(sick)).toMatch(/^needs 60% · at \d+%$/);
+  });
+
+  it("steps aside when the sentence already gives both numbers", () => {
+    const state = { ...elder, healthRaw: HEALTH_MAX * 0.4, needs: thin };
+    expect(line(state)).toContain("needs average 30%, today's line is 60%");
+    expect(elderFragment(state)).toBeNull();
+  });
+
+  it("is absent before old age", () => {
+    expect(elderFragment(adult)).toBeNull();
+    expect(elderFragment({ ...adult, healthRaw: HEALTH_MAX / 2 })).toBeNull();
+    expect(elderFragment(born)).toBeNull();
+  });
+
+  it("is kept while the elder sleeps", () => {
+    expect(elderFragment({ ...elder, asleep: true, sleepReason: "NIGHT" })).toBe("needs 60% · at 100%");
   });
 });
 
@@ -167,11 +273,10 @@ describe("the wake countdown", () => {
   it("puts the countdown in the status line, whatever put the pet down", () => {
     for (const reason of ["NIGHT", "NAP", "LULLABY"] as const) {
       const asleep: PetState = { ...base, asleep: true, sleepReason: reason };
-      const line = statusLine("Makoto", asleep, derive(asleep), ctx);
-      expect(line).toContain("Wakes ");
+      expect(statusLine("Makoto", asleep, derive(asleep), ctx).text).toContain("Wakes ");
     }
     // And says nothing about waking when there is no schedule to read.
     const asleep: PetState = { ...base, asleep: true, sleepReason: "NIGHT" };
-    expect(statusLine("Makoto", asleep, derive(asleep))).not.toContain("Wakes ");
+    expect(statusLine("Makoto", asleep, derive(asleep)).text).not.toContain("Wakes ");
   });
 });
