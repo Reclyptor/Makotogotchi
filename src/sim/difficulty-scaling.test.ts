@@ -93,24 +93,49 @@ describe("reading presence off a state (SPEC §23.1)", () => {
   });
 });
 
+/** Whether moving between two presences is recorded, the head count holding still unless told otherwise. */
+const worth = (
+  from: number | undefined,
+  to: number,
+  rules: number,
+  heads: { from: number; to: number } = { from: DIFFICULTY_BASELINE, to: DIFFICULTY_BASELINE },
+): boolean =>
+  worthRecording(
+    from === undefined ? {} : { population: heads.from, populationPermille: from },
+    { named: heads.to, presencePermille: to },
+    rules,
+  );
+
 describe("recording thresholds", () => {
   it("records a move of a tenth or more, and ignores smaller ones", () => {
-    expect(worthRecording(whole(2), whole(3), UNCAPPED)).toBe(true); // 1.00× → 1.355×
-    expect(worthRecording(whole(2), whole(2), UNCAPPED)).toBe(false);
-    expect(worthRecording(whole(13), whole(40), UNCAPPED)).toBe(false); // both capped at 4×
-    expect(worthRecording(undefined, whole(2), UNCAPPED)).toBe(false); // baseline is already assumed
-    expect(worthRecording(undefined, whole(5), UNCAPPED)).toBe(true);
+    expect(worth(whole(2), whole(3), UNCAPPED)).toBe(true); // 1.00× → 1.355×
+    expect(worth(whole(2), whole(2), UNCAPPED)).toBe(false);
+    expect(worth(whole(13), whole(40), UNCAPPED)).toBe(false); // both capped at 4×
+    expect(worth(undefined, whole(2), UNCAPPED)).toBe(false); // baseline is already assumed
+    expect(worth(undefined, whole(5), UNCAPPED)).toBe(true);
   });
 
   it("ignores a fraction of a caretaker arriving, which is most measurements", () => {
     // Hourly measurement against a seventh-of-a-caretaker resolution would
     // otherwise write an event nearly every hour (SPEC §23.2).
-    expect(worthRecording(whole(6), whole(6) + Math.round(PRESENCE_SCALE / 7), UNCAPPED)).toBe(false);
+    expect(worth(whole(6), whole(6) + Math.round(PRESENCE_SCALE / 7), UNCAPPED)).toBe(false);
+  });
+
+  it("records a change in the head count even when the multiplier is pinned at the ceiling", () => {
+    // Ruleset 3 stops the multiplier at about five caretakers' presence, but
+    // the count it is shown beside, and the quests' hands, keep following the room.
+    expect(worth(whole(6), whole(20), 3, { from: 6, to: 20 })).toBe(true);
+    expect(worth(whole(6), whole(20), 3)).toBe(false);
+    expect(worth(whole(6), whole(6), 3, { from: 6, to: 7 })).toBe(true);
+    expect(worth(whole(6), whole(6), 3, { from: 6, to: 6 })).toBe(false);
+    // Unrecorded reads as the baseline head count, as everywhere else.
+    expect(worth(undefined, whole(2), 3)).toBe(false);
+    expect(worth(undefined, whole(2), 3, { from: DIFFICULTY_BASELINE, to: 3 })).toBe(true);
   });
 
   it("records a shrinking community too, so difficulty comes back down", () => {
-    expect(worthRecording(whole(8), whole(3), UNCAPPED)).toBe(true);
-    expect(worthRecording(whole(6), whole(2), UNCAPPED)).toBe(true);
+    expect(worth(whole(8), whole(3), UNCAPPED)).toBe(true);
+    expect(worth(whole(6), whole(2), UNCAPPED)).toBe(true);
   });
 });
 

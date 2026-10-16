@@ -20,7 +20,7 @@ import { PushDispatcher } from "./push/dispatcher";
 import { pushConfigured, webPushSender } from "./push/sender";
 import { CURRENT_RULES_VERSION, TICK_SECONDS, TICKS_PER_HOUR } from "@/sim/tuning";
 import { ambientAt } from "@/sim/ambient";
-import { presencePermilleOf, worthRecording } from "@/sim/difficulty";
+import { worthRecording } from "@/sim/difficulty";
 import { activeCaretakers } from "./population";
 import { subscribeToEvents } from "./stream/hub";
 import { primeRoomCache } from "./snapshot";
@@ -151,9 +151,10 @@ const boot = async (): Promise<Runtime> => {
       if (!successor && isAlive(state) && state.tick - lastPopulationTick >= TICKS_PER_HOUR) {
         lastPopulationTick = state.tick;
         const measured = await activeCaretakers(database, state.tick);
-        // Difficulty follows presence, so presence is what decides whether the
-        // measurement is worth a log entry (SPEC §23.2).
-        if (worthRecording(presencePermilleOf(state), measured.presencePermille, rulesVersionOf(state))) {
+        // Difficulty follows presence, so presence decides whether the
+        // measurement is worth a log entry, as does the head count shown
+        // beside it (SPEC §23.2).
+        if (worthRecording(state, measured, rulesVersionOf(state))) {
           await engine.population(current, measured);
         }
       }

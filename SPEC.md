@@ -3405,9 +3405,10 @@ quests' bar (which reads what decay reads). The table and the interpolation are
 unchanged below the cap, so the table's entries from six caretakers upward read
 2.00× under ruleset 3. The ceiling was lowered because at 4× one eight-hour
 waking gap starved an elder in a room of twenty, so the better the community
-did the less any lapse was survivable. The night exemption stays. A crowd past
-the cap is no longer worth a `POPULATION` event, since the multiplier it
-recorded would not move (`worthRecording` reads the ruleset too).
+did the less any lapse was survivable. The night exemption stays. Past the cap
+the multiplier no longer moves with presence, so `worthRecording` reads the
+ruleset too; it still records whenever the head count changes, because the
+count is shown beside the multiplier (§23.3) and sizes the quests' hands.
 
 ### 23.2 Determinism
 

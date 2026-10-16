@@ -99,7 +99,18 @@ export const careMultiplierOf = (state: PetState): number =>
 export const careMultiplier = (presencePermille: number | undefined, rules: number): number =>
   careMultiplierPermille(presencePermille, rules) / 1000;
 
-/** Whether a newly measured presence is worth recording as an event. */
-export const worthRecording = (recorded: number | undefined, measured: number, rules: number): boolean =>
-  Math.abs(careMultiplierPermille(measured, rules) - careMultiplierPermille(recorded, rules)) >=
-  DIFFICULTY_STEP_PERMILLE;
+/**
+ * Whether a newly measured community is worth recording as an event: the
+ * multiplier moved a step, or the head count did. The count is displayed
+ * (§23.3) and sizes the quests' hands (§21.7), and a ceiling stops the
+ * multiplier moving long before it stops the count.
+ */
+export const worthRecording = (
+  recorded: { population?: number; populationPermille?: number },
+  measured: { named: number; presencePermille: number },
+  rules: number,
+): boolean =>
+  Math.abs(
+    careMultiplierPermille(measured.presencePermille, rules) -
+      careMultiplierPermille(presencePermilleOf(recorded), rules),
+  ) >= DIFFICULTY_STEP_PERMILLE || measured.named !== (recorded.population ?? DIFFICULTY_BASELINE);

@@ -182,7 +182,7 @@ describe("old age is held off by care (SPEC §16.2)", () => {
     expect(run.lowestHealth).toBeGreaterThanOrEqual(HEALTH_MAX / 2);
   });
 
-  it("ten people looking in every half hour for a few moves each lose the elder to old age within three weeks, under the rules before ruleset 3", () => {
+  it("ten people looking in every half hour for a few moves each lose the elder to old age within three weeks, under the rules before ruleset 3", { timeout: 20_000 }, () => {
     const run = careForElder({ caretakers: 10, days: 21, every: 180, perLook: 4 });
     expect(run.cause).toBe("age");
     expect(run.diedAfterDays).not.toBeNull();

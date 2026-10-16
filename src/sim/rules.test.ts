@@ -206,9 +206,12 @@ describe("the community multiplier's ceiling (SPEC §23)", () => {
     expect(questTarget(QUESTS["feast-day"], 13, whole(13), 3)).toBe(20);
   });
 
-  it("stops recording a crowd once it no longer moves the multiplier", () => {
-    expect(worthRecording(whole(6), whole(20), 2)).toBe(true);
-    expect(worthRecording(whole(6), whole(20), 3)).toBe(false);
+  it("stops recording a crowd's presence once it no longer moves the multiplier, but still records its head count", () => {
+    const recorded = { population: 6, populationPermille: whole(6) };
+    const sameHeads = { named: 6, presencePermille: whole(20) };
+    expect(worthRecording(recorded, sameHeads, 2)).toBe(true);
+    expect(worthRecording(recorded, sameHeads, 3)).toBe(false);
+    expect(worthRecording(recorded, { ...sameHeads, named: 20 }, 3)).toBe(true);
   });
 });
 
