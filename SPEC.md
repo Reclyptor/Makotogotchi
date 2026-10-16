@@ -135,32 +135,73 @@ drainPerTick = HEALTH_DRAIN_PER_NEED × Σ max(0, CRITICAL_THRESHOLD − value) 
 regenPerTick = HEALTH_REGEN             if no need is below CRITICAL_THRESHOLD (not ELDER)
              = HEALTH_REGEN_ELDER       if ELDER, no need is below CRITICAL_THRESHOLD, and vigour = 1
 
-vigour (ELDER only) = clamp((mean(needs) − CRITICAL_THRESHOLD) / (ELDER_HOLD_MEAN − CRITICAL_THRESHOLD), 0, 1)
-                      computed in per-mille integer arithmetic; ELDER_HOLD_MEAN = 600_000 (60%)
+hold(rampDay)       = min(ELDER_HOLD_CAP, ELDER_HOLD_START + ELDER_HOLD_STEP × rampDay)
+                      ELDER_HOLD_START = 600_000 (60%), ELDER_HOLD_STEP = 25_000 (2.5 points a day),
+                      ELDER_HOLD_CAP = 850_000 (85%, reached on ramp day 10)
+vigour (ELDER only) = clamp((mean(needs) − (hold − ELDER_BAND)) / ELDER_BAND, 0, 1)
+                      ELDER_BAND = 100_000 (10 points); per-mille integer arithmetic
+                      with no ramp (rampDay = null), the original rule:
+                      clamp((mean − CRITICAL_THRESHOLD) / (ELDER_HOLD_START − CRITICAL_THRESHOLD), 0, 1)
 ```
 
-**Old age is held off by care, not by a clock.** The first generation died of
-age at 26 days under attentive care from ten people, and the community said
-so: a death nobody could have prevented is not a stake, it is the game
-killing the pet. The age drain therefore scales with how well the elder is
-kept. With the four needs averaging 60% or better, `vigour` is 1: age drains
-nothing and the elder regains health slowly (`HEALTH_REGEN_ELDER`, a quarter
-of the adult rate — about four days from empty to full). At a 40% average it
-fades at half the age rate; at a 20% average, or below, at the full rate
-(about ten days from full), and any need below critical adds the ordinary
-neglect drain on top. The rule reads the *mean* on purpose: an elder loses
-close to half its hunger overnight at ten caretakers, so any bar applied to
-the instantaneous needs is crossed every night, and the elder would fade
-regardless. Averaged, the night is paid for by the day, a lapse shows as a
-slow decline, and a rally reverses it. An elder is still more work than an
-adult — its needs decay ×1.2 — and two caretakers cannot hold one (§16.2);
-that is the group's job, which is the point.
+**Old age is held off by care, not by a clock — and the care asked for rises.**
+The first generation died of age at 26 days under attentive care from ten
+people, and the community said so: a death nobody could have prevented is not
+a stake, it is the game killing the pet. The age drain therefore scales with
+how well the elder is kept. Held to a flat 60% mean, though, an elder was
+kept indefinitely by any group that cleared one easy bar, and the second
+generation passed a month. So the line climbs: an elder stays technically
+keepable for good, but every day it takes a little more.
+
+`vigour` reads the *mean* of the four needs against a hold line that starts at
+60% and rises 2.5 points per elder day to a cap of 85%, which it reaches on
+the tenth day. At or above the line `vigour` is 1: age drains nothing and the
+elder regains health slowly (`HEALTH_REGEN_ELDER`, a quarter of the adult rate
+— about four days from empty to full). Below it, `vigour` falls linearly across
+a fixed band, `ELDER_BAND`, ten points wide, and the age drain is
+`HEALTH_DRAIN_AGE × (1 − vigour)`: half rate five points under the line, full
+rate (about ten days from full health) ten under it. Any need below critical
+adds the ordinary neglect drain on top. A band that travels with the line,
+rather than one anchored at the critical threshold, is what gives a shortfall
+teeth: with the line at 85%, a 75% mean costs the full age drain.
+
+The rule reads the mean on purpose: an elder loses close to half its hunger
+overnight at ten caretakers, so any bar applied to the instantaneous needs is
+crossed every night, and the elder would fade regardless. Averaged, the night
+is paid for by the day, a lapse shows as a slow decline, and a rally reverses
+it. An elder is still more work than an adult — its needs decay ×1.2 — and two
+caretakers cannot hold one (§16.2); that is the group's job, which is the
+point. What it asks of that group is keen, though. Against the real
+simulation, the 85% line is held only by a bot that refeeds on every cooldown,
+minute by minute, for tens of thousands of actions a month; ten people looking
+in every half hour lose the elder within three weeks (§16.2).
+
+**The ramp starts by event.** `rampDay` is the number of whole days since the
+ramp began, and when that was is part of the history, so it enters the fold
+the only honest way, as an event (§23.2's precedent). The leader appends one
+`ELDER_RAMP` per generation, at the first observation in which the state does
+not yet carry `PetState.elderRampFromTick`; the reducer sets that field to the
+event's tick and ignores any later event. The ramp counts from the later of
+that tick and the first elder day, so a pet still young when the event lands
+ages by the flat rule until it is an elder and then ramps from its first elder
+day. For the generation alive when the ramp shipped, the event lands at release
+and the line starts at 60% on release day. For a new generation it lands just
+after the hatch.
+
+With no `ELDER_RAMP` the field is absent — absent, not null, so a serialized
+state is byte-identical — and `rampDay` is `null`: the original rule,
+`clamp((mean − 20%) / (60% − 20%))`. Every log written before the ramp folds
+as it always did, and the golden fixtures are untouched. The append is
+idempotent: the engine re-checks the field under the write lock, and the first
+append sets the very field that check reads, so two leaders, a retry or a
+restart cannot double-append.
 
 `causeOfDeath` is the largest drain source at the moment of death — the need
 with the deepest deficit, sickness, or age — with a deterministic tie order
 (needs, then sickness, then age). Instantaneous attribution at the death tick
-keeps the rule a pure function of state; a rolling "final hour" account would
-require per-tick history the state deliberately does not carry.
+keeps the rule a pure function of state; a rolling account would require
+per-tick history the state deliberately does not carry. A pet that dies of
+old age under devoted care is a *win*, and the memorial records it as such.
 
 Consequences that fall out of this for free, rather than being special-cased:
 
@@ -172,21 +213,14 @@ Consequences that fall out of this for free, rather than being special-cased:
   meaningfully extends the pet's life. This is the "a lone caretaker can
   rescue it" goal, satisfied by the shape of the rule rather than by a
   special case.
-- Untreated illness is dangerous on its own, independent of needs.
+- Sickness drains `HEALTH_DRAIN_SICK` a tick, exactly the adult regen rate: a
+  sick adult with no critical need holds its health instead of gaining it, and
+  one with a critical need loses it faster. Alone it is not fatal to an adult.
+  An elder's regen is a quarter of that, so a sick elder loses the difference —
+  full health to zero in about 31 hours. Medicine cures it and restores a
+  little health.
 
-When `health` reaches `0`, the pet dies. `causeOfDeath` records whichever
-need contributed the largest share of the health drained over the final hour —
-so the memorial can read "starved", "died of illness", "died of loneliness".
-
-**Old age.** An `ELDER` pet's needs decay faster, its health regeneration is
-disabled, and `HEALTH_DRAIN_AGE` drains its health unconditionally every tick
-— so its death is arithmetically certain, not merely likely: roughly 9–10
-elder days from full health under perfect care. (Disabling regeneration alone
-would *not* accomplish this — a well-tended elder would take zero drain and
-live forever; the unconditional term is what makes mortality a theorem.)
-`causeOfDeath` reads as old age when the age term dominates the final hour's
-drain. A pet that dies of old age under devoted care is a *win*, and the
-memorial records it as such.
+When `health` reaches `0`, the pet dies.
 
 ### 2.4 Why Griefing Is Impossible
 
@@ -533,7 +567,7 @@ act. When an elder's health crosses below `FADING_THRESHOLD` (50%) on the
 way down, projection emits a `FADING` milestone — a crossing, like
 `CRITICAL`, so it fires once per descent. It is a push trigger (§12) and a
 feed line, and while an elder's health is below the threshold and its needs
-average under `ELDER_HOLD_MEAN`, the status line (§11.7) reads
+average short of the day's hold line, the status line (§11.7) reads
 "Makoto is fading. A little more care each day brings it back." rather than
 anything about doing fine. Once the group lifts the average past the line
 the drift turns and the line says so ("is recovering").
@@ -832,13 +866,21 @@ health (raw units; HEALTH_MAX = 10¹²):
   HEALTH_DRAIN_PER_NEED = 550         ; × Σ max(0, CRITICAL_THRESHOLD − need), per tick
                                       ; worst case 4.4×10⁸/tick → ~6.3h from full
                                       ; under total deprivation
-  HEALTH_DRAIN_SICK     = 120_000_000 ; per tick untreated (~23h to kill from full —
-                                      ; an overnight onset leaves the day shift a
-                                      ; real chance to answer the push alert)
+  HEALTH_DRAIN_SICK     = 120_000_000 ; per tick untreated, equal to HEALTH_REGEN: it
+                                      ; cancels an adult's regen, and kills from full in
+                                      ; ~23h where nothing regenerates (a critical need)
+                                      ; or ~31h for an elder at full vigour — an
+                                      ; overnight onset leaves the day shift a real
+                                      ; chance to answer the push alert
   HEALTH_DRAIN_AGE      = 12_000_000  ; per tick, ELDER only, × (1 − vigour):
-                                      ; zero with needs averaging ≥ 60%, full below 20%
-                                      ; (~9.6 elder days from full when fully neglected)
-  ELDER_HOLD_MEAN       = 600_000     ; the mean of needs at which age drains nothing
+                                      ; zero with the needs' mean at the hold line, full
+                                      ; a band below it (~9.6 elder days from full when
+                                      ; fully neglected)
+  ELDER_HOLD_START      = 600_000     ; the hold line on ramp day 0, and the whole of the
+                                      ; flat rule histories from before the ramp fold by
+  ELDER_HOLD_STEP       =  25_000     ; the line rises this much each ramp day…
+  ELDER_HOLD_CAP        = 850_000     ; …to this ceiling, reached on day 10
+  ELDER_BAND            = 100_000     ; how far under the line vigour falls to 0
   HEALTH_REGEN          = 120_000_000 ; per tick, only when nothing is critical
                                       ; (~23h from zero to full); adults only
   HEALTH_REGEN_ELDER    =  30_000_000 ; per tick, ELDER with vigour 1 and nothing critical
@@ -2067,10 +2109,18 @@ a lone caretaker can rescue:
 a lone caretaker cannot sustain:
     the same bot, alone, cannot keep the mean of needs ≥ 50% across
     pet-days 2–8 of a generation
-old age is held off by care:
-    an ELDER whose needs are held at a 60% mean keeps ≥ 90% health across
-    30 elder-days; one held at a 30% mean, nothing ever critical, dies of
-    age within 11–14 days
+old age is held off by care (ten caretakers, sickness cured on sight):
+    a net-gain bot — acts the moment cooldowns and budget permit, taking
+    the action with the largest restoration net of the pet's own cost, so
+    it pets for joy unless playing pays — looking in every minute keeps a
+    fresh elder alive, at 50% health or better, for 30 elder-days
+    ten people looking in every half hour, four moves each, lose it to old
+    age in 8–18 days
+    an elder whose needs are held at a 90% mean keeps ≥ 90% health across
+    30 elder-days; held at 70% it dies of age in 14–18 days, at 60% in 10–14
+    (histories from before the ramp keep the flat rule, pinned in
+    project.test.ts: held at 60% an elder keeps ≥ 90% health for 30 days,
+    held at 30% it dies of age in 11–14)
 ```
 
 The last three encode §1.2's design goals as executable assertions — with the

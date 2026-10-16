@@ -26,9 +26,12 @@ export const HEALTH_MAX = 1_000_000_000_000; // 10^12
 // dial holds: abandonment from full is fatal ~42–48h in, ~12h after the
 // first need goes critical.
 export const HEALTH_DRAIN_PER_NEED = 550;
-// Untreated sickness kills from full health in ~8333 ticks (~23h) — an
-// overnight onset leaves the day shift a real chance to respond to the push
-// alert, matching the ~24h difficulty dial. Compounds with need deficits.
+// Untreated sickness drains exactly what an adult regenerates, so on its own
+// it only stalls recovery. Where nothing regenerates (a critical need) it
+// kills from full health in ~8333 ticks (~23h) — an overnight onset leaves the
+// day shift a real chance to respond to the push alert, matching the ~24h
+// difficulty dial — and an elder, whose regen is a quarter of that, loses the
+// difference in ~31h. Compounds with need deficits.
 export const HEALTH_DRAIN_SICK = 120_000_000;
 // ELDER-only age drain at zero vigour: ~9.65 elder days from full when the
 // elder is left entirely to itself. Care scales it away (SPEC §2.3).
