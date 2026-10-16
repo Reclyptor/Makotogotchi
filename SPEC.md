@@ -1570,11 +1570,14 @@ the gravestone wears nothing.
 ```
 
 - **The critical line is drawn on each need bar.** A 1px tick at
-  `CRITICAL_THRESHOLD` (20%, read from `tuning.ts`, never hardcoded), painted
+  `CRITICAL_THRESHOLD` (20%, read from `tuning.ts` through the shared
+  `CRITICAL_PERCENT` in `app/copy/health.ts`, never hardcoded), painted
   over the fill in `foreground` at about 35% so it shows on the dark track
   and on a bright bar alike. It is a landmark and not a label: `aria-hidden`,
-  no text, and the health bar has none because health has no such line.
-  Players could see a need fall but not where "low" began.
+  no text, and only the four needs carry it: the health bar is flagged low
+  under 20% like the others, but the tick marks where a *need* turns
+  critical, and health has no such line to point at. Players could see a need
+  fall but not where "low" began.
 - Action buttons show live cooldowns and disable with a *reason* on hover and
   in an accessible label: "Makoto is still eating (23s)", "Makoto is asleep",
   "Makoto isn't sick".
@@ -1690,7 +1693,7 @@ wins:
 | 2 | egg | "The egg is incubating…" |
 | 3 | asleep | by `sleepReason`: "is asleep for the night." / "is napping until the energy comes back." / "was sung to sleep." |
 | 4 | any ailment | "is starving, filthy and sad" — worst first, in §2.9's order — with sickness dated last: "just fell sick" (under an hour), "has been sick for 5 hours", "since yesterday", "for 3 days" |
-| 5 | health below 25% (§2.3) | "is weak." while health is climbing back; "is dangerously weak." while it is not — an elder, a sick pet, or a critical need. An elder fading below 50% reads "is fading." |
+| 5 | health below 25% (§2.3) | "is weak." while health is climbing back; "is dangerously weak." while it is not — an elder, a sick pet, or a critical need. Fading takes over only between 25% and 50%, once health has left this band: an elder there reads "is fading." |
 | 6 | a need under 50% | the lowest one: "is getting hungry." / "is getting sleepy." / "could use a bath." / "is getting bored." |
 | 7 | well | by stage: "is small and curious." / "is full of beans." / "is growing fast." / "is doing fine." / "is taking it slow." |
 
@@ -1706,8 +1709,16 @@ The reason is the largest drain; ties go need, then sickness, then age.
 | sick | "Health is falling: sickness."; just "Health is falling." when the headline already says the pet is sick |
 | age | "Health is falling with age." |
 | regen | "Health is coming back." |
-| holding | "Health is holding steady." — drains and recovery cancel out, as for a sick pet that is fed |
+| holding | alive, this means sickness exactly cancels recovery (a sick pet that is fed). Below full health: "Health is stuck: sickness stops it coming back.", or just "Health is stuck." when the headline already says the pet is sick. At full health there is nothing to be stuck below: "Health is holding steady." |
 | full | nothing |
+
+**Danger is not buried.** The headline carries "is dangerously weak." only
+when nothing outranks it. A sleeping or sick pet at under a quarter health
+gets a headline about the sleep or the sickness, so whenever health is frail
+and the headline did not say so the sentence does: "Health is dangerously low
+and falling: hunger is below 20%.", "…and falling with age.", "…and stuck:
+sickness stops it coming back." A recovering pet is not in danger, so "Health
+is coming back." stands alone.
 
 A cause is never said twice. The headline names an ailment only on the
 ailment line (rule 4), and a need can be below the critical line without
@@ -1724,10 +1735,16 @@ moving, today's hold line and where the needs average now follow the
 sentence as a small muted fragment: "needs 72% · at 81%" (line, then
 average). The numbers live only there, so "falling with age" is a short
 sentence and the fragment says by how much. `statusLine()` returns
-`{ text, elder }` so the page can set the fragment quieter (smaller, 60%
-opacity, tabular figures) without cutting it out of a string.
+`{ text, elder }` so the page can set the fragment quieter (smaller, 80%
+opacity, which keeps the muted text above AA contrast, tabular figures)
+without cutting it out of a string. It sits last on the line, after the
+venue clause, as a footnote to the sentence. The terse form is
+`aria-hidden`; a screen-reader-only sibling reads the whole of it ("Today's
+line is 72%; needs average 81%."), because a `title` tooltip is neither
+reliably exposed nor shown on touch.
 
-The venue clause ("Out at the shrine path today.", §22.8) follows on its own.
+The venue clause ("Out at the shrine path today.", §22.8) comes before the
+fragment, on its own.
 
 ---
 
