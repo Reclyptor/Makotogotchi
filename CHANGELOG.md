@@ -6,6 +6,22 @@ follow [Semantic Versioning]. Pre-1.0, so game-rule changes are minor bumps.
 [Keep a Changelog]: https://keepachangelog.com/en/1.1.0/
 [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
 
+## [0.5.1] — 2026-10-16
+
+### Changed
+
+- **Three minigames are named for what they are.** Coffee Run is now Sneaky
+  Brew (nobody runs; you brew before Natsumi walks in), Wheel Sprint is now
+  Wheel Rhythm (a timing game), and Sausage Party, where no sausage ever
+  appears, is now Tea Party 🫖. Titles are display-only: the ids that event
+  logs, wishes, quirks and records store are unchanged, so history and
+  records carry over (`8aae599`)
+
+### Fixed
+
+- The Bubble Pop containment property asserts once per flight instead of
+  twice per sample, so it no longer times out on CI (`3c12638`)
+
 ## [0.5.0] — 2026-10-16
 
 Old age becomes a real stake again. Every event log written before this
