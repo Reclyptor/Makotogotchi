@@ -6,6 +6,17 @@ follow [Semantic Versioning]. Pre-1.0, so game-rule changes are minor bumps.
 [Keep a Changelog]: https://keepachangelog.com/en/1.1.0/
 [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
 
+## [0.5.3] — 2026-10-16
+
+### Changed
+
+- The game components carry their current titles: `SneakyBrew`,
+  `WheelRhythm`, `TeaParty` (rules in `teaPartyRules.ts`) and `NatsumiSays`.
+  The roster ids stay as they are — event logs, wishes, quirks and records
+  store them, and quirks pick by their order — and `MINIGAME_IDS` now says
+  so, naming the title beside each renamed id. No player-visible change
+  (`4e1783f`)
+
 ## [0.5.2] — 2026-10-16
 
 ### Changed
