@@ -6,6 +6,31 @@ follow [Semantic Versioning]. Pre-1.0, so game-rule changes are minor bumps.
 [Keep a Changelog]: https://keepachangelog.com/en/1.1.0/
 [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
 
+## [0.7.0] — 2026-10-16
+
+A well-cared-for Makoto can be kept alive. Under ruleset 2 ordinary good care
+lost an elder around elder day 16–21, and one eight-hour waking gap starved an
+elder in a room of twenty. Ruleset 3 (`RULES{3}`, appended once on deploy)
+changes two numbers; every log written before it folds byte-identically.
+
+### Changed
+
+- **The community multiplier stops at 2×**, not 4×, for decay, the caretaker
+  allowance and the care-quest bar alike, so supply and demand stay matched.
+  The night exemption stays (`0321229`)
+- **The elder line stops at 75%** (70% for FRAIL), reached on ramp day 6
+  (day 4 for FRAIL); it still rises 2.5 points a day from 60% (`0321229`)
+- Simulated over 45 elder days, good care (and even lazy care) keeps the
+  elder alive at 5, 10 and 20 caretakers, with or without a weekly 8-hour
+  gap; the thinnest case, five people with a weekly gap, dips to about 24%
+  health and recovers. Abandonment still kills within about a day
+
+### Fixed
+
+- The weekly head count is recorded whenever it changes, not only when it
+  moves the multiplier, so "N named caretakers" and the many-hands quest
+  stay current above the ceiling (`29a67e5`)
+
 ## [0.6.0] — 2026-10-16
 
 Health you can read, and kinder rules around it. Every event log written
