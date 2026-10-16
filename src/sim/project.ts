@@ -16,11 +16,12 @@
 //   7. sickness onset draw (keyed by absolute tick, pre-drain health)
 //   8. health drain / regeneration, death check
 
-import { isAlive, stageAt, type CauseOfDeath, type PetState, type ProjectionContext } from "./model";
-import { healthTerms } from "./health";
+import { isAlive, rulesVersionOf, stageAt, type PetState, type ProjectionContext } from "./model";
+import { causeOfDeath, healthTerms } from "./health";
 import { careMultiplierPermille, presencePermilleOf } from "./difficulty";
 import { draw32, RNG_PURPOSE } from "./rng";
 import {
+  BASELINE_CARE_PERMILLE,
   CRITICAL_THRESHOLD,
   decayRates,
   ENERGY_SLEEP_RECOVERY,
@@ -28,11 +29,11 @@ import {
   FORM_STEADY_AT,
   FORM_THRIVING_AT,
   FADING_THRESHOLD,
-  HEALTH_DRAIN_PER_NEED,
   HEALTH_MAX,
   NAP_WAKE_THRESHOLD,
   NEED_KEYS,
   NEED_MAX,
+  RULES_SINCE,
   sickOnsetThreshold,
   type LifeStage,
 } from "./tuning";
@@ -72,6 +73,9 @@ export const project = (input: PetState, toTick: number, ctx: ProjectionContext)
   // whole projection: only a POPULATION event changes it, and events are
   // folded between projections, never during one.
   const difficultyPermille = careMultiplierPermille(presencePermilleOf(state));
+  // Under ruleset 2 the night is exempt from it (SPEC §23): only a RULES event
+  // changes this, and events fold between projections.
+  const nightExempt = rulesVersionOf(state) >= RULES_SINCE.NIGHT_EXEMPT;
 
   for (let tick = state.tick + 1; tick <= toTick; tick++) {
     // 1. Stage evolution.
@@ -117,7 +121,7 @@ export const project = (input: PetState, toTick: number, ctx: ProjectionContext)
       stage as Exclude<LifeStage, "EGG">,
       state.form,
       state.asleep ? "SLEEP" : "WAKE",
-      difficultyPermille,
+      nightExempt && phase === "SLEEP" ? BASELINE_CARE_PERMILLE : difficultyPermille,
     );
     const before = { ...state.needs };
     for (const need of NEED_KEYS) {
@@ -163,26 +167,16 @@ export const project = (input: PetState, toTick: number, ctx: ProjectionContext)
 
     // 8. Health. The terms (and why deficit drain and regeneration never
     // coexist) live in health.ts, shared with derive (SPEC §2.3).
-    const { drainNeeds, drainSick, drainAge, regen, worstNeed } = healthTerms(state, tick);
+    const terms = healthTerms(state, tick);
     const healthBefore = state.healthRaw;
-    state.healthRaw = clampNeed(state.healthRaw - drainNeeds - drainSick - drainAge + regen, HEALTH_MAX);
+    state.healthRaw = clampNeed(state.healthRaw - terms.drainNeeds - terms.drainSick - terms.drainAge + terms.regen, HEALTH_MAX);
     // An elder crossing below the fading line, once per descent (SPEC §2.10).
     if (stage === "ELDER" && healthBefore >= FADING_THRESHOLD && state.healthRaw < FADING_THRESHOLD) {
       milestones.push({ kind: "FADING", tick });
     }
 
     if (state.healthRaw === 0) {
-      // Cause: the largest drain source at the moment of death, with a
-      // deterministic tie order of needs → sickness → age.
-      let cause: CauseOfDeath = worstNeed ?? "sickness";
-      let causeMagnitude = worstNeed ? HEALTH_DRAIN_PER_NEED * (CRITICAL_THRESHOLD - state.needs[worstNeed]) : 0;
-      if (drainSick > causeMagnitude) {
-        cause = "sickness";
-        causeMagnitude = drainSick;
-      }
-      if (drainAge > causeMagnitude) {
-        cause = "age";
-      }
+      const cause = causeOfDeath(state, terms);
       state.diedAtTick = tick;
       state.causeOfDeath = cause;
       state.tick = toTick;

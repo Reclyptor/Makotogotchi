@@ -12,6 +12,15 @@ export const TICK_SECONDS = 10;
 // gating the new rule on it. Version 1 is every history that predates the
 // event.
 export const CURRENT_RULES_VERSION = 2;
+/** The ruleset that introduced each gated rule, so no call site carries a bare number. */
+export const RULES_SINCE = {
+  /** An elder dying with no need critical, below its line, dies of age (SPEC §2.3). */
+  AGE_CREDIT: 2,
+  /** FRAIL elders' hold line stops at `ELDER_HOLD_CAP_FRAIL` (SPEC §2.3). */
+  FRAIL_CAP: 2,
+  /** No community scaling of need decay while the schedule says SLEEP (SPEC §23). */
+  NIGHT_EXEMPT: 2,
+} as const;
 export const TICKS_PER_HOUR = 360;
 export const TICKS_PER_DAY = 8640;
 
@@ -56,17 +65,25 @@ export const LEGACY_ELDER_HOLD_MEAN = 600_000;
 export const ELDER_HOLD_START = 600_000; // 60%
 export const ELDER_HOLD_STEP = 25_000; // 2.5 points a day
 export const ELDER_HOLD_CAP = 850_000; // 85%, reached on ramp day 10
+// A FRAIL elder is asked for less (SPEC §2.3): its needs decay 15% faster than
+// a STEADY one's, so the same line costs it more care. Its line stops here, on
+// ramp day 8. Only histories under ruleset 2 read it (`RULES_SINCE.FRAIL_CAP`).
+export const ELDER_HOLD_CAP_FRAIL = 800_000; // 80%
 export const ELDER_BAND = 100_000; // 10 points
-export const elderHoldMean = (rampDay: number): number =>
-  Math.min(ELDER_HOLD_CAP, ELDER_HOLD_START + ELDER_HOLD_STEP * rampDay);
+export const elderHoldMean = (rampDay: number, form: AdultForm | null = null): number =>
+  Math.min(form === "FRAIL" ? ELDER_HOLD_CAP_FRAIL : ELDER_HOLD_CAP, ELDER_HOLD_START + ELDER_HOLD_STEP * rampDay);
 export const needsMean = (needs: Record<NeedKey, number>): number =>
   Math.floor((needs.hunger + needs.energy + needs.hygiene + needs.joy) / 4);
 /** Today's hold line: the legacy flat one before any ramp, the climbing one after. */
-export const elderHoldLine = (rampDay: number | null): number =>
-  rampDay === null ? LEGACY_ELDER_HOLD_MEAN : elderHoldMean(rampDay);
-export const elderVigourPermille = (needs: Record<NeedKey, number>, rampDay: number | null): number => {
+export const elderHoldLine = (rampDay: number | null, form: AdultForm | null = null): number =>
+  rampDay === null ? LEGACY_ELDER_HOLD_MEAN : elderHoldMean(rampDay, form);
+export const elderVigourPermille = (
+  needs: Record<NeedKey, number>,
+  rampDay: number | null,
+  form: AdultForm | null = null,
+): number => {
   const mean = needsMean(needs);
-  const hold = elderHoldLine(rampDay);
+  const hold = elderHoldLine(rampDay, form);
   const floor = rampDay === null ? CRITICAL_THRESHOLD : hold - ELDER_BAND;
   return Math.min(1000, Math.max(0, Math.floor(((mean - floor) * 1000) / (hold - floor))));
 };
@@ -151,6 +168,9 @@ export const MULTIPLIED_NEEDS: readonly NeedKey[] = NEED_KEYS.filter((need) => n
 
 export type DecayRates = Record<NeedKey, number>;
 
+/** The care multiplier that leaves the decay table as written (1.00×). */
+export const BASELINE_CARE_PERMILLE = 1000;
+
 const decayFor = (stage: Exclude<LifeStage, "EGG">, form: AdultForm | null, phase: SleepPhase): DecayRates => {
   const rates = {} as Record<NeedKey, number>;
   for (const need of NEED_KEYS) {
@@ -175,11 +195,11 @@ export const decayRates = (
   form: AdultForm | null,
   phase: SleepPhase,
   /** Community difficulty in per-mille (SPEC §23); 1000 leaves the table as-is. */
-  multiplierPermille = 1000,
+  multiplierPermille = BASELINE_CARE_PERMILLE,
 ): DecayRates => {
   const rates = DECAY_TABLE.get(`${stage}|${form ?? "-"}|${phase}`);
   if (!rates) throw new Error(`no decay rates for ${stage}/${form}/${phase}`);
-  if (multiplierPermille === 1000) return rates;
+  if (multiplierPermille === BASELINE_CARE_PERMILLE) return rates;
   // Integer arithmetic throughout, so a scaled rate is as exactly reproducible
   // as the table it came from. Energy is exempt: see MULTIPLIED_NEEDS.
   const scaled = { ...rates } as DecayRates;

@@ -3,7 +3,7 @@
 // health is moving and why — so the screen can never disagree with the death
 // clock about what is draining it.
 
-import { elderRampDayAt, stageAt, type PetState } from "./model";
+import { elderRampDayAt, rulesVersionOf, stageAt, type CauseOfDeath, type PetState } from "./model";
 import {
   CRITICAL_THRESHOLD,
   elderHoldLine,
@@ -15,6 +15,7 @@ import {
   HEALTH_REGEN_ELDER,
   needsMean,
   NEED_KEYS,
+  RULES_SINCE,
   type NeedKey,
 } from "./tuning";
 
@@ -52,10 +53,12 @@ export const healthTerms = (state: PetState, tick: number): HealthTerms => {
   let elder: HealthTerms["elder"] = null;
   if (stageAt(state.bornAtTick, tick) === "ELDER") {
     const rampDay = elderRampDayAt(state, tick);
+    // The FRAIL cap only exists for a history lived under the rules that added it.
+    const form = rulesVersionOf(state) >= RULES_SINCE.FRAIL_CAP ? state.form : null;
     elder = {
-      holdPermille: Math.floor(elderHoldLine(rampDay) / 1000),
+      holdPermille: Math.floor(elderHoldLine(rampDay, form) / 1000),
       meanPermille: Math.floor(needsMean(state.needs) / 1000),
-      vigour: elderVigourPermille(state.needs, rampDay),
+      vigour: elderVigourPermille(state.needs, rampDay, form),
     };
   }
 
@@ -68,4 +71,32 @@ export const healthTerms = (state: PetState, tick: number): HealthTerms => {
     worstNeed,
     elder,
   };
+};
+
+/**
+ * What to write on the gravestone, given the terms of the tick that emptied the
+ * bar (SPEC §2.3). A need below critical always wins — starvation is still
+ * starvation. From there the histories part ways:
+ *
+ * - Ruleset 2: an elder below its hold line dies of age, sick or not; anything
+ *   else of sickness.
+ * - Before it: the largest drain at that moment, with ties going needs, then
+ *   sickness, then age. A sick elder's 120M sickness term outweighs the age
+ *   drain at every vigour, so under that rule age could only ever be credited
+ *   to an elder who was not sick, and that is the rule old logs keep.
+ */
+export const causeOfDeath = (state: PetState, terms: HealthTerms): CauseOfDeath => {
+  const { worstNeed } = terms;
+  if (rulesVersionOf(state) >= RULES_SINCE.AGE_CREDIT) {
+    if (worstNeed !== null) return worstNeed;
+    return terms.elder !== null && terms.elder.vigour < 1000 ? "age" : "sickness";
+  }
+  let cause: CauseOfDeath = worstNeed ?? "sickness";
+  let magnitude = worstNeed !== null ? HEALTH_DRAIN_PER_NEED * (CRITICAL_THRESHOLD - state.needs[worstNeed]) : 0;
+  if (terms.drainSick > magnitude) {
+    cause = "sickness";
+    magnitude = terms.drainSick;
+  }
+  if (terms.drainAge > magnitude) cause = "age";
+  return cause;
 };
