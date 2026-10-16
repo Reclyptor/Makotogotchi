@@ -168,11 +168,17 @@ export default function Shell({ gameId, onClose, onReact }: ShellProps) {
   }, []);
 
   const Game = game.Component;
+  // A long press is the browser's gesture too: on a phone it starts a text
+  // selection (and on Android a context menu), and taking the touch over
+  // fires pointercancel — which a hold game rightly reads as letting go. So
+  // nothing in the dialog is selectable and the menu never opens; a run's
+  // hold belongs to the game.
   return (
     <div
       role="dialog"
       aria-label={`${def.title} minigame`}
-      className="fixed inset-0 z-10 flex items-center justify-center bg-black/70 p-4"
+      onContextMenu={(event) => event.preventDefault()}
+      className="fixed inset-0 z-10 flex items-center justify-center bg-black/70 p-4 select-none [-webkit-touch-callout:none]"
     >
       <div className="panel animate-pop flex w-full max-w-md flex-col items-center gap-3 !rounded-2xl p-5">
         <h2 className="text-sm font-semibold">
