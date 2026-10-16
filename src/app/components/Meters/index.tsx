@@ -7,7 +7,7 @@
 // alone.
 
 import type { DerivedState } from "@/sim/derive";
-import { NEED_KEYS, type NeedKey } from "@/sim/tuning";
+import { CRITICAL_THRESHOLD, NEED_KEYS, NEED_MAX, type NeedKey } from "@/sim/tuning";
 
 const METER_ROWS = [
   { key: "hunger", label: "Hunger", emoji: "🍖", hue: "#fb923c" },
@@ -17,7 +17,7 @@ const METER_ROWS = [
   { key: "health", label: "Health", emoji: "❤️", hue: "#fb7185" },
 ] as const;
 
-const CRITICAL_PERCENT = 20;
+const CRITICAL_PERCENT = (CRITICAL_THRESHOLD / NEED_MAX) * 100;
 
 /** The allowance is per need, and these are the same emoji the rows use. */
 const ALLOWANCE_EMOJI: Record<NeedKey, string> = {
@@ -83,6 +83,16 @@ export default function Meters({ percentages, population, careMultiplier, allowa
                   boxShadow: `inset 0 1px 0 rgba(255,255,255,0.55), inset 0 -2px 3px rgba(0,0,0,0.25), 0 0 10px ${hue}44`,
                 }}
               />
+              {key !== "health" && (
+                // Where "low" starts. Painted over the fill so it reads on
+                // both the dark track and a bright bar; quiet enough that it
+                // is a landmark, not a label.
+                <div
+                  aria-hidden="true"
+                  className="absolute inset-y-0 w-px bg-foreground/35"
+                  style={{ left: `${CRITICAL_PERCENT}%` }}
+                />
+              )}
             </div>
             <span
               className={`w-13 shrink-0 text-right text-[13px] tabular-nums ${low ? "font-bold text-rose" : "text-muted"}`}
