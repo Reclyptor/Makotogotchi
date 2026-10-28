@@ -14,6 +14,11 @@
 import { execFileSync } from "node:child_process";
 import type { TestProject } from "vitest/node";
 
+// The version production runs (infra/mongodb in the kubernetes repo), not a
+// floating `mongo:8`, so a test failure means the code and not an upstream
+// release nobody chose.
+const MONGO_IMAGE = "mongo:8.3.11";
+
 const started: string[] = [];
 
 const startContainer = (image: string, containerPort: number): string => {
@@ -51,7 +56,7 @@ const waitForMongo = (): void => {
 export const setup = (project: TestProject): void => {
   // A setup that throws is never torn down, so it cleans up after itself.
   try {
-    const mongoPort = startContainer("mongo:8", 27017);
+    const mongoPort = startContainer(MONGO_IMAGE, 27017);
     const redisPort = startContainer("redis:8-alpine", 6379);
     waitForMongo();
     project.provide("mongoUri", `mongodb://127.0.0.1:${mongoPort}`);
