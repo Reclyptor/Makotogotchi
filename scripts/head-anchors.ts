@@ -1,7 +1,7 @@
 // Finds where the head is on every pet frame, for the table in
 // src/game/scene/head.ts (SPEC §10.5). Run `npm run head-anchors` after adding
 // pet frames; it prints candidate entries to paste, and a contact sheet with
-// the crown and an elder's brow tufts drawn on every frame for a look before
+// the crown, an elder's brow tufts and a sage's beard drawn on every frame for a look before
 // committing.
 //
 // Three things are read off the art:
@@ -15,13 +15,18 @@
 //     contours, which touch pink — level with each other and an eye-spacing
 //     apart. The tufts' brow bars sit one art pixel above them, and their fur
 //     never rises above the head outline.
+//   • The beard. The mouth is the small enclosed black marks a row of fur
+//     under the eyes and between them — the nose dot and the two curls of the
+//     smile, or whatever shape the pose pulls it into. A sage's beard hangs
+//     from the mouth's top row, centred on it, so the moustache covers the
+//     mouth and the beard falls down the chest.
 //   • A nightcap. When the skyline at the anchor column is a vivid colour the
 //     pet itself never is, the art already wears a hat, and a cosmetic drawn
 //     there would land on top of it.
 //
 // Frames with no ears (the egg, the gravestone, the medicine) get no
-// candidate and wear nothing; a frame whose eyes are hidden prints a comment
-// asking for its brows by hand.
+// candidate and wear nothing; a frame whose eyes or mouth are hidden prints a
+// comment asking for that point by hand.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { PNG } from "pngjs";
@@ -36,7 +41,18 @@ const MIN_EAR_PIXELS = 12;
 const EYE_SPACING = { min: 25, max: 50 };
 /** Rows between the bottom of the brow bars and the top of the eyes: one art pixel. */
 const BROW_GAP = 5;
+/**
+ * Rows of fur between the bottom of the eyes and the top of the mouth: at
+ * least one art pixel. A mark any nearer is the eye's own corner — the droop
+ * of a tired eye, the wings of a happy ^ ^ — not a piece of the mouth.
+ */
+const MOUTH_GAP = 5;
+/** How far below the eyes the mouth can start, in frame pixels: four art pixels. */
+const MOUTH_REACH = 22;
+/** A mark bigger than this under the eyes is a paw or a prop, not a piece of the mouth. */
+const MAX_MOUTH_PIECE = 100;
 const BROWS = SPRITE_FRAMES.elderBrows;
+const BEARD = SPRITE_FRAMES.sageBeard;
 
 type Rgba = [number, number, number, number];
 
@@ -68,7 +84,7 @@ const petFrames = (): FrameName[] => {
 
 type Blob = { x0: number; x1: number; y0: number; y1: number; size: number };
 type Point = { x: number; y: number };
-type Candidate = { name: FrameName; hat: (Point & { nightcap: boolean }) | null; brows: Point | null };
+type Candidate = { name: FrameName; hat: (Point & { nightcap: boolean }) | null; brows: Point | null; beard: Point | null };
 
 /**
  * Four-connected blobs of `matches` pixels within rows [0, rows), with
@@ -132,12 +148,39 @@ const eyes = (name: FrameName, dipRow: number): [Blob, Blob] | null => {
   return null;
 };
 
+/**
+ * The mouth's bounding box, in frame pixels: every small enclosed black mark
+ * that starts within reach below the eyes and sits strictly inside their
+ * outer edges — a paw raised to the face reaches those edges and is not a
+ * piece of the mouth. Null where nothing is left showing.
+ */
+const mouth = (name: FrameName, [left, right]: [Blob, Blob]): Blob | null => {
+  const f = SPRITE_FRAMES[name];
+  const pieces = blobs(name, f.h, isBlack, isPink).filter(
+    (blob) =>
+      !blob.touched &&
+      blob.size <= MAX_MOUTH_PIECE &&
+      blob.y0 > left.y1 + MOUTH_GAP &&
+      blob.y0 <= left.y1 + MOUTH_REACH &&
+      blob.x0 > left.x0 &&
+      blob.x1 < right.x1,
+  );
+  if (pieces.length === 0) return null;
+  return {
+    x0: Math.min(...pieces.map((piece) => piece.x0)),
+    x1: Math.max(...pieces.map((piece) => piece.x1)),
+    y0: Math.min(...pieces.map((piece) => piece.y0)),
+    y1: Math.max(...pieces.map((piece) => piece.y1)),
+    size: pieces.reduce((total, piece) => total + piece.size, 0),
+  };
+};
+
 const candidate = (name: FrameName): Candidate => {
   const f = SPRITE_FRAMES[name];
   const ears = blobs(name, Math.floor(f.h / 2), isPink)
     .filter((blob) => blob.size >= MIN_EAR_PIXELS)
     .sort((p, q) => p.x0 - q.x0);
-  if (ears.length < 2) return { name, hat: null, brows: null };
+  if (ears.length < 2) return { name, hat: null, brows: null, beard: null };
   const left = ears[0]!;
   const right = ears[ears.length - 1]!;
   let floor = 0;
@@ -154,6 +197,7 @@ const candidate = (name: FrameName): Candidate => {
   // bottom-centre as the atlas snaps it, rows from the frame's bottom edge.
   const toHeadSpace = (x: number, y: number): Point => ({ x: Math.round(x) - Math.floor(f.w / 2), y: y - f.h });
   const pair = eyes(name, floor);
+  const lips = pair && mouth(name, pair);
   return {
     name,
     hat: { ...toHeadSpace(centre, floor), nightcap },
@@ -161,6 +205,8 @@ const candidate = (name: FrameName): Candidate => {
     // second pair of ears this table exists to prevent: the fur's top row
     // never rises above the head outline.
     brows: pair && toHeadSpace((centreOf(pair[0]) + centreOf(pair[1])) / 2, Math.max(pair[0].y0 - BROW_GAP, floor + BROWS.h)),
+    // Bottom-centre like the brows, so the beard's top row is the mouth's.
+    beard: lips && toHeadSpace(centreOf(lips), lips.y0 + BEARD.h),
   };
 };
 
@@ -195,8 +241,9 @@ const contactSheet = (candidates: Candidate[]): void => {
     blit(f.x, f.y, f.w, f.h, ox, oy);
     const footX = ox + Math.floor(f.w / 2);
     const footY = oy + f.h;
-    // The tufts as the atlas draws them: bottom-centre on the brow point.
+    // The tufts and the beard as the atlas draws them: bottom-centre on their points.
     if (c.brows) blit(BROWS.x, BROWS.y, BROWS.w, BROWS.h, footX + c.brows.x - BROWS.w / 2, footY + c.brows.y - BROWS.h);
+    if (c.beard) blit(BEARD.x, BEARD.y, BEARD.w, BEARD.h, footX + c.beard.x - BEARD.w / 2, footY + c.beard.y - BEARD.h);
     if (!c.hat || c.hat.nightcap) return;
     // The crown as room.ts draws it, so what the sheet shows is what ships.
     const ax = footX + c.hat.x;
@@ -211,14 +258,21 @@ const contactSheet = (candidates: Candidate[]): void => {
   writeFileSync(CONTACT, PNG.sync.write(out));
 };
 
-const entry = ({ name, hat, brows }: Candidate): string => {
+const entry = ({ name, hat, brows, beard }: Candidate): string => {
   if (!hat) return `  ${name}: null, // no ears in this frame`;
-  const point = (p: Point): string => `{ x: ${p.x}, y: ${p.y} }`;
-  const browsText = brows ? point(brows) : "null /* eyes hidden: set by hand */";
-  return `  ${name}: { x: ${hat.x}, y: ${hat.y}, brows: ${browsText}${hat.nightcap ? ", nightcap: true" : ""} },`;
+  const point = (p: Point | null, hidden: string): string => (p ? `{ x: ${p.x}, y: ${p.y} }` : `null /* ${hidden} hidden: set by hand */`);
+  const fields = [`x: ${hat.x}`, `y: ${hat.y}`, `brows: ${point(brows, "eyes")}`, `beard: ${point(beard, "mouth")}`];
+  if (hat.nightcap) fields.push("nightcap: true");
+  return `  ${name}: { ${fields.join(", ")} },`;
 };
 
-const candidates = petFrames().map(candidate);
+// Art can land before the clip that plays it: `npm run head-anchors -- meditate1`
+// adds frames by name to the clips' own.
+const extra = process.argv.slice(2).map((name) => {
+  if (!(name in SPRITE_FRAMES)) throw new Error(`${name} is not a frame in the atlas`);
+  return name as FrameName;
+});
+const candidates = [...new Set([...petFrames(), ...extra])].sort().map(candidate);
 for (const c of candidates) console.log(entry(c));
 contactSheet(candidates);
 console.log(`head-anchors: ${candidates.length} frames → ${CONTACT.pathname}`);

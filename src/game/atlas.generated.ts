@@ -2,7 +2,7 @@
 // after any change under art/ and review the contact sheet.
 
 /** The packed sheet these frame rectangles index — hashed together, stale never. */
-export const SPRITE_SHEET_URL = "/sprites.7f87ea0cf8.png";
+export const SPRITE_SHEET_URL = "/sprites.a700620e04.png";
 
 export type SpriteFrame = { x: number; y: number; w: number; h: number };
 
@@ -92,27 +92,30 @@ export const SPRITE_FRAMES = {
   lift2: { x: 1326, y: 1129, w: 137, h: 138 },
   lights1: { x: 8, y: 1275, w: 138, h: 138 },
   lights2: { x: 154, y: 1275, w: 138, h: 138 },
-  pekori: { x: 300, y: 1275, w: 138, h: 137 },
-  shiver1: { x: 446, y: 1275, w: 138, h: 143 },
-  shiver2: { x: 592, y: 1275, w: 138, h: 143 },
-  sick1: { x: 738, y: 1275, w: 132, h: 137 },
-  sick2: { x: 878, y: 1275, w: 132, h: 137 },
-  sleep1: { x: 1018, y: 1275, w: 137, h: 132 },
-  sleep2: { x: 1163, y: 1275, w: 137, h: 132 },
-  sneeze1: { x: 1308, y: 1275, w: 138, h: 143 },
-  sneeze2: { x: 8, y: 1426, w: 149, h: 143 },
-  tea1: { x: 165, y: 1426, w: 138, h: 121 },
-  tea2: { x: 311, y: 1426, w: 138, h: 121 },
-  tired1: { x: 457, y: 1426, w: 137, h: 138 },
-  tired2: { x: 602, y: 1426, w: 137, h: 138 },
-  unhappyEat1: { x: 747, y: 1426, w: 126, h: 132 },
-  unhappyEat2: { x: 881, y: 1426, w: 126, h: 132 },
-  walk1: { x: 1015, y: 1426, w: 138, h: 143 },
-  walk2: { x: 1161, y: 1426, w: 138, h: 149 },
-  walk3: { x: 1307, y: 1426, w: 138, h: 143 },
-  walk4: { x: 1453, y: 1426, w: 138, h: 143 },
-  yawn1: { x: 8, y: 1583, w: 138, h: 143 },
-  yawn2: { x: 154, y: 1583, w: 138, h: 143 },
+  meditate1: { x: 300, y: 1275, w: 138, h: 143 },
+  meditate2: { x: 446, y: 1275, w: 138, h: 143 },
+  pekori: { x: 592, y: 1275, w: 138, h: 137 },
+  sageBeard: { x: 738, y: 1275, w: 61, h: 55 },
+  shiver1: { x: 807, y: 1275, w: 138, h: 143 },
+  shiver2: { x: 953, y: 1275, w: 138, h: 143 },
+  sick1: { x: 1099, y: 1275, w: 132, h: 137 },
+  sick2: { x: 1239, y: 1275, w: 132, h: 137 },
+  sleep1: { x: 1379, y: 1275, w: 137, h: 132 },
+  sleep2: { x: 8, y: 1426, w: 137, h: 132 },
+  sneeze1: { x: 153, y: 1426, w: 138, h: 143 },
+  sneeze2: { x: 299, y: 1426, w: 149, h: 143 },
+  tea1: { x: 456, y: 1426, w: 138, h: 121 },
+  tea2: { x: 602, y: 1426, w: 138, h: 121 },
+  tired1: { x: 748, y: 1426, w: 137, h: 138 },
+  tired2: { x: 893, y: 1426, w: 137, h: 138 },
+  unhappyEat1: { x: 1038, y: 1426, w: 126, h: 132 },
+  unhappyEat2: { x: 1172, y: 1426, w: 126, h: 132 },
+  walk1: { x: 1306, y: 1426, w: 138, h: 143 },
+  walk2: { x: 1452, y: 1426, w: 138, h: 149 },
+  walk3: { x: 8, y: 1583, w: 138, h: 143 },
+  walk4: { x: 154, y: 1583, w: 138, h: 143 },
+  yawn1: { x: 300, y: 1583, w: 138, h: 143 },
+  yawn2: { x: 446, y: 1583, w: 138, h: 143 },
 } as const satisfies Record<string, SpriteFrame>;
 
 export type FrameName = keyof typeof SPRITE_FRAMES;
