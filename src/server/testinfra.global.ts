@@ -17,7 +17,7 @@ import type { TestProject } from "vitest/node";
 // The version production runs (infra/mongodb in the kubernetes repo), not a
 // floating `mongo:8`, so a test failure means the code and not an upstream
 // release nobody chose.
-const MONGO_IMAGE = "mongo:8.3.11";
+const MONGO_IMAGE = "mongo:8.3.13";
 
 const started: string[] = [];
 
