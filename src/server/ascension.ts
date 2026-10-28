@@ -14,7 +14,7 @@ import { TICKS_PER_DAY } from "@/sim/tuning";
 import { events, isDuplicateKeyError } from "./db/collections";
 import { creditCoins } from "./social";
 
-export const SAGE_ASCENSION_COINS = 50;
+export const SAGE_ASCENSION_COINS = 300;
 /** How far back before the meditation a caretaker's care counts toward the payout. */
 export const SAGE_ASCENSION_WINDOW_TICKS = 14 * TICKS_PER_DAY;
 

@@ -43,7 +43,7 @@ export default function AboutPage() {
           </li>
           <li>
             It rises a Sage, with a white beard. A Sage is asked for less — a flat 65% (60% if frail) — and everyone who
-            cared for it in its last two weeks as an elder gets 50 🪙. Care for a Sage earns half as many coins again, and
+            cared for it in its last two weeks as an elder gets 300 🪙. Care for a Sage earns half as many coins again, and
             the egg laid after a Sage has a gentler childhood.
           </li>
         </ul>

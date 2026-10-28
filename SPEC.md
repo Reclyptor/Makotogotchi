@@ -1895,7 +1895,7 @@ parameter is required, so no caller can skip the bonus by omission.
 
 When the meditation ends, every caretaker with at least one `CARE` event in
 the fourteen days before it began (`SAGE_ASCENSION_WINDOW_TICKS`) is paid
-`SAGE_ASCENSION_COINS` = 50 (`server/ascension.ts`). The leader checks on every
+`SAGE_ASCENSION_COINS` = 300 (`server/ascension.ts`). The leader checks on every
 tick it observes a living Sage rather than listening for the milestone, so a
 leader that was down at the moment still pays when it returns. It is the
 daily quest's pattern (§21.7): claim, then pay. A marker
