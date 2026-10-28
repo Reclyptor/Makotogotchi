@@ -37,6 +37,15 @@ export default function AboutPage() {
             An elder (three weeks old) must keep its needs averaging above a line that rises every day, up to 75% (70%
             for one that grew up frail). Fall short and its health fades; stay above it and its health comes back.
           </li>
+          <li>
+            On its 40th day an elder sits down to meditate. For two days nothing can hurt it: its needs and health hold
+            still, and only a gentle pat or medicine gets through.
+          </li>
+          <li>
+            It rises a Sage, with a white beard. A Sage is asked for less — a flat 65% (60% if frail) — and everyone who
+            cared for it in its last two weeks as an elder gets 50 🪙. Care for a Sage earns half as many coins again, and
+            the egg laid after a Sage has a gentler childhood.
+          </li>
         </ul>
         <p className="text-muted">
           Pick a display name below the pet so your care is remembered on the{" "}
@@ -68,7 +77,8 @@ export default function AboutPage() {
           >
             CC BY 4.0
           </a>
-          . Take either — just credit Jingles for the sprites.
+          . Take either — just credit Jingles for the sprites. The meditation pose and the Sage&apos;s beard are
+          modifications of her work.
         </p>
       </div>
     </main>

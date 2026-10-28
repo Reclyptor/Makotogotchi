@@ -44,7 +44,9 @@ Two licenses, split by what the file is:
 
 Everything in
 [`art/original/jingles-sprites.png`](./art/original/jingles-sprites.png) is
-Jingles' work.
+Jingles' work. The derived frames in `art/pet/` are modifications of it,
+among them the Sage's beard (`sageBeard@1x.png`) and the meditation pose
+(`meditate1@1x.png`, `meditate2@1x.png`).
 
 The chinchilla is Jingles' design and Jingles' linework — she drew it, and
 this project exists because of it. Fork the code freely; if you take the

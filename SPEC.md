@@ -131,9 +131,10 @@ formula is pure integer arithmetic with no division anywhere:
 ```
 drainPerTick = HEALTH_DRAIN_PER_NEED × Σ max(0, CRITICAL_THRESHOLD − value)   over hunger, energy, hygiene, joy
              + HEALTH_DRAIN_SICK        if the SICK ailment is untreated
-             + HEALTH_DRAIN_AGE × (1 − vigour)   if stage is ELDER
-regenPerTick = HEALTH_REGEN             if no need is below CRITICAL_THRESHOLD (not ELDER)
-             = HEALTH_REGEN_ELDER       if ELDER, no need is below CRITICAL_THRESHOLD, and vigour = 1
+             + HEALTH_DRAIN_AGE × (1 − vigour)   if stage is ELDER or SAGE
+regenPerTick = HEALTH_REGEN             if no need is below CRITICAL_THRESHOLD (not ELDER or SAGE)
+             = HEALTH_REGEN_ELDER       if ELDER or SAGE, no need is below CRITICAL_THRESHOLD, and vigour = 1
+drainPerTick = regenPerTick = 0         while meditating (§2.8)
 
 hold(rampDay)       = min(cap, ELDER_HOLD_START + ELDER_HOLD_STEP × rampDay)
                       ELDER_HOLD_START = 600_000 (60%), ELDER_HOLD_STEP = 25_000 (2.5 points a day)
@@ -145,6 +146,8 @@ vigour (ELDER only) = clamp((mean(needs) − (hold − ELDER_BAND)) / ELDER_BAND
                       ELDER_BAND = 100_000 (10 points); per-mille integer arithmetic
                       with no ramp (rampDay = null), the original rule:
                       clamp((mean − CRITICAL_THRESHOLD) / (LEGACY_ELDER_HOLD_MEAN − CRITICAL_THRESHOLD), 0, 1)
+vigour (SAGE)       = the same band under a flat line, no ramp (ruleset 4):
+                      SAGE_HOLD_MEAN = 650_000 (65%), SAGE_HOLD_MEAN_FRAIL = 600_000 (60%)
 ```
 
 **Old age is held off by care, not by a clock — and the care asked for rises.**
@@ -223,6 +226,23 @@ two seeds and 45 elder days, a good human (a visit every 30 to 90 minutes, four
 moves each) kept the elder alive in rooms of 5, 10 and 20, with or without a
 weekly eight-hour waking gap, and a room that did nothing lost it inside a day
 (§16.2).
+
+**A Sage is asked for less (ruleset 4).** An elder that has meditated (§2.8)
+stands against a flat line ten points under the ruleset-3 caps: 65%, and 60%
+for FRAIL (`SAGE_HOLD_MEAN`, `SAGE_HOLD_MEAN_FRAIL`). It never ramps. The band,
+`HEALTH_DRAIN_AGE`, `HEALTH_REGEN_ELDER` and the critical-need drain are the
+elder's, so a Sage is still mortal and still dies of `age` under poor care,
+and every rule below that says "elder" holds for a Sage too (`isOld`). Its
+needs decay at the adult rate rather than the elder's ×1.2. In the property
+tests, ten people looking in every half hour keep a Sage alive and above half
+health for twenty days; one held at a 70% mean, under the elder's 75% line,
+keeps its health; and one held at 55% still dies of age (§16.2).
+
+**Meditation holds health still.** For the two days of meditation (§2.8)
+`healthTerms` returns no drain and no regeneration of any kind, need, sickness
+or age, and reports the elder's standing against its line unchanged, so the
+screen and the fold agree that nothing is moving. A pet that sits down sick
+stays sick and loses nothing; medicine still cures it.
 
 `causeOfDeath` is decided at the death tick from the same terms the health
 step used — instantaneous attribution keeps the rule a pure function of state;
@@ -306,6 +326,13 @@ anyone a weapon.
 
 (Cooldowns are whole ticks — 10-second quanta — which is why `FEED` is 50s
 rather than a rounder 45s.)
+
+**A meditating pet turns care away (§2.8).** `canPerform` rejects `FEED`,
+`PLAY`, `CLEAN` and `LULLABY` with `MEDITATING` for the two days, the same four
+sleep refuses, and checks it before any cooldown, since no wait would make the
+action possible. `PET` and `MEDICATE` stay available and apply normally: a pat
+is gentle enough, and a pet that sat down sick can still be cured. The copy
+reads "<name> is in deep meditation" (short form "Meditating", glyph 🧘).
 
 **Global cooldown** is a property of *the pet*, not of the player: the pet is
 busy eating; wait for it to finish. The UI says so in those words. This
@@ -464,6 +491,12 @@ its gate reads as an energy threshold, and a sleeping pet's energy is
 *climbing* — a nap crosses the daytime gate on its way to `NAP_WAKE_THRESHOLD`.
 Gating on energy alone told a caretaker their napping pet was wide awake.
 
+The schedule keeps running through an elder's meditation (§2.8): the fold
+still puts the pet down at `SLEEP_HOUR` and wakes it at `WAKE_HOUR`, so its
+sleep state stays continuous, but the night recovers no energy and costs no
+hunger, and the screen shows the meditation rather than the sleep. With
+energy held still, no nap can start.
+
 This gives the game a daily rhythm and — importantly — means the overnight
 window is the *least* dangerous time, not the most. Nobody is punished for
 sleeping. (A crowded room used to break that promise; ruleset 2 restores it
@@ -554,7 +587,8 @@ the tradeoff that was always doing the work.
 | `PUP` | Hatch +1 day | Full decay rate begins. |
 | `JUVENILE` | Hatch +3 days | Care quality is sampled here — this window determines the adult form. |
 | `ADULT` | Hatch +7 days | Branches on care quality (below). |
-| `ELDER` | Hatch +21 days | Faster decay (×1.2), slower regeneration, and an age drain held off by keeping the needs' mean above a hold line that rises daily to 75% (70% for a FRAIL one) (§2.3). |
+| `ELDER` | Hatch +21 days | Faster decay (×1.2), slower regeneration, and an age drain held off by keeping the needs' mean above a hold line that rises daily to 75% (70% for a FRAIL one) (§2.3). From hatch +40 days it meditates for two days (below). |
+| `SAGE` | The end of the meditation (ruleset 4) | Adult decay rate again (×1.0), a white beard (§21.9), and a flat, lower hold line: 65%, or 60% for FRAIL (§2.3). Care pays a wisdom bonus and the ascension pays the elder's last caretakers (§13.1). |
 
 A newly hatched pet starts with every need at `NEED_MAX` and full health.
 
@@ -575,6 +609,38 @@ At the transition:
 The form is cosmetic *plus* a small modifier to decay rates, so a well-raised
 pet is genuinely easier to keep alive. It is decided once and never revisited —
 so the juvenile window is a real, high-stakes, community-wide test.
+
+**Meditation (ruleset 4).** On day 40 of its life an elder sits down and closes
+its eyes for two days (`MEDITATION_STARTS_AT`, `MEDITATION_TICKS`). The two
+days are a stasis: needs do not decay, the night recovers no energy, health
+neither drains nor heals (§2.3), no sickness sets in, and `FEED`, `PLAY`,
+`CLEAN` and `LULLABY` are turned away with `MEDITATING` while a pat and
+medicine still get through (§2.5). No want opens over them and a wish that
+lapses during them costs no joy (§25). Nothing can go wrong in that time, and
+nothing needs doing. When the meditation ends the pet is a `SAGE`, and projection
+emits `EVOLVED` with detail `SAGE` on that tick, as for every other stage; the
+meditation's first tick emits `MEDITATING`. The status line counts the time
+down (§11.7) and both moments push (§12).
+
+When it starts is part of the history, not of age alone. A RULES event at
+version 4 or later records its tick on the state (`sageRuleFromTick`, §4.3,
+§23.2), and the meditation starts at the later of day 40 and the tick after
+it. A generation laid under ruleset 4 has RULES right after its hatch, so it
+meditates on days 40–42. Makoto the 2nd is about 46 days old when the rule
+ships, so it sits down on the first tick after the leader records ruleset 4,
+not on a day it has already lived. A log that never reached ruleset 4 carries
+no such field, never meditates, and stays an `ELDER` until it dies.
+`stageAt(bornAtTick, tick, sageStartTick)` therefore takes the sage start;
+callers holding a state use `stageOf(state, tick)`, which supplies it. The
+`meditating` flag is `meditatingAt(state, tick)`, derived and never stored,
+and a meditating pet is still an `ELDER`.
+
+**The Sage's blessing.** An egg laid after a Sage's death carries
+`Generation.sageBlessed: true`, pinned at egg-laying like `foodCatalogSize`
+(§21.4) and absent on every other egg. Its adult form is decided against lines
+ten points lower: `THRIVING` from a 65% `careScore` and `STEADY` from 30%
+(`formThresholds(true)`). The Sage's care passes on as a head start in the
+fragile childhood, not as immortality.
 
 ### 2.9 Ailments
 
@@ -621,7 +687,8 @@ Death is a **feature**, and it is the single best re-engagement event the
 game has. It should feel like an occasion.
 
 **Twilight.** An elder that is fading should be seen fading, with time to
-act. When an elder's health crosses below `FADING_THRESHOLD` (50%) on the
+act. Everything here holds for a Sage too (`isOld` covers both), and none of
+it during meditation, when health cannot move. When an elder's health crosses below `FADING_THRESHOLD` (50%) on the
 way down, projection emits a `FADING` milestone — a crossing, like
 `CRITICAL`, so it fires once per descent. It is a push trigger (§12) and a
 feed line, and while an elder's health is below the threshold and its needs
@@ -819,13 +886,18 @@ Display divides by 1000 for a percentage.
 ### 4.3 Stored vs. Derived
 
 **Stored** (the minimum that cannot be recomputed): needs, `healthRaw`,
-phase, stage, adult form, `bornAtTick`, `lastEventTick`, `sleepState`,
+phase, adult form, `bornAtTick`, `lastEventTick`, `sleepState`,
 `sick`, the `careScore` accumulator pair (§2.8), the caretaker budget rings
-(§2.5), generation identity and seed.
+(§2.5), generation identity and seed, and the rule starts the log cannot
+derive from time: `elderRampFromTick` (§2.3) and `sageRuleFromTick` (§2.8).
+The second is stored because a RULES version carries no time, and the
+meditation of a pet already past day 40 has to start from when the rule
+arrived.
 
-**Derived** (never stored, computed by `derive.ts`): every ailment except
-`SICK`, mood, animation key, alert level, "is the pet busy", cooldown
-remainders.
+**Derived** (never stored, computed by `derive.ts` and `model.ts`): the stage
+(`stageOf`, from `bornAtTick` and the sage start), whether the pet is
+meditating (`meditatingAt`), every ailment except `SICK`, mood, animation
+key, alert level, "is the pet busy", cooldown remainders.
 
 The original project stored animation frames as game state
 (`Status.CLONE1..4`). That class of bug is structurally impossible here: the
@@ -931,7 +1003,7 @@ health (raw units; HEALTH_MAX = 10¹²):
                                       ; or ~31h for an elder at full vigour — an
                                       ; overnight onset leaves the day shift a real
                                       ; chance to answer the push alert
-  HEALTH_DRAIN_AGE      = 12_000_000  ; per tick, ELDER only, × (1 − vigour):
+  HEALTH_DRAIN_AGE      = 12_000_000  ; per tick, ELDER and SAGE only, × (1 − vigour):
                                       ; zero with the needs' mean at the hold line, full
                                       ; a band below it (~9.6 elder days from full when
                                       ; fully neglected)
@@ -942,9 +1014,10 @@ health (raw units; HEALTH_MAX = 10¹²):
   ELDER_HOLD_CAP        = 850_000     ; …to this ceiling, reached on day 10 (rulesets 1 and 2;
                                       ; 750_000 on day 6 from ruleset 3, 700_000 for FRAIL)
   ELDER_BAND            = 100_000     ; how far under the line vigour falls to 0
+  SAGE_HOLD_MEAN        = 650_000     ; a Sage's flat line (ruleset 4); 600_000 for FRAIL
   HEALTH_REGEN          = 120_000_000 ; per tick, only when nothing is critical
                                       ; (~23h from zero to full); adults only
-  HEALTH_REGEN_ELDER    =  30_000_000 ; per tick, ELDER with vigour 1 and nothing critical
+  HEALTH_REGEN_ELDER    =  30_000_000 ; per tick, ELDER or SAGE with vigour 1 and nothing critical
                                       ; (~4 days from zero to full)
   FADING_THRESHOLD      = 50% health  ; an ELDER crossing below it is fading (§2.10)
 
@@ -1708,11 +1781,12 @@ wins:
 | --- | --- | --- |
 | 1 | dead | "Makoto starved. A new egg will appear soon." — the cause worded exactly as the memorial wall words it (`app/copy/death.ts`, one table for both) |
 | 2 | egg | "The egg is incubating…" |
+| 2½ | meditating (§2.8) | "is in deep meditation. Returns in 1d 18h." — days and hours (`untilReturnText`), falling back to the sleep countdown's hours and minutes in the last day ("Returns in 15m."). It outranks sleep and every need, and carries no health sentence and no elder fragment: nothing is moving. |
 | 3 | asleep | by `sleepReason`: "is asleep for the night." / "is napping until the energy comes back." / "was sung to sleep." |
 | 4 | any ailment | "is starving, filthy and sad" — worst first, in §2.9's order — with sickness dated last: "just fell sick" (under an hour), "has been sick for 5 hours", "since yesterday", "for 3 days" |
 | 5 | health below 25% (§2.3) | "is weak." while health is climbing back; "is dangerously weak." while it is not — an elder, a sick pet, or a critical need. Fading takes over only between 25% and 50%: an elder in that band reads "is fading." |
 | 6 | a need under 50% | the lowest one: "is getting hungry." / "is getting sleepy." / "could use a bath." / "is getting bored." |
-| 7 | well | by stage: "is small and curious." / "is full of beans." / "is growing fast." / "is doing fine." / "is taking it slow." |
+| 7 | well | by stage: "is small and curious." / "is full of beans." / "is growing fast." / "is doing fine." / "is taking it slow." / "is radiating calm." (a Sage) |
 
 **The health sentence.** Rules 3 to 7 are followed by a second sentence that
 says which way health is moving and why, worded from `derive()`'s
@@ -1747,8 +1821,8 @@ Dead and egg lines carry none, so a dead pet's steady health is never
 reported. One fixed line per state, warm in tone, no rotation: every
 caretaker reads the same words, and the tests are exact.
 
-**The elder fragment.** For every living elder, whichever way health is
-moving, today's hold line and where the needs average now follow the
+**The elder fragment.** For every living elder, and every Sage against its
+flat line, whichever way health is moving, today's hold line and where the needs average now follow the
 sentence as a small muted fragment: "needs 72% · at 81%" (line, then
 average). The numbers live only there, so "falling with age" is a short
 sentence and the fragment says by how much. `HealthView.elder` carries them
@@ -1779,8 +1853,15 @@ Tuesday and the people who care get told.
 - Subscriptions stored per caretaker; a `410 Gone` from the push service
   prunes the subscription.
 - **Triggers:** `BECAME_SICK`, any need crossing `CRITICAL_THRESHOLD`
-  downward, `health < 25%`, `FADING` (an elder's health below 50%, re-arming
-  past 55% — §2.10), `DIED`, `HATCHED`, `EVOLVED`.
+  downward, `health < 25%`, `FADING` (an elder's or Sage's health below 50%,
+  re-arming past 55%, and silent during meditation — §2.10), `DIED`,
+  `HATCHED`, `EVOLVED`, and the meditation (§2.8).
+- **The meditation and the Sage.** "<name> has entered deep meditation 🧘",
+  "Needs and health hold still for two days. <name> rises a sage.", once per
+  generation while the meditation is recent. The Sage arrives through the
+  ordinary evolved push, deduped as `evolved:SAGE` ("<name> is now sage"); a
+  Sage's stage start is the end of the meditation rather than an age in
+  `STAGE_STARTS`, so the dispatcher reads it from `sageStartTickOf`.
 - **Throttling:** at most one push per caretaker per 30 minutes, and each
   trigger uses hysteresis: after firing, it re-arms only once the underlying
   value has recovered past `CRITICAL_THRESHOLD + 5000` and stayed there for
@@ -1801,7 +1882,29 @@ same diminishing-returns curve as §2.6, so the incentive points at the pet's
 actual need rather than at button-mashing.
 
 Bonuses: daily streak, being present at a hatch or an evolution, and being a
-top-3 caretaker at a generation's end.
+top-3 caretaker at a generation's end. Of the evolution bonus, only the Sage's
+ascension (below) is built.
+
+**The Sage pays (§2.8).** While the pet is a `SAGE`, care coins and the want
+reward (§25.4) are half as much again, `wisdomCoins(base, stage)` =
+`floor(base × 3 / 2)` (`SAGE_COIN_NUMERATOR` / `SAGE_COIN_DENOMINATOR`,
+`server/social.ts`): a granted wish pays 15. The one-coin floor and the
+nothing-for-nothing rule still apply first; quest rewards and minigame payouts
+are unchanged. The write routes pass the pet's stage at the action, and the
+parameter is required, so no caller can skip the bonus by omission.
+
+When the meditation ends, every caretaker with at least one `CARE` event in
+the fourteen days before it began (`SAGE_ASCENSION_WINDOW_TICKS`) is paid
+`SAGE_ASCENSION_COINS` = 50 (`server/ascension.ts`). The leader checks on every
+tick it observes a living Sage rather than listening for the milestone, so a
+leader that was down at the moment still pays when it returns. It is the
+daily quest's pattern (§21.7): claim, then pay. A marker
+`{ _id: "ascension:<generationId>" }` in the `ascensions` collection is
+inserted first, and a duplicate key pays nobody, so two leaders, a retry or a
+restart cannot pay twice; a process lost between the claim and the payout
+loses those coins rather than doubling them. A cheap read of the marker keeps
+every later tick off the event log, and the event query itself is bounded to
+the fourteen-day window.
 
 Coins are **per caretaker**, not communal — the balance lives on the caretaker
 document and is spent through a filter that *is* the affordability check. What
@@ -2245,6 +2348,14 @@ old age is held off by care (ten caretakers, sickness cured on sight):
     (histories from before the ramp keep the flat rule, pinned in
     project.test.ts: held at 60% an elder keeps ≥ 90% health for 30 days,
     held at 30% it dies of age in 11–14)
+a Sage is easier to keep than the elder it was (elder-care.test.ts):
+    ten people looking in every half hour, four moves each, keep a fresh
+    Sage alive at 50% health or better for 20 Sage-days
+    a Sage held at a 70% mean, under the elder's 75% line, keeps ≥ 90%
+    health for 20 days; held at 55%, the foot of its band, it dies of age
+meditation is a stasis (sage.test.ts):
+    needs and health are equal at the meditation's first and last tick,
+    sick or well, and no sickness sets in
 ```
 
 The last three encode §1.2's design goals as executable assertions — with the
@@ -2766,11 +2877,27 @@ pet just never looks different. Presentation-layer only:
 - **ELDER**: 100% plus a new `@1x` accessory sprite — gray brow tufts —
   drawn in the head layer at the frame's §10.5 brow point, over the eyes
   (stacking under any worn cosmetic).
+- **SAGE** (§2.8): 100%, the elder's brow tufts (they draw for every old
+  stage, `isOld`), and a white beard, `art/pet/sageBeard@1x.png`, drawn in the
+  same head layer at the frame's `beard` anchor, the chin point that
+  `scripts/head-anchors.ts` finds from the mouth below the eyes. A frame with
+  no brow anchor (`dead1`, `drpepper1`, `drpepper2`) wears no beard either. The
+  beard adds one colour to the pet's palette, `#ffffff`, shaded in the belly's
+  `#e0e0e0` and outlined in the art's black: the lightest pet colour before it
+  was the belly itself, which a beard would vanish into.
+- **Meditating** (an elder, §2.8): the `meditating` animation key plays its
+  own two-frame clip, `meditate1`/`meditate2`, a seated pose with the eyes
+  closed and a slow breath. Those frames carry the brow and beard anchors like
+  any other. The key outranks sleep, so a meditating pet seen at night is still
+  meditating.
 
 The stage scale applies everywhere the room draws the pet (idle, wander,
 one-shots). Minigames keep drawing the adult frames — the game canvas is a
 caricature, and a 36px runner does not need life stages. New sprites go
-through the §10.2 pipeline (`art/pet/elderBrows@1x.png`).
+through the §10.2 pipeline (`art/pet/elderBrows@1x.png`,
+`sageBeard@1x.png`, `meditate1@1x.png`, `meditate2@1x.png`). The beard and the
+meditation pose are modifications of Jingles' sprites and are credited as
+such (CC BY 4.0, §3(a)(1)(B)).
 
 ### 21.10 Delivery Phases
 
@@ -3473,6 +3600,18 @@ Ruleset 3 holds two: the community multiplier's 2× ceiling (§23.1) and the
 elder hold line's 75% cap, 70% for FRAIL (§2.3). It reaches a pet through the
 same `RULES` event, so a log without `RULES{3}` folds byte-identically.
 
+Ruleset 4 (`RULES_SINCE.SAGE`) holds the meditation and the Sage (§2.8): the
+two days of stasis, the `SAGE` stage with its adult decay rate and flat 65%
+line (§2.3), and the wish that lapses mid-meditation without a joy debit
+(§25.2). It is the first rule whose start is a time, and it still adds no event
+type: the fold records the tick of the first `RULES` event at version 4 or
+later as `PetState.sageRuleFromTick` (`??=`, so a duplicate changes nothing),
+because the rule has to begin from when it arrived for a pet already past day
+40, and a version alone cannot say when that was. The field is absent, not
+null, in every older history, and a log without `RULES{4}` folds
+byte-identically: it never meditates and stays an `ELDER`. The Sage's coins
+and the blessing's egg (§13.1, §2.8) are server-side and touch no fold.
+
 ### 23.3 Visibility
 
 Rising difficulty must never feel like a silent nerf. The derived state
@@ -3666,7 +3805,10 @@ milestones, because milestones are assertions and can never change state:
   places in waking hours, *and* only while the pet is born and alive
   (`isAlive` — no cravings from an egg, no debits against a corpse mid-
   mourning; on death an open want simply dies with the generation, no
-  `WANT_EXPIRED` appended). Sets `PetState.wantOpen`.
+  `WANT_EXPIRED` appended), *and* only in a window that keeps clear of an
+  elder's meditation (`windowClearOfMeditation`: it ends by the meditation's
+  first tick or starts at or after its end, §2.8), since a meditating pet
+  turns away the care a want asks for. Sets `PetState.wantOpen`.
 - `WANT_EXPIRED { windowIndex }` — the trigger is **state-shaped, not
   calendar-shaped**: whenever `wantOpen` is set and the clock stands at or
   past its window's end, the leader appends the expiry — late is legal, so
@@ -3686,7 +3828,11 @@ can settle:
   `W > wantSettledWindow` (an absent mark reads as −∞). Otherwise a no-op.
 - `WANT_EXPIRED { W }` folds only when `wantOpen != null` and
   `wantOpen.window === W`: applies the clamped debit, sets
-  `wantSettledWindow = W`, clears `wantOpen`. Otherwise a no-op.
+  `wantSettledWindow = W`, clears `wantOpen`. Otherwise a no-op. A want that
+  lapses while the pet is meditating settles the same way but takes no joy:
+  the stasis holds joy still too, and nobody could have granted it. Only a
+  want already open when the rule arrived can meet that (Makoto the 2nd at
+  release, §2.8); the open rule above keeps every later one clear.
 - Fulfillment (§25.3) likewise sets `wantSettledWindow` and clears
   `wantOpen`.
 
@@ -3790,7 +3936,8 @@ feed line only.
 
 ### 25.4 Rewards
 
-The fulfilling caretaker earns `WANT_REWARD_COINS`. Coins live outside the
+The fulfilling caretaker earns `WANT_REWARD_COINS`, half as much again (15)
+while the pet is a Sage (`wisdomCoins`, §13.1). Coins live outside the
 fold (§13.1), so payment happens on the write path: `engine.care`'s outcome
 gains the milestones the reduce step emitted, and the same shared helper
 that counts titles (§24.3) — called from both `/api/care` and `/api/play` —
