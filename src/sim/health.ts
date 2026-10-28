@@ -12,7 +12,7 @@
 // down by age under devoted care reads as the win it was even when it was also
 // ill. Ruleset 1 ranks both by largest drain.
 
-import { elderRampDayAt, rulesVersionOf, stageAt, type CauseOfDeath, type PetState } from "./model";
+import { elderRampDayAt, meditatingAt, rulesVersionOf, stageOf, type CauseOfDeath, type PetState } from "./model";
 import {
   CRITICAL_THRESHOLD,
   elderHoldLine,
@@ -25,6 +25,8 @@ import {
   needsMean,
   NEED_KEYS,
   RULES_SINCE,
+  sageHoldMean,
+  sageVigourPermille,
   type NeedKey,
 } from "./tuning";
 
@@ -59,8 +61,16 @@ export const healthTerms = (state: PetState, tick: number): HealthTerms => {
   // Old age is held off by care (SPEC §2.3): the age drain scales with the
   // elder's vigour — against a hold line that climbs once the leader has
   // started the ramp — and an elder at full vigour regains health slowly.
+  // A Sage stands against its own flat, lower line (SPEC §2.8).
   let elder: HealthTerms["elder"] = null;
-  if (stageAt(state.bornAtTick, tick) === "ELDER") {
+  const stage = stageOf(state, tick);
+  if (stage === "SAGE") {
+    elder = {
+      holdPermille: Math.floor(sageHoldMean(state.form) / 1000),
+      meanPermille: Math.floor(needsMean(state.needs) / 1000),
+      vigour: sageVigourPermille(state.needs, state.form),
+    };
+  } else if (stage === "ELDER") {
     const rampDay = elderRampDayAt(state, tick);
     const rules = rulesVersionOf(state);
     elder = {
@@ -68,6 +78,12 @@ export const healthTerms = (state: PetState, tick: number): HealthTerms => {
       meanPermille: Math.floor(needsMean(state.needs) / 1000),
       vigour: elderVigourPermille(state.needs, rampDay, state.form, rules),
     };
+  }
+
+  // Meditation is a stasis (SPEC §2.8): health neither drains nor heals, and
+  // the elder's standing is still reported so the screen can show it.
+  if (meditatingAt(state, tick)) {
+    return { drainNeeds: 0, drainSick: 0, drainAge: 0, regen: 0, worstNeed, elder };
   }
 
   return {

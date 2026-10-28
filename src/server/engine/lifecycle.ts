@@ -7,7 +7,7 @@
 // leader crash or handover mid-transition simply retries next tick.
 
 import type { Db } from "mongodb";
-import type { Generation, PetState } from "@/sim/model";
+import { stageOf, type Generation, type PetState } from "@/sim/model";
 import { FOOD_ITEM_IDS } from "@/sim/economy";
 import { quirks } from "@/sim/quirks";
 import { INCUBATION_TICKS, MOURNING_TICKS } from "@/sim/tuning";
@@ -38,7 +38,7 @@ export class Lifecycle {
     if (state.diedAtTick !== null) {
       await this.sealOnce(generation.id);
       if (state.tick >= state.diedAtTick + MOURNING_TICKS) {
-        return this.rotate(generation);
+        return this.rotate(generation, state);
       }
       return null;
     }
@@ -80,7 +80,7 @@ export class Lifecycle {
   }
 
   /** Lay the next egg. Guarded by ordinal uniqueness against double-rotation. */
-  private async rotate(previous: Generation): Promise<Generation | null> {
+  private async rotate(previous: Generation, final: PetState): Promise<Generation | null> {
     const successor = await generations(this.db).findOne({ ordinal: previous.ordinal + 1 });
     if (successor) return toGeneration(successor);
     const generation: Generation = {
@@ -91,12 +91,14 @@ export class Lifecycle {
       name: null,
       // The menu this egg is born with: everything the shop sells today.
       foodCatalogSize: FOOD_ITEM_IDS.length,
+      // A Sage's care passes on as a gentler childhood (SPEC §2.8).
+      ...(final.diedAtTick !== null && stageOf(final, final.diedAtTick) === "SAGE" ? { sageBlessed: true as const } : {}),
     };
     try {
       await createGeneration(this.db, generation);
     } catch (error) {
       // Unique ordinal index: another leader won the race — adopt theirs.
-      if (isDuplicateKeyError(error)) return this.rotate(previous);
+      if (isDuplicateKeyError(error)) return this.rotate(previous, final);
       throw error;
     }
     return generation;

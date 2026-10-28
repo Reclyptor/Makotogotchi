@@ -7,6 +7,7 @@
 // thing, and the UI says so differently.
 
 import { NextResponse, type NextRequest } from "next/server";
+import { stageOf } from "@/sim/model";
 import { z } from "zod";
 import { CARE_ACTIONS } from "@/sim/tuning";
 import { runtime } from "@/server/runtime";
@@ -76,16 +77,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (wasted) await refundItem(await db(), identity.caretakerId, itemId);
 
   // Roll the accepted action into the social ledgers (SPEC §2.11, §13.1).
+  // A Sage's care pays half as much again (SPEC §13.1).
+  const stage = stageOf(outcome.state, outcome.state.tick);
   const ledger = await recordContribution(await db(), {
     caretakerId: identity.caretakerId,
     generationId: current.id,
     action: parsed.data.action,
     applied: outcome.applied,
     tick: outcome.state.tick,
+    stage,
     changed: outcome.changed,
   });
   // Granting a wish pays extra (SPEC §25.4).
-  const wantCoins = await settleWantFulfillment(await db(), identity.caretakerId, outcome.milestones);
+  const wantCoins = await settleWantFulfillment(await db(), identity.caretakerId, outcome.milestones, stage);
   // And the title race advances (SPEC §24.3).
   await rollTitles(
     await db(),

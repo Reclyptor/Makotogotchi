@@ -6,7 +6,7 @@
 import type { Collection, Db } from "mongodb";
 import { contributionScore, petDay } from "@/sim/score";
 import { NICKNAME_PATTERN } from "@/sim/events";
-import type { CareAction } from "@/sim/tuning";
+import type { CareAction, LifeStage } from "@/sim/tuning";
 import { isDuplicateKeyError } from "./db/collections";
 import { announcePurse, purseOf } from "./purse";
 import { once } from "./once";
@@ -34,6 +34,14 @@ export type ContributionDoc = {
   score: number;
   actions: number;
 };
+
+// A Sage pays its caretakers half again for care and granted wishes (SPEC
+// §2.8, §13.1): the wisdom bonus for having kept it this long.
+export const SAGE_COIN_NUMERATOR = 3;
+export const SAGE_COIN_DENOMINATOR = 2;
+/** Coins earned for `base`, under the wisdom bonus while the pet is a Sage. */
+export const wisdomCoins = (base: number, stage: LifeStage): number =>
+  stage === "SAGE" ? Math.floor((base * SAGE_COIN_NUMERATOR) / SAGE_COIN_DENOMINATOR) : base;
 
 export const caretakers = (db: Db): Collection<CaretakerDoc> => db.collection("caretakers");
 export const contributions = (db: Db): Collection<ContributionDoc> => db.collection("contributions");
@@ -122,6 +130,8 @@ export const recordContribution = async (
      *  nothing; the floor below exists to round small care up, not to pay for
      *  none. Defaults true so a caller that cannot tell is never penalised. */
     changed?: boolean;
+    /** The pet's stage at the action: a Sage pays the wisdom bonus. */
+    stage: LifeStage;
   },
 ): Promise<{ score: number; coins: number; streakDays: number }> => {
   await ensureSocialIndexes(db);
@@ -129,7 +139,7 @@ export const recordContribution = async (
   // The floor rounds a small but real contribution up to one coin. An action
   // that changed nothing is not a small contribution, and paying it a coin
   // made a spent allowance into a slow, dull way to farm the shop.
-  const coins = input.changed === false ? 0 : Math.max(1, Math.floor(score / 10));
+  const coins = input.changed === false ? 0 : wisdomCoins(Math.max(1, Math.floor(score / 10)), input.stage);
   const day = petDay(input.tick);
 
   const existing = await caretakers(db).findOne({ _id: input.caretakerId });

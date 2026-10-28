@@ -16,6 +16,8 @@ export type GenerationDoc = {
   name: string | null;
   /** The menu's length at laying (SPEC §21.4); absent on older eggs. */
   foodCatalogSize?: number;
+  /** Laid after a Sage's death (SPEC §2.8); absent on every other egg. */
+  sageBlessed?: true;
   hatchedAtTick: number | null;
   died: { tick: number; at: Date; cause: CauseOfDeath } | null;
   /** Written once at seal time — the permanent record the memorial reads. */

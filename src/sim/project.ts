@@ -7,7 +7,8 @@
 //
 // Step order within one tick, pinned and load-bearing (changing it changes
 // every replay):
-//   1. stage evolution (EVOLVED; adult form decided at the ADULT boundary)
+//   1. stage evolution (EVOLVED; adult form decided at the ADULT boundary;
+//      MEDITATING on the first tick of an elder's meditation)
 //   2. schedule sleep/wake sync
 //   3. need decay / sleep recovery
 //   4. involuntary-nap transitions (post-decay energy)
@@ -15,8 +16,20 @@
 //   6. careScore accumulation (JUVENILE only, post-decay)
 //   7. sickness onset draw (keyed by absolute tick, pre-drain health)
 //   8. health drain / regeneration, death check
+//
+// A meditating pet skips 3 and 7, and health.ts gives it no terms for 8: the
+// two days are a stasis (SPEC §2.8).
 
-import { isAlive, rulesVersionOf, stageAt, type PetState, type ProjectionContext } from "./model";
+import {
+  isAlive,
+  meditatingAt,
+  meditationStartTickOf,
+  rulesVersionOf,
+  sageStartTickOf,
+  stageAt,
+  type PetState,
+  type ProjectionContext,
+} from "./model";
 import { causeOfDeath, healthTerms } from "./health";
 import { careMultiplierOf } from "./difficulty";
 import { draw32, RNG_PURPOSE } from "./rng";
@@ -26,10 +39,10 @@ import {
   decayRates,
   ENERGY_SLEEP_RECOVERY,
   EXHAUSTED_THRESHOLD,
-  FORM_STEADY_AT,
-  FORM_THRIVING_AT,
   FADING_THRESHOLD,
+  formThresholds,
   HEALTH_MAX,
+  isOld,
   NAP_WAKE_THRESHOLD,
   NEED_KEYS,
   NEED_MAX,
@@ -68,7 +81,11 @@ export const project = (input: PetState, toTick: number, ctx: ProjectionContext)
     boundaryIdx += 1;
   }
 
-  let stage = stageAt(bornAtTick, state.tick);
+  // Only a RULES event moves either, and events fold between projections.
+  const meditationStart = meditationStartTickOf(state);
+  const sageStart = sageStartTickOf(state);
+  const formLines = formThresholds(state.generation.sageBlessed === true);
+  let stage = stageAt(bornAtTick, state.tick, sageStart);
   // How hard the community has made the pet (SPEC §23). It is fixed for the
   // whole projection: only a POPULATION event changes it, and events are
   // folded between projections, never during one.
@@ -79,7 +96,7 @@ export const project = (input: PetState, toTick: number, ctx: ProjectionContext)
 
   for (let tick = state.tick + 1; tick <= toTick; tick++) {
     // 1. Stage evolution.
-    const nextStage = stageAt(bornAtTick, tick);
+    const nextStage = stageAt(bornAtTick, tick, sageStart);
     if (nextStage !== stage) {
       if (nextStage === "ADULT" && state.form === null) {
         // careScore is the mean of all four needs across the window:
@@ -89,15 +106,17 @@ export const project = (input: PetState, toTick: number, ctx: ProjectionContext)
         state.form =
           state.careTicks === 0
             ? "STEADY"
-            : state.careNum >= FORM_THRIVING_AT * denominator
+            : state.careNum >= formLines.thriving * denominator
               ? "THRIVING"
-              : state.careNum >= FORM_STEADY_AT * denominator
+              : state.careNum >= formLines.steady * denominator
                 ? "STEADY"
                 : "FRAIL";
       }
       stage = nextStage;
       milestones.push({ kind: "EVOLVED", tick, detail: stage });
     }
+    if (tick === meditationStart) milestones.push({ kind: "MEDITATING", tick });
+    const meditating = meditatingAt(state, tick);
 
     // 2. Scheduled sleep/wake.
     while (boundaryIdx < boundaries.length && boundaries[boundaryIdx]!.tick <= tick) {
@@ -117,17 +136,19 @@ export const project = (input: PetState, toTick: number, ctx: ProjectionContext)
     }
 
     // 3. Decay / recovery. EGG never reaches here, so stage is post-hatch.
-    const rates = decayRates(
+    const rates = meditating ? null : decayRates(
       stage as Exclude<LifeStage, "EGG">,
       state.form,
       state.asleep ? "SLEEP" : "WAKE",
       nightExempt && phase === "SLEEP" ? BASELINE_CARE_PERMILLE : difficultyPermille,
     );
     const before = { ...state.needs };
-    for (const need of NEED_KEYS) {
-      state.needs[need] = clampNeed(state.needs[need] - rates[need], NEED_MAX);
+    if (rates !== null) {
+      for (const need of NEED_KEYS) {
+        state.needs[need] = clampNeed(state.needs[need] - rates[need], NEED_MAX);
+      }
     }
-    if (state.asleep) {
+    if (state.asleep && !meditating) {
       state.needs.energy = clampNeed(state.needs.energy + ENERGY_SLEEP_RECOVERY, NEED_MAX);
     }
 
@@ -156,7 +177,7 @@ export const project = (input: PetState, toTick: number, ctx: ProjectionContext)
     }
 
     // 7. Sickness onset — the only randomness in the game (SPEC §2.9).
-    if (!state.sick) {
+    if (!state.sick && !meditating) {
       const threshold = sickOnsetThreshold(state.needs.hygiene, state.healthRaw);
       if (draw32(state.generation.seed, tick, RNG_PURPOSE.sickOnset) < threshold) {
         state.sick = true;
@@ -171,7 +192,7 @@ export const project = (input: PetState, toTick: number, ctx: ProjectionContext)
     const healthBefore = state.healthRaw;
     state.healthRaw = clampNeed(state.healthRaw - terms.drainNeeds - terms.drainSick - terms.drainAge + terms.regen, HEALTH_MAX);
     // An elder crossing below the fading line, once per descent (SPEC §2.10).
-    if (stage === "ELDER" && healthBefore >= FADING_THRESHOLD && state.healthRaw < FADING_THRESHOLD) {
+    if (isOld(stage) && healthBefore >= FADING_THRESHOLD && state.healthRaw < FADING_THRESHOLD) {
       milestones.push({ kind: "FADING", tick });
     }
 

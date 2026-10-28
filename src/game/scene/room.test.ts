@@ -17,7 +17,7 @@ import { hatchedState, projectImmortal, testCtx } from "@/sim/testkit";
 import { HEALTH_MAX, NEED_MAX, STAGE_STARTS, TICKS_PER_DAY, type LifeStage } from "@/sim/tuning";
 
 const ctx = testCtx();
-const RAMP: LifeStage[] = ["HATCHLING", "PUP", "JUVENILE", "ADULT", "ELDER"];
+const RAMP: LifeStage[] = ["HATCHLING", "PUP", "JUVENILE", "ADULT", "ELDER", "SAGE"];
 
 type Matrix = { a: number; d: number; e: number; f: number };
 type Rect = { x: number; y: number; w: number; h: number };
@@ -172,6 +172,7 @@ describe("stage scale", () => {
     expect(stageScale("JUVENILE")).toBe(0.9);
     expect(stageScale("ADULT")).toBe(1);
     expect(stageScale("ELDER")).toBe(1);
+    expect(stageScale("SAGE")).toBe(1);
     for (let index = 1; index < RAMP.length; index++) {
       expect(stageScale(RAMP[index]!)).toBeGreaterThanOrEqual(stageScale(RAMP[index - 1]!));
     }
@@ -413,6 +414,33 @@ describe("a hat on the head", () => {
     }
   });
 
+  // A sage's beard hangs from the mouth, and the mouth is a row of fur under
+  // the eyes: the beard's top row never rises past the bottom of a two-row
+  // eye, which sits sixteen rows under the brow bars — the one-pixel gap
+  // above the eyes plus the eyes themselves — so it can never cover them.
+  it("hangs every frame's beard under the eyes, never over them", () => {
+    for (const [frame, anchor] of Object.entries(HEAD_ANCHORS)) {
+      if (!anchor) continue;
+      expect(anchor.beard.y - SPRITE_FRAMES.sageBeard.h, frame).toBeGreaterThanOrEqual(anchor.brows.y + 16);
+      expect(anchor.beard.y, frame).toBeLessThan(0);
+    }
+  });
+
+  // The meditation frames are the front-facing adult sat down: the same
+  // head, so the same columns for everything worn on it, and the second
+  // frame's breath lifts the head one art pixel with all of it.
+  it("anchors the meditation frames on the front-facing head, rising a pixel on the inhale", () => {
+    const settled = HEAD_ANCHORS.meditate1!;
+    const risen = HEAD_ANCHORS.meditate2!;
+    const front = HEAD_ANCHORS.idleFront1!;
+    expect([settled.x, settled.brows.x, settled.beard.x]).toEqual([front.x, front.brows.x, front.beard.x]);
+    expect([risen.x, risen.brows.x, risen.beard.x]).toEqual([front.x, front.brows.x, front.beard.x]);
+    for (const lift of [settled.y - risen.y, settled.brows.y - risen.brows.y, settled.beard.y - risen.beard.y]) {
+      expect(lift).toBeGreaterThanOrEqual(5);
+      expect(lift).toBeLessThanOrEqual(6);
+    }
+  });
+
   it("stands an elder's brow tufts over the eyes, and takes them off the gravestone", () => {
     const { room, derived, state } = contentedRoom(22);
     expect(derived.stage).toBe("ELDER");
@@ -433,6 +461,57 @@ describe("a hat on the head", () => {
     const mourning = recordingContext();
     room.render(mourning.ctx, 3000);
     expect(mourning.drawn.map((entry) => entry.x1 - entry.x0)).toEqual([SPRITE_FRAMES.dead1.w]);
+  });
+
+  // Brought to ruleset 4 on its 22nd day: it meditates from day 40 and is a
+  // Sage from day 42 (SPEC §2.8).
+  const agedRoom = (days: number) => {
+    const { room, state } = contentedRoom(22);
+    const aged = {
+      ...projectImmortal({ ...state, sageRuleFromTick: state.tick }, days * TICKS_PER_DAY, ctx),
+      needs: state.needs,
+      sick: false,
+      asleep: false,
+    };
+    return { room, derived: derive(aged) };
+  };
+
+  it("hangs a Sage's beard from the mouth, under its tufts, and none on an elder", () => {
+    const { room, derived } = agedRoom(43);
+    expect(derived.stage).toBe("SAGE");
+    room.reducedMotion = true;
+    room.syncDerived(derived, false, 0);
+    const recorder = recordingContext();
+    room.render(recorder.ctx, 1000);
+    const frame = BASE_CLIPS.idle.frames[0]!;
+    const { beard } = HEAD_ANCHORS[frame]!;
+    const sprite = recorder.drawn.find((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES[frame].w)!;
+    const widths = recorder.drawn.map((entry) => entry.x1 - entry.x0);
+    expect(widths).toContain(SPRITE_FRAMES.elderBrows.w);
+    const drawnBeard = recorder.drawn.find((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES.sageBeard.w)!;
+    expect(drawnBeard).toBeDefined();
+    expect(drawnBeard.x0 - sprite.x0).toBe(Math.floor(SPRITE_FRAMES[frame].w / 2) + beard.x - Math.floor(SPRITE_FRAMES.sageBeard.w / 2));
+    expect(drawnBeard.y1 - 172).toBe(beard.y);
+
+    const elder = contentedRoom(22);
+    elder.room.reducedMotion = true;
+    elder.room.syncDerived(elder.derived, false, 0);
+    const elderRecorder = recordingContext();
+    elder.room.render(elderRecorder.ctx, 1000);
+    expect(elderRecorder.drawn.some((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES.sageBeard.w)).toBe(false);
+  });
+
+  it("sits a meditating elder in the meditation pose, tufts on and no beard yet", () => {
+    const { room, derived } = agedRoom(41);
+    expect(derived.animation).toBe("meditating");
+    room.reducedMotion = true;
+    room.syncDerived(derived, false, 0);
+    const recorder = recordingContext();
+    room.render(recorder.ctx, 1000);
+    const widths = recorder.drawn.map((entry) => entry.x1 - entry.x0);
+    expect(widths).toContain(SPRITE_FRAMES.meditate1.w);
+    expect(widths).toContain(SPRITE_FRAMES.elderBrows.w);
+    expect(widths).not.toContain(SPRITE_FRAMES.sageBeard.w);
   });
 
   // The sleeping art wears its own nightcap, and the crown was drawn straight

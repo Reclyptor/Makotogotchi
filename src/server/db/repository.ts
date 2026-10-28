@@ -15,6 +15,7 @@ export const createGeneration = async (database: Db, generation: Generation): Pr
     genesisEpochMs: generation.genesisEpochMs,
     name: generation.name,
     ...(generation.foodCatalogSize !== undefined ? { foodCatalogSize: generation.foodCatalogSize } : {}),
+    ...(generation.sageBlessed ? { sageBlessed: true as const } : {}),
     hatchedAtTick: null,
     died: null,
     memorial: null,
@@ -29,6 +30,7 @@ export const toGeneration = (doc: GenerationDoc): Generation => ({
   genesisEpochMs: doc.genesisEpochMs,
   name: doc.name,
   ...(doc.foodCatalogSize !== undefined ? { foodCatalogSize: doc.foodCatalogSize } : {}),
+  ...(doc.sageBlessed ? { sageBlessed: true as const } : {}),
 });
 
 export const latestGeneration = async (database: Db): Promise<GenerationDoc | null> => {

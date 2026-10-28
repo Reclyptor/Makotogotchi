@@ -90,11 +90,11 @@ describe("project", () => {
 
   it("evolves through the life stages at the tick boundaries", () => {
     const state = hatchedState(ctx);
-    expect(stageAt(0, TICKS_PER_DAY - 1)).toBe("HATCHLING");
-    expect(stageAt(0, TICKS_PER_DAY)).toBe("PUP");
-    expect(stageAt(0, 3 * TICKS_PER_DAY)).toBe("JUVENILE");
-    expect(stageAt(0, 7 * TICKS_PER_DAY)).toBe("ADULT");
-    expect(stageAt(0, 21 * TICKS_PER_DAY)).toBe("ELDER");
+    expect(stageAt(0, TICKS_PER_DAY - 1, null)).toBe("HATCHLING");
+    expect(stageAt(0, TICKS_PER_DAY, null)).toBe("PUP");
+    expect(stageAt(0, 3 * TICKS_PER_DAY, null)).toBe("JUVENILE");
+    expect(stageAt(0, 7 * TICKS_PER_DAY, null)).toBe("ADULT");
+    expect(stageAt(0, 21 * TICKS_PER_DAY, null)).toBe("ELDER");
 
     const { milestones } = project(state, 2 * TICKS_PER_DAY, ctx);
     const evolved = milestones.filter((m) => m.kind === "EVOLVED");

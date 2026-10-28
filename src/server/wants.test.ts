@@ -146,9 +146,9 @@ describe("settleWantFulfillment", () => {
   it("pays exactly when the outcome carries WANT_FULFILLED", async () => {
     const database = await db();
     const before = (await caretakerProfile(database, "payee"))?.coins ?? 0;
-    const paid = await settleWantFulfillment(database, "payee", [{ kind: "WANT_FULFILLED", tick: 1, detail: "cuddle" }]);
+    const paid = await settleWantFulfillment(database, "payee", [{ kind: "WANT_FULFILLED", tick: 1, detail: "cuddle" }], "ADULT");
     expect(paid).toBe(WANT_REWARD_COINS);
-    const none = await settleWantFulfillment(database, "payee", [{ kind: "SLEPT", tick: 1 }]);
+    const none = await settleWantFulfillment(database, "payee", [{ kind: "SLEPT", tick: 1 }], "ADULT");
     expect(none).toBe(0);
     const after = (await caretakerProfile(database, "payee"))?.coins ?? 0;
     expect(after - before).toBe(WANT_REWARD_COINS);

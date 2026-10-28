@@ -19,6 +19,8 @@ const clip = (frames: readonly FrameName[], frameMs: number, loop: boolean): Cli
 export const BASE_CLIPS: Record<AnimationKey, Clip> = {
   egg: clip(["clone1", "clone2", "clone3", "clone4", "clone5", "clone6", "clone7", "clone8"], 1800, true),
   idle: clip(["idleSide1", "idleSide2", "idleSide3"], 900, true),
+  // A slow breath in and out: two days of it (SPEC §2.8).
+  meditating: clip(["meditate1", "meditate2"], 1600, true),
   sleeping: clip(["sleep1", "sleep2"], 1200, true),
   sick: clip(["sick1", "sick2", "sick1", "sick2", "sneeze1", "sneeze2"], 900, true),
   hungry: clip(["unhappyEat1", "unhappyEat2", "unhappyEat1", "unhappyEat2", "cry1", "cry2"], 800, true),

@@ -76,13 +76,13 @@ describe("generation lifecycle", () => {
     const fed = await engine.care(first, "FEED", "ana");
     expect(fed.ok).toBe(true);
     if (fed.ok) {
-      await recordContribution(database, { caretakerId: "ana", generationId: first.id, action: "FEED", applied: fed.applied, tick: fed.state.tick });
+      await recordContribution(database, { stage: "ADULT", caretakerId: "ana", generationId: first.id, action: "FEED", applied: fed.applied, tick: fed.state.tick });
     }
     advanceTicks(6);
     const played = await engine.care(first, "PLAY", "bo");
     expect(played.ok).toBe(true);
     if (played.ok) {
-      await recordContribution(database, { caretakerId: "bo", generationId: first.id, action: "PLAY", applied: played.applied, tick: played.state.tick });
+      await recordContribution(database, { stage: "ADULT", caretakerId: "bo", generationId: first.id, action: "PLAY", applied: played.applied, tick: played.state.tick });
     }
 
     // Ana holds a title going into the grave (SPEC §24.2).

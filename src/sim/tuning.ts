@@ -11,7 +11,7 @@ export const TICK_SECONDS = 10;
 // means raising this number — not adding an event type per change — and
 // gating the new rule on it. Version 1 is every history that predates the
 // event.
-export const CURRENT_RULES_VERSION = 3;
+export const CURRENT_RULES_VERSION = 4;
 /** The ruleset that introduced each gated rule, so no call site carries a bare number. */
 export const RULES_SINCE = {
   /** An elder dying with no need critical, below its line, dies of age (SPEC §2.3). */
@@ -26,6 +26,8 @@ export const RULES_SINCE = {
   GENTLE_CEILING: 3,
   /** The elder hold line stops at 75%, FRAIL at 70% (SPEC §2.3). */
   LOWER_HOLD_CAP: 3,
+  /** An elder meditates on day 40 and rises a SAGE two days later (SPEC §2.8). */
+  SAGE: 4,
 } as const;
 export const TICKS_PER_HOUR = 360;
 export const TICKS_PER_DAY = 8640;
@@ -80,6 +82,10 @@ export const ELDER_HOLD_CAP_FRAIL = 800_000; // 80%
 export const ELDER_HOLD_CAP_V3 = 750_000; // 75%
 export const ELDER_HOLD_CAP_FRAIL_V3 = 700_000; // 70%
 export const ELDER_BAND = 100_000; // 10 points
+// A Sage is asked for less than the elder it was (SPEC §2.8): a flat line, ten
+// points under the elder's ruleset-3 caps, with the same band beneath it.
+export const SAGE_HOLD_MEAN = 650_000; // 65%
+export const SAGE_HOLD_MEAN_FRAIL = 600_000; // 60%
 /** Where the hold line stops for a form, under the ruleset the pet is living by. */
 const elderHoldCap = (form: AdultForm | null, rules: number): number => {
   const frail = form === "FRAIL" && rules >= RULES_SINCE.FRAIL_CAP;
@@ -93,16 +99,22 @@ export const needsMean = (needs: Record<NeedKey, number>): number =>
 /** Today's hold line: the legacy flat one before any ramp, the climbing one after. */
 export const elderHoldLine = (rampDay: number | null, form: AdultForm | null, rules: number): number =>
   rampDay === null ? LEGACY_ELDER_HOLD_MEAN : elderHoldMean(rampDay, form, rules);
+/** Vigour against a line: none at `floor`, full at `hold`, linear between. */
+const vigourAgainst = (needs: Record<NeedKey, number>, hold: number, floor: number): number =>
+  Math.min(1000, Math.max(0, Math.floor(((needsMean(needs) - floor) * 1000) / (hold - floor))));
+export const sageHoldMean = (form: AdultForm | null): number => (form === "FRAIL" ? SAGE_HOLD_MEAN_FRAIL : SAGE_HOLD_MEAN);
+export const sageVigourPermille = (needs: Record<NeedKey, number>, form: AdultForm | null): number => {
+  const hold = sageHoldMean(form);
+  return vigourAgainst(needs, hold, hold - ELDER_BAND);
+};
 export const elderVigourPermille = (
   needs: Record<NeedKey, number>,
   rampDay: number | null,
   form: AdultForm | null,
   rules: number,
 ): number => {
-  const mean = needsMean(needs);
   const hold = elderHoldLine(rampDay, form, rules);
-  const floor = rampDay === null ? CRITICAL_THRESHOLD : hold - ELDER_BAND;
-  return Math.min(1000, Math.max(0, Math.floor(((mean - floor) * 1000) / (hold - floor))));
+  return vigourAgainst(needs, hold, rampDay === null ? CRITICAL_THRESHOLD : hold - ELDER_BAND);
 };
 // An elder held at full vigour regains health at a quarter of the adult rate:
 // about four days from empty to full.
@@ -115,12 +127,21 @@ export const HEALTH_REGEN = 120_000_000;
 // Below 40% health the SICK onset chance triples.
 export const HEALTH_SICK_MULTIPLIER_THRESHOLD = 400_000_000_000;
 
-export type LifeStage = "EGG" | "HATCHLING" | "PUP" | "JUVENILE" | "ADULT" | "ELDER";
+export type LifeStage = "EGG" | "HATCHLING" | "PUP" | "JUVENILE" | "ADULT" | "ELDER" | "SAGE";
+/** The stages old age reaches: the elder health model, fading and twilight. */
+export const isOld = (stage: LifeStage): stage is "ELDER" | "SAGE" => stage === "ELDER" || stage === "SAGE";
 export type AdultForm = "THRIVING" | "STEADY" | "FRAIL";
 export type SleepPhase = "WAKE" | "SLEEP";
 
 // When a pet becomes an elder, in ticks since hatch.
 export const ELDER_STARTS_AT = 21 * TICKS_PER_DAY;
+
+// Under ruleset 4 an elder sits down to meditate on this day of its life, or
+// the tick after the ruleset is recorded if it is already older, and rises a
+// SAGE when the meditation ends (SPEC §2.8). Neither is in STAGE_STARTS: SAGE
+// depends on when the rule arrived, not on age alone (see `sageStartTickOf`).
+export const MEDITATION_STARTS_AT = 40 * TICKS_PER_DAY;
+export const MEDITATION_TICKS = 2 * TICKS_PER_DAY;
 
 // Stage boundaries in ticks since hatch (EGG ends at the HATCHED event, whose
 // timing is external — the naming vote — so it is not a tick offset).
@@ -152,6 +173,7 @@ const STAGE_MULTIPLIER: Record<Exclude<LifeStage, "EGG">, number> = {
   JUVENILE: 1,
   ADULT: 1,
   ELDER: 1.2,
+  SAGE: 1,
 };
 const FORM_MULTIPLIER: Record<AdultForm, number> = { THRIVING: 0.9, STEADY: 1, FRAIL: 1.15 };
 
@@ -200,7 +222,7 @@ const decayFor = (stage: Exclude<LifeStage, "EGG">, form: AdultForm | null, phas
 // The full precomputed table: stage → form (null pre-adult) → phase → rates.
 // Deterministic at module load; every value is an exact integer thereafter.
 export const DECAY_TABLE: ReadonlyMap<string, DecayRates> = new Map(
-  (["HATCHLING", "PUP", "JUVENILE", "ADULT", "ELDER"] as const).flatMap((stage) =>
+  (Object.keys(STAGE_MULTIPLIER) as Exclude<LifeStage, "EGG">[]).flatMap((stage) =>
     ([null, "THRIVING", "STEADY", "FRAIL"] as const).flatMap((form) =>
       (["WAKE", "SLEEP"] as const).map((phase) => [`${stage}|${form ?? "-"}|${phase}`, decayFor(stage, form, phase)] as const),
     ),
@@ -378,6 +400,15 @@ export const sickOnsetThreshold = (hygiene: number, healthRaw: number): number =
 
 export const FORM_THRIVING_AT = 750_000; // careScore ≥ 75%
 export const FORM_STEADY_AT = 400_000; // careScore ≥ 40%; below is FRAIL
+// The Sage's blessing (SPEC §2.8): an egg laid after a Sage's death is held to
+// a gentler childhood, ten points under each line.
+export const FORM_THRIVING_AT_BLESSED = 650_000;
+export const FORM_STEADY_AT_BLESSED = 300_000;
+/** The careScore lines a generation's adult form is decided against. */
+export const formThresholds = (blessed: boolean): { thriving: number; steady: number } =>
+  blessed
+    ? { thriving: FORM_THRIVING_AT_BLESSED, steady: FORM_STEADY_AT_BLESSED }
+    : { thriving: FORM_THRIVING_AT, steady: FORM_STEADY_AT };
 
 // ── Contribution scoring (SPEC §2.11) ───────────────────────────────────────
 

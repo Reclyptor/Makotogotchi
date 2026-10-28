@@ -26,6 +26,7 @@ import { subscribeToEvents } from "./stream/hub";
 import { primeRoomCache } from "./snapshot";
 import type { EngineMessage } from "./engine/messages";
 import { settleQuest } from "./quests";
+import { settleAscension } from "./ascension";
 import { observeWants } from "./wants";
 import { isAlive, rulesVersionOf, type Generation } from "@/sim/model";
 
@@ -147,6 +148,8 @@ const boot = async (): Promise<Runtime> => {
         // The day's shared goal (SPEC §21.7): claimed once, then announced.
         const settled = await settleQuest(database, current, state, env().PET_TIMEZONE, Date.now());
         if (settled) await engine.milestone(current, "QUEST_DONE", settled.quest.id);
+        // The Sage's ascension (SPEC §2.8): claimed once, then paid.
+        await settleAscension(database, current, state);
       }
       if (!successor && isAlive(state) && state.tick - lastPopulationTick >= TICKS_PER_HOUR) {
         lastPopulationTick = state.tick;

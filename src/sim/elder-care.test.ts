@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { PetEvent } from "./events";
-import type { PetState } from "./model";
+import { sageStartTickOf, stageOf, type PetState } from "./model";
 import { careMultiplierOf } from "./difficulty";
 import { project } from "./project";
 import { reduce } from "./reduce";
@@ -19,18 +19,18 @@ import { hatchedState, projectImmortal, TEST_GENERATION, testCtx } from "./testk
 import { canPerform } from "./validate";
 import {
   COOLDOWNS,
-  CURRENT_RULES_VERSION,
   diminishedMagnitude,
   ELDER_STARTS_AT,
   HEALTH_MAX,
   MAGNITUDE_ACTIONS,
   NEED_MAX,
   PLAY_ENERGY_COST,
+  RULES_SINCE,
   TICKS_PER_DAY,
   type CareAction,
 } from "./tuning";
 
-const ctx = testCtx();
+const ctx = testCtx(70);
 
 /** A restoration this small is not worth a caretaker's cooldown. */
 const MIN_NET_GAIN = 250;
@@ -126,8 +126,12 @@ const outcomeOf = (state: PetState, start: number, lowestHealth: number): Outcom
  * Ten (or however many) people caring for a fresh elder, each look at the pet
  * taking up to `perLook` of the bot's moves. Sickness is off (see `projectWell`).
  */
-const careForElder = (opts: { caretakers: number; days: number; every: number; perLook: number; rules?: number }): Outcome => {
-  let state = startOfRamp(NEED_MAX, opts.caretakers, opts.rules);
+const careForElder = (opts: { caretakers: number; days: number; every: number; perLook: number; rules?: number }): Outcome =>
+  careFrom(startOfRamp(NEED_MAX, opts.caretakers, opts.rules), opts);
+
+/** The bot's care from any starting state (see `careForElder`). */
+const careFrom = (initial: PetState, opts: { caretakers: number; days: number; every: number; perLook: number }): Outcome => {
+  let state = initial;
   const ids = Array.from({ length: opts.caretakers }, (_, index) => `carer-${String(index).padStart(2, "0")}`);
   const start = state.tick;
   const end = start + opts.days * TICKS_PER_DAY;
@@ -160,8 +164,10 @@ const careForElder = (opts: { caretakers: number; days: number; every: number; p
  * A group that holds the mean exactly: the needs are pinned back to `level`
  * after every half-minute step, the way project.test.ts holds the flat line.
  */
-const heldAt = (level: number, days: number): Outcome => {
-  let state = startOfRamp(level, 10);
+const heldAt = (level: number, days: number): Outcome => heldFrom(startOfRamp(level, 10), level, days);
+
+const heldFrom = (initial: PetState, level: number, days: number): Outcome => {
+  let state = initial;
   const start = state.tick;
   const end = start + days * TICKS_PER_DAY;
   let lowestHealth = HEALTH_MAX;
@@ -193,7 +199,7 @@ describe("old age is held off by care (SPEC §16.2)", () => {
   it("ten people looking in every half hour keep the elder alive for thirty days under ruleset 3", { timeout: 20_000 }, () => {
     // Good care, not perfect play (SPEC §2.3): the 75% line is within reach of
     // a look every half hour, which the 85% line was not.
-    const run = careForElder({ caretakers: 10, days: 30, every: 180, perLook: 4, rules: CURRENT_RULES_VERSION });
+    const run = careForElder({ caretakers: 10, days: 30, every: 180, perLook: 4, rules: RULES_SINCE.LOWER_HOLD_CAP });
     expect(run.diedAfterDays).toBeNull();
     expect(run.lowestHealth).toBeGreaterThanOrEqual(HEALTH_MAX / 2);
   });
@@ -216,5 +222,38 @@ describe("old age is held off by care (SPEC §16.2)", () => {
     expect(run.cause).toBe("age");
     expect(run.diedAfterDays!).toBeGreaterThanOrEqual(10);
     expect(run.diedAfterDays!).toBeLessThanOrEqual(14);
+  });
+});
+
+/**
+ * A Sage on its first day, full of everything: an elder brought to ruleset 4
+ * on its first elder day, carried through its meditation.
+ */
+const firstSageDay = (level: number, caretakers: number): PetState => {
+  const elder = { ...startOfRamp(NEED_MAX, caretakers, RULES_SINCE.SAGE) };
+  const ruled = { ...elder, sageRuleFromTick: elder.tick };
+  const sage = projectImmortal(ruled, sageStartTickOf(ruled)!, ctx);
+  return { ...sage, needs: { hunger: level, energy: level, hygiene: level, joy: level }, healthRaw: HEALTH_MAX };
+};
+
+describe("a Sage is easier to keep than the elder it was (SPEC §2.8, §16.2)", () => {
+  it("ten people looking in every half hour keep the Sage alive and above half health for twenty days", { timeout: 30_000 }, () => {
+    const start = firstSageDay(NEED_MAX, 10);
+    expect(stageOf(start, start.tick)).toBe("SAGE");
+    const run = careFrom(start, { caretakers: 10, days: 20, every: 180, perLook: 4 });
+    expect(run.diedAfterDays).toBeNull();
+    expect(run.lowestHealth).toBeGreaterThanOrEqual(HEALTH_MAX / 2);
+  });
+
+  it("a Sage held at a 70% mean, below the elder's 75% line, keeps its health", () => {
+    const run = heldFrom(firstSageDay(700_000, 10), 700_000, 20);
+    expect(run.diedAfterDays).toBeNull();
+    expect(run.lowestHealth).toBeGreaterThanOrEqual(HEALTH_MAX * 0.9);
+  });
+
+  it("a Sage held at a 55% mean, the bottom of its band, still dies of age", () => {
+    const run = heldFrom(firstSageDay(550_000, 10), 550_000, 20);
+    expect(run.cause).toBe("age");
+    expect(run.diedAfterDays).not.toBeNull();
   });
 });

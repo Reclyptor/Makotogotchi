@@ -9,6 +9,7 @@
 // client cannot start a cheap envelope and finish an expensive one.
 
 import { NextResponse, type NextRequest } from "next/server";
+import { stageOf } from "@/sim/model";
 import { z } from "zod";
 import { db } from "@/server/db/client";
 import { key, redis } from "@/server/redis/client";
@@ -180,19 +181,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const favorite = quirks(current).favoriteGame === sessionGame.id;
   const base = sessionGame.coins(score);
   const coins = favorite ? Math.round((base * QUIRK_FAVORITE_GAME_COIN_PERCENT) / 100) : base;
+  // A Sage's care pays half as much again (SPEC §13.1).
+  const stage = stageOf(outcome.state, outcome.state.tick);
   const ledger = await recordContribution(await db(), {
     caretakerId: identity.caretakerId,
     generationId: current.id,
     action: "PLAY",
     applied: outcome.applied,
     tick: outcome.state.tick,
+    stage,
     // The run's own payout above is earned by playing well and is untouched;
     // this is the care ledger, and care that moved nothing earns nothing.
     changed: outcome.changed,
   });
   await creditCoins(await db(), identity.caretakerId, coins);
   // Granting a play-game wish pays extra (SPEC §25.4).
-  const wantCoins = await settleWantFulfillment(await db(), identity.caretakerId, outcome.milestones);
+  const wantCoins = await settleWantFulfillment(await db(), identity.caretakerId, outcome.milestones, stage);
   // And the title race advances — Wish Granter can move here (SPEC §24.3).
   await rollTitles(await db(), publish, {
     generation: current,

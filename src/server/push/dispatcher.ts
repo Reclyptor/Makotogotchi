@@ -17,8 +17,17 @@
 
 import type { Db } from "mongodb";
 import type Redis from "ioredis";
-import { stageAt, type PetState, type WantOpen } from "@/sim/model";
-import { CRITICAL_THRESHOLD, FADING_THRESHOLD, HEALTH_MAX, NEED_KEYS, STAGE_STARTS, type NeedKey } from "@/sim/tuning";
+import { meditatingAt, meditationStartTickOf, sageStartTickOf, stageOf, type PetState, type WantOpen } from "@/sim/model";
+import {
+  CRITICAL_THRESHOLD,
+  FADING_THRESHOLD,
+  HEALTH_MAX,
+  isOld,
+  NEED_KEYS,
+  STAGE_STARTS,
+  type LifeStage,
+  type NeedKey,
+} from "@/sim/tuning";
 import { WANT_PUSH_THROTTLE_MS } from "@/sim/wants";
 import { foodItem } from "@/sim/economy";
 import { isMinigameId, MINIGAMES } from "@/sim/minigames";
@@ -75,14 +84,24 @@ export class PushDispatcher {
       return; // no other alert matters now
     }
 
-    const stage = stageAt(state.bornAtTick, state.tick);
-    if (stage !== "HATCHLING") {
-      const stageStart = STAGE_STARTS.find((entry) => entry.stage === stage)?.atTick ?? 0;
-      const sinceStage = state.tick - state.bornAtTick - stageStart;
+    const stage = stageOf(state, state.tick);
+    if (stage !== "HATCHLING" && stage !== "EGG") {
+      const sinceStage = state.tick - stageStartTick(state, stage);
       await this.oncePerGeneration(generationId, `evolved:${stage}`, sinceStage <= RECENT_TICKS, {
         title: `${name} evolved! ✨`,
         body: `${name} is now ${stage.toLowerCase()}${state.form ? ` (${state.form.toLowerCase()})` : ""}.`,
         tag: "evolved",
+      });
+    }
+
+    // The elder's two days of stillness (SPEC §2.8), once per generation.
+    const meditating = meditatingAt(state, state.tick);
+    if (meditating) {
+      const sinceStart = state.tick - meditationStartTickOf(state)!;
+      await this.oncePerGeneration(generationId, "meditating", sinceStart <= RECENT_TICKS, {
+        title: `${name} has entered deep meditation 🧘`,
+        body: `Needs and health hold still for two days. ${name} rises a sage.`,
+        tag: "meditating",
       });
     }
 
@@ -109,9 +128,10 @@ export class PushDispatcher {
       }
     }
 
-    // An elder in its twilight (SPEC §2.10): fading is reversible, and this
-    // is the alert that says so while there is still time.
-    if (stage === "ELDER" && state.healthRaw < FADING_THRESHOLD) {
+    // An elder or Sage in its twilight (SPEC §2.10): fading is reversible, and
+    // this is the alert that says so while there is still time. Meditation
+    // holds health still, so there is nothing to warn about during it.
+    if (isOld(stage) && !meditating && state.healthRaw < FADING_THRESHOLD) {
       await this.hysteresisTrigger(generationId, "fading", {
         title: `${name} is fading 🍂`,
         body: "Old age is catching up. Keeping every need high brings health back.",
@@ -250,4 +270,11 @@ const wantPayload = (name: string, want: WantOpen): PushPayload => {
       ask = `${name} wants something.`;
   }
   return { title: `${name} wants something 💭`, body: `${ask} Nobody's around right now.`, tag: "want" };
+};
+
+/** The tick `stage` began for this pet; SAGE starts when the meditation ends. */
+const stageStartTick = (state: PetState, stage: Exclude<LifeStage, "EGG">): number => {
+  const bornAtTick = state.bornAtTick as number;
+  if (stage === "SAGE") return sageStartTickOf(state)!;
+  return bornAtTick + (STAGE_STARTS.find((entry) => entry.stage === stage)?.atTick ?? 0);
 };

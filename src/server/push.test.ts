@@ -10,7 +10,7 @@ import { allSubscriptions, saveSubscription } from "./push/store";
 import { startTestInfra, type TestInfra } from "./testsetup";
 import { genesis } from "@/sim/genesis";
 import type { PetState } from "@/sim/model";
-import { CRITICAL_THRESHOLD, HEALTH_MAX, NEED_MAX } from "@/sim/tuning";
+import { CRITICAL_THRESHOLD, HEALTH_MAX, MEDITATION_TICKS, NEED_MAX, RULES_SINCE, TICKS_PER_DAY } from "@/sim/tuning";
 
 let infra: TestInfra;
 let fakeNowMs = 1_760_028_800_000;
@@ -171,5 +171,48 @@ describe("the playful want lane (SPEC §25.6)", () => {
     fakeNowMs += 4 * 60 * 60 * 1000;
     await dispatcher.observe(wanting(105));
     expect(wantsSent()).toHaveLength(1);
+  });
+});
+
+describe("PushDispatcher and the Sage (SPEC §2.8)", () => {
+  // Day 40 with the ruleset recorded at hatch: meditation runs 40d–42d.
+  const sageGeneration = { id: "gen-push-sage", ordinal: 1, seed: 1, genesisEpochMs: fakeNowMs, name: "Makoto" };
+  const meditationStart = 40 * TICKS_PER_DAY;
+  // An earlier case prunes an endpoint, so count what is left rather than assume.
+  const subscribers = async (): Promise<number> => (await allSubscriptions(await db())).length;
+  const sageState = (tick: number): PetState => ({
+    ...genesis(sageGeneration),
+    bornAtTick: 0,
+    tick,
+    rulesVersion: RULES_SINCE.SAGE,
+    sageRuleFromTick: 0,
+  });
+
+  it("announces the meditation once, as it begins", async () => {
+    sent.length = 0;
+    fakeNowMs += 31 * 60 * 1000;
+    await dispatcher.observe(sageState(meditationStart + 5));
+    await dispatcher.observe(sageState(meditationStart + 50));
+    const meditating = sent.filter((s) => s.payload.tag === "meditating");
+    expect(meditating).toHaveLength(await subscribers()); // every subscriber, once each
+    expect(meditating[0]!.payload.title).toBe("Makoto has entered deep meditation 🧘");
+  });
+
+  it("announces the Sage once, from the tick the meditation ends", async () => {
+    sent.length = 0;
+    fakeNowMs += 31 * 60 * 1000;
+    const sageStart = meditationStart + MEDITATION_TICKS;
+    await dispatcher.observe(sageState(sageStart + 5));
+    await dispatcher.observe(sageState(sageStart + 50));
+    const evolved = sent.filter((s) => s.payload.tag === "evolved");
+    expect(evolved).toHaveLength(await subscribers());
+    expect(evolved[0]!.payload.body).toBe("Makoto is now sage.");
+  });
+
+  it("raises no fading alert while health is held still by meditation", async () => {
+    sent.length = 0;
+    fakeNowMs += 31 * 60 * 1000;
+    await dispatcher.observe({ ...sageState(meditationStart + 100), healthRaw: HEALTH_MAX / 3 });
+    expect(sent.filter((s) => s.payload.tag === "fading")).toHaveLength(0);
   });
 });

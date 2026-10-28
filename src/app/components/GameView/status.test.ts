@@ -387,3 +387,28 @@ describe("the wake countdown", () => {
     expect(statusLine("Makoto", asleep, derive(asleep)).text).not.toContain("Wakes ");
   });
 });
+
+// The elder's two days of stillness and the Sage after them (SPEC §2.8).
+describe("status line: meditation and the Sage", () => {
+  // Brought to ruleset 4 on its 22nd day, so it meditates from day 40.
+  const ruled = { ...elder, sageRuleFromTick: elder.tick };
+  const meditationStart = 40 * TICKS_PER_DAY;
+
+  it("counts down the meditation in days and hours, ahead of sleep and every need", () => {
+    const sitting = contented(projectImmortal(ruled, meditationStart + 6 * TICKS_PER_HOUR, ctx));
+    expect(line(sitting)).toBe("Makoto is in deep meditation. Returns in 1d 18h.");
+    const hungryAsleep = { ...sitting, asleep: true, sleepReason: "NIGHT" as const, needs: { ...sitting.needs, hunger: 0 } };
+    expect(line(hungryAsleep)).toBe("Makoto is in deep meditation. Returns in 1d 18h.");
+  });
+
+  it("falls back to hours and minutes in the last day", () => {
+    const nearlyDone = contented(projectImmortal(ruled, meditationStart + 2 * TICKS_PER_DAY - 90, ctx));
+    expect(line(nearlyDone)).toBe("Makoto is in deep meditation. Returns in 15m.");
+  });
+
+  it("gives a well Sage its own line", () => {
+    const sage = contented(projectImmortal(ruled, meditationStart + 2 * TICKS_PER_DAY + 1, ctx));
+    expect(derive(sage).stage).toBe("SAGE");
+    expect(line(sage)).toBe("Makoto is radiating calm.");
+  });
+});

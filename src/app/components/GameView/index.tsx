@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { derive, type DerivedState } from "@/sim/derive";
-import { stageAt, type PetState } from "@/sim/model";
+import { stageOf, type PetState } from "@/sim/model";
 import { allowanceRemaining } from "@/sim/score";
 import type { CareAction } from "@/sim/tuning";
 import { GameAudio } from "@/game/audio";
@@ -59,6 +59,7 @@ const MILESTONE_ICONS: Record<string, string> = {
   DIED: "🪦",
   CRITICAL: "⚠️",
   FADING: "🍂",
+  MEDITATING: "🧘",
 };
 
 const actionFeedText = (petName: string): Record<CareAction, string> => ({
@@ -141,6 +142,7 @@ const milestoneFeedText = (petName: string): Record<string, string> => ({
   EVOLVED: `${petName} evolved!`,
   CRITICAL: "A need is critically low!",
   FADING: `${petName} is fading — old age is catching up. Keep every need high.`,
+  MEDITATING: `${petName} has sat down to meditate. Only a gentle pat for two days.`,
 });
 
 /** One feed line for a milestone, or null when it has nothing to say. */
@@ -152,6 +154,7 @@ const milestoneLine = (kind: string, detail: string | undefined, petName: string
   if (kind === "WANT_FULFILLED") {
     return { icon: "⭐", text: wantGranted(petName, detail) };
   }
+  if (kind === "EVOLVED" && detail === "SAGE") return { icon: "🧙", text: `${petName} became a sage!` };
   const name = kind === "HATCHED" && detail !== undefined ? detail : petName;
   const text = milestoneFeedText(name)[kind];
   return text === undefined ? null : { icon: MILESTONE_ICONS[kind] ?? "✨", text };
@@ -461,7 +464,7 @@ export default function GameView() {
 
   const ctx = context();
   const petName = ui?.state.generation.name ?? "Makoto";
-  const stage = ui ? stageAt(ui.state.bornAtTick, ui.state.tick) : null;
+  const stage = ui ? stageOf(ui.state, ui.state.tick) : null;
   const isEgg = ui !== null && ui.state.bornAtTick === null;
   const isDead = ui !== null && ui.state.diedAtTick !== null;
 
@@ -590,7 +593,7 @@ export default function GameView() {
         {ui && (
           <span className="flex items-center gap-1.5 text-xs text-muted">
             <span className="panel !rounded-full px-2 py-0.5">{ageText(ui.state)}</span>
-            <span className="panel !rounded-full px-2 py-0.5">{STAGE_LABELS[stage ?? ""] ?? ""}</span>
+            <span className="panel !rounded-full px-2 py-0.5">{stage ? STAGE_LABELS[stage] : ""}</span>
             {ui.state.form && <span className="panel !rounded-full px-2 py-0.5 capitalize">{ui.state.form.toLowerCase()}</span>}
           </span>
         )}

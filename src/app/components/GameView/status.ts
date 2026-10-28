@@ -70,6 +70,7 @@ const WELL_LINE: Record<Exclude<LifeStage, "EGG">, string> = {
   JUVENILE: "is growing fast.",
   ADULT: "is doing fine.",
   ELDER: "is taking it slow.",
+  SAGE: "is radiating calm.",
 };
 
 const list = (words: string[]): string =>
@@ -134,6 +135,14 @@ export const untilWakeText = (ticks: number): string => {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return rest === 0 ? `in ${hours}h` : `in ${hours}h ${rest}m`;
+};
+
+/** "in 1d 6h": the meditation runs two days, longer than any sleep. */
+export const untilReturnText = (ticks: number): string => {
+  const hours = Math.floor(ticks / TICKS_PER_HOUR);
+  if (hours < 24) return untilWakeText(ticks);
+  const rest = hours % 24;
+  return rest === 0 ? `in ${Math.floor(hours / 24)}d` : `in ${Math.floor(hours / 24)}d ${rest}h`;
 };
 
 const sleeping = (state: PetState, ctx?: ProjectionContext): string => {
@@ -249,6 +258,14 @@ export const statusLine = (
   }
   const { stage } = derived;
   if (stage === "EGG") return { text: "The egg is incubating…", elder: null };
+  // Nothing moves while it meditates, so there is no health to report and no
+  // need to name: the countdown is the whole story (SPEC §2.8).
+  if (derived.meditatingUntilTick !== null) {
+    return {
+      text: `${petName} is in deep meditation. Returns ${untilReturnText(derived.meditatingUntilTick - state.tick)}.`,
+      elder: null,
+    };
+  }
   const head = headline(petName, state, derived, stage, ctx);
   const health = healthSentence(derived, head.told);
   return { text: health ? `${head.text} ${health}` : head.text, elder: elderFragment(derived.health) };

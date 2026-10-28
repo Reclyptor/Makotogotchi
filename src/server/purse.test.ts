@@ -64,7 +64,7 @@ describe("every writer announces the purse it just changed", () => {
   });
 
   it("earning from care, which is the balance's most common mover", async () => {
-    await recordContribution(await db(), {
+    await recordContribution(await db(), { stage: "ADULT",
       caretakerId: "ct-care",
       generationId: "gen-purse",
       action: "FEED",
@@ -128,7 +128,7 @@ describe("every writer announces the purse it just changed", () => {
 describe("coins for care that did nothing", () => {
   it("pays the floor for a small but real contribution", async () => {
     const database = await db();
-    const ledger = await recordContribution(database, {
+    const ledger = await recordContribution(database, { stage: "ADULT",
       caretakerId: "ct-tiny",
       generationId: "gen-coins",
       action: "FEED",
@@ -140,7 +140,7 @@ describe("coins for care that did nothing", () => {
 
   it("pays nothing when the action moved nothing", async () => {
     const database = await db();
-    const ledger = await recordContribution(database, {
+    const ledger = await recordContribution(database, { stage: "ADULT",
       caretakerId: "ct-none",
       generationId: "gen-coins",
       action: "FEED",
@@ -156,7 +156,7 @@ describe("coins for care that did nothing", () => {
     // The contribution row is how §23.1 weighs a caretaker's week, so a
     // no-op action must not erase the fact that someone showed up and tried.
     const database = await db();
-    await recordContribution(database, {
+    await recordContribution(database, { stage: "ADULT",
       caretakerId: "ct-showed-up",
       generationId: "gen-coins",
       action: "CLEAN",

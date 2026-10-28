@@ -3,7 +3,7 @@
 // function reproduces its exact state on any machine (SPEC §3.1) — the
 // determinism the golden-file test guards.
 
-import { phaseAt, rulesVersionOf, type PetState, type ProjectionContext } from "./model";
+import { meditatingAt, phaseAt, rulesVersionOf, type PetState, type ProjectionContext } from "./model";
 import { project } from "./project";
 import { drinkItem, foodItem, toysPlayBonusPercent, type Perks } from "./economy";
 import { quirkFoodPercent } from "./quirks";
@@ -18,6 +18,7 @@ import {
   NEED_KEYS,
   NEED_MAX,
   PLAY_ENERGY_COST,
+  RULES_SINCE,
   type NeedKey,
 } from "./tuning";
 import { WANT_BONUS_PERCENT, WANT_EXPIRY_JOY_DEBIT, WANT_FULFILLING_ACTION, windowIndexAt } from "./wants";
@@ -107,6 +108,8 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       // newer version changes anything, so a duplicate or stale append folds
       // to nothing — and an old log still carries no field at all.
       if (event.version > rulesVersionOf(state)) state.rulesVersion = event.version;
+      // The one rule whose start is a time, not just a version (SPEC §2.8).
+      if (event.version >= RULES_SINCE.SAGE) state.sageRuleFromTick ??= event.tick;
       return { state, milestones, applied: 0, changed: true };
     }
 
@@ -132,7 +135,9 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
 
     case "WANT_EXPIRED": {
       if (state.wantOpen != null && state.wantOpen.window === event.windowIndex) {
-        state.needs.joy = clamp(state.needs.joy - WANT_EXPIRY_JOY_DEBIT, NEED_MAX);
+        // A wish that runs out mid-meditation costs nothing: the stasis holds
+        // joy still too, and nobody could have granted it (SPEC §2.8).
+        if (!meditatingAt(state, event.tick)) state.needs.joy = clamp(state.needs.joy - WANT_EXPIRY_JOY_DEBIT, NEED_MAX);
         state.wantSettledWindow = event.windowIndex;
         // Explicit null, never undefined or delete (SPEC §25.2).
         state.wantOpen = null;

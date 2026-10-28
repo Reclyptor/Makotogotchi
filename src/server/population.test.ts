@@ -30,7 +30,7 @@ const GENERATION = "gen-population";
 const TODAY = 40 * TICKS_PER_DAY + 100;
 
 const cared = async (caretakerId: string, tick: number): Promise<void> => {
-  await recordContribution(await db(), { caretakerId, generationId: GENERATION, action: "FEED", applied: 10_000, tick });
+  await recordContribution(await db(), { stage: "ADULT", caretakerId, generationId: GENERATION, action: "FEED", applied: 10_000, tick });
 };
 
 describe("the active population", () => {
@@ -85,7 +85,7 @@ describe("the active population", () => {
     for (let action = 0; action < 5; action++) await cared("pop-busy", tick);
     // A generation ending mid-day writes a second contribution row for the
     // same day; presence must not read that as two days of turning up.
-    await recordContribution(await db(), {
+    await recordContribution(await db(), { stage: "ADULT",
       caretakerId: "pop-busy",
       generationId: "gen-population-next",
       action: "FEED",

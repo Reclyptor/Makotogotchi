@@ -5,20 +5,32 @@
 
 import { careMultiplier, DIFFICULTY_BASELINE, presencePermilleOf } from "./difficulty";
 import { healthTerms, type HealthTerms } from "./health";
-import { isAlive, rulesVersionOf, stageAt, type PetState } from "./model";
+import { isAlive, meditatingAt, rulesVersionOf, sageStartTickOf, stageOf, type PetState } from "./model";
 import {
   AILMENT_THRESHOLDS,
   CRITICAL_THRESHOLD,
   FADING_THRESHOLD,
   HEALTH_MAX,
+  isOld,
   NEED_KEYS,
   RULES_SINCE,
+  type LifeStage,
   type NeedKey,
 } from "./tuning";
 
 export type Ailment = "SICK" | "FILTHY" | "STARVING" | "EXHAUSTED" | "SAD";
 
-export type AnimationKey = "egg" | "idle" | "sleeping" | "sick" | "dirty" | "hungry" | "tired" | "bored" | "dead";
+export type AnimationKey =
+  | "egg"
+  | "idle"
+  | "meditating"
+  | "sleeping"
+  | "sick"
+  | "dirty"
+  | "hungry"
+  | "tired"
+  | "bored"
+  | "dead";
 
 export type AlertLevel = "OK" | "WARN" | "CRITICAL";
 
@@ -55,7 +67,9 @@ export type HealthView = {
 };
 
 export type DerivedState = {
-  stage: ReturnType<typeof stageAt>;
+  stage: LifeStage;
+  /** The tick an elder's meditation ends, while it is meditating (SPEC §2.8). */
+  meditatingUntilTick: number | null;
   ailments: Ailment[];
   animation: AnimationKey;
   alert: AlertLevel;
@@ -106,7 +120,8 @@ const healthViewOf = (state: PetState, terms: HealthTerms): HealthView => {
 };
 
 export const derive = (state: PetState): DerivedState => {
-  const stage = stageAt(state.bornAtTick, state.tick);
+  const stage = stageOf(state, state.tick);
+  const meditating = isAlive(state) && meditatingAt(state, state.tick);
 
   const ailments: Ailment[] = [];
   if (state.sick) ailments.push("SICK");
@@ -118,19 +133,21 @@ export const derive = (state: PetState): DerivedState => {
     ? state.diedAtTick !== null
       ? "dead"
       : "egg"
-    : state.asleep
-      ? "sleeping"
-      : state.sick
-        ? "sick"
-        : ailments.includes("STARVING")
-          ? "hungry"
-          : ailments.includes("FILTHY")
-            ? "dirty"
-            : ailments.includes("EXHAUSTED")
-              ? "tired"
-              : ailments.includes("SAD")
-                ? "bored"
-                : "idle";
+    : meditating
+      ? "meditating"
+      : state.asleep
+        ? "sleeping"
+        : state.sick
+          ? "sick"
+          : ailments.includes("STARVING")
+            ? "hungry"
+            : ailments.includes("FILTHY")
+              ? "dirty"
+              : ailments.includes("EXHAUSTED")
+                ? "tired"
+                : ailments.includes("SAD")
+                  ? "bored"
+                  : "idle";
 
   const anyCritical = NEED_KEYS.some((need) => state.needs[need] < CRITICAL_THRESHOLD);
   const alert: AlertLevel =
@@ -140,7 +157,7 @@ export const derive = (state: PetState): DerivedState => {
   const terms = healthTerms(state, state.tick);
   const vigour = terms.elder?.vigour ?? 1000;
   const healing = !anyCritical && !state.sick && vigour === 1000;
-  const fading = stage === "ELDER" && state.healthRaw < FADING_THRESHOLD && vigour < 1000;
+  const fading = isOld(stage) && !meditating && state.healthRaw < FADING_THRESHOLD && vigour < 1000;
   const vitality: Vitality =
     state.healthRaw < HEALTH_CRITICAL ? (healing ? "recovering" : "frail") : fading ? "fading" : "well";
 
@@ -154,6 +171,7 @@ export const derive = (state: PetState): DerivedState => {
 
   return {
     stage,
+    meditatingUntilTick: meditating ? sageStartTickOf(state) : null,
     ailments,
     animation,
     alert,

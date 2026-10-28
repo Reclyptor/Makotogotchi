@@ -2,7 +2,18 @@
 // what is stored here versus derived in derive.ts: nothing presentational
 // lives in this file, and nothing stored here is recomputable from the rest.
 
-import { ELDER_STARTS_AT, STAGE_STARTS, TICKS_PER_DAY, type AdultForm, type CareAction, type LifeStage, type NeedKey, type SleepPhase } from "./tuning";
+import {
+  ELDER_STARTS_AT,
+  MEDITATION_STARTS_AT,
+  MEDITATION_TICKS,
+  STAGE_STARTS,
+  TICKS_PER_DAY,
+  type AdultForm,
+  type CareAction,
+  type LifeStage,
+  type NeedKey,
+  type SleepPhase,
+} from "./tuning";
 import type { WantKind } from "./wants";
 
 export type Needs = Record<NeedKey, number>;
@@ -29,6 +40,13 @@ export type Generation = {
    * `LEGACY_FOOD_CATALOG_SIZE`.
    */
   foodCatalogSize?: number;
+  /**
+   * Laid after a Sage's death (SPEC §2.8): its childhood is held to the gentler
+   * `formThresholds(true)`. Pinned at egg-laying like `foodCatalogSize`, and
+   * absent rather than false on every other egg so their generations
+   * serialize as they always did.
+   */
+  sageBlessed?: true;
 };
 
 /** One pet-day of applied restoration, for the rolling budget (SPEC §2.5). */
@@ -122,20 +140,59 @@ export type PetState = {
    * Never defaulted into genesis: that would change every fixture.
    */
   rulesVersion?: number;
+  /**
+   * The tick a RULES event first brought this generation to ruleset 4, which
+   * fixes when it may begin to meditate (see `meditationStartTickOf`). A
+   * version carries no time and the rule needs one: a pet already past day 40
+   * when it lands meditates from then, not from a day it already lived. Set
+   * once by the fold, and absent, not null, in every older history.
+   */
+  sageRuleFromTick?: number;
 };
 
 /** The ruleset a state is lived under: a log with no RULES event is version 1. */
 export const rulesVersionOf = (state: PetState): number => state.rulesVersion ?? 1;
 
-/** Pure function of hatch time — never stored (SPEC §4.3). */
-export const stageAt = (bornAtTick: number | null, tick: number): LifeStage => {
+/**
+ * Pure function of hatch time and the sage start — never stored (SPEC §4.3).
+ * `sageStartTick` is null for a pet that will never be a Sage; callers holding
+ * a state use `stageOf`, which supplies it.
+ */
+export const stageAt = (bornAtTick: number | null, tick: number, sageStartTick: number | null): LifeStage => {
   if (bornAtTick === null) return "EGG";
+  if (sageStartTick !== null && tick >= sageStartTick) return "SAGE";
   const sinceHatch = tick - bornAtTick;
   let stage: LifeStage = "HATCHLING";
   for (const start of STAGE_STARTS) {
     if (sinceHatch >= start.atTick) stage = start.stage;
   }
   return stage;
+};
+
+/**
+ * The first tick of the elder's meditation, or null for a pet lived under a
+ * ruleset without it. Day 40 of its life, or the tick after the ruleset was
+ * recorded if that is later: the event's own tick, and every tick before it,
+ * were lived under the old rules.
+ */
+export const meditationStartTickOf = (state: PetState): number | null => {
+  if (state.sageRuleFromTick === undefined || state.bornAtTick === null) return null;
+  return Math.max(state.sageRuleFromTick + 1, state.bornAtTick + MEDITATION_STARTS_AT);
+};
+
+/** The tick the meditation ends and the Sage begins, or null. */
+export const sageStartTickOf = (state: PetState): number | null => {
+  const start = meditationStartTickOf(state);
+  return start === null ? null : start + MEDITATION_TICKS;
+};
+
+export const stageOf = (state: PetState, tick: number): LifeStage =>
+  stageAt(state.bornAtTick, tick, sageStartTickOf(state));
+
+/** Whether the pet is in its two days of meditation at `tick` (SPEC §2.8). Derived, never stored. */
+export const meditatingAt = (state: PetState, tick: number): boolean => {
+  const start = meditationStartTickOf(state);
+  return start !== null && tick >= start && tick < start + MEDITATION_TICKS;
 };
 
 /**

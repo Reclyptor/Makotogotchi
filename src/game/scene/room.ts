@@ -19,7 +19,7 @@ import { celestialAt, seasonFor, skyMomentAt, weatherFor, type Celestial } from 
 import type { DerivedState } from "@/sim/derive";
 import type { AmbientEvent } from "@/sim/ambient";
 import type { SpectacleMood } from "@/sim/secret";
-import type { CareAction, LifeStage } from "@/sim/tuning";
+import { isOld, type CareAction, type LifeStage } from "@/sim/tuning";
 
 export { ROOM_WIDTH, ROOM_HEIGHT } from "./backdrop";
 const PET_X = ROOM_WIDTH / 2;
@@ -130,8 +130,9 @@ const CARE_PARTICLES: Record<CareAction, { kind: ParticleKind; count: number }> 
 
 // Visible growth (SPEC §21.9): the stage the sim already tracks finally
 // shows. A hatchling is small and a juvenile nearly grown; adulthood is the
-// art's own size, and an elder keeps it but gains brow tufts. The anchor is
-// bottom-center throughout, so every size stands on the same floor.
+// art's own size, and an elder keeps it but gains brow tufts; a Sage keeps
+// the tufts and grows a white beard. The anchor is bottom-center throughout,
+// so every size stands on the same floor.
 export const STAGE_SCALE: Record<LifeStage, number> = {
   EGG: 1,
   HATCHLING: 0.8,
@@ -139,6 +140,7 @@ export const STAGE_SCALE: Record<LifeStage, number> = {
   JUVENILE: 0.9,
   ADULT: 1,
   ELDER: 1,
+  SAGE: 1,
 };
 
 export const stageScale = (stage: LifeStage): number => STAGE_SCALE[stage];
@@ -576,8 +578,8 @@ export class Room {
    * Everything worn on the head, drawn inside the pet's own scaled space so
    * a hatchling's hat is a hatchling-sized hat, and at this frame's own
    * anchors (SPEC §10.5) so it sits between the ears wherever the pose put
-   * them. An elder's brow tufts stand over the eyes, underneath whatever
-   * cosmetic is on top (SPEC §21.9); a frame whose art already wears a
+   * them. An elder's brow tufts stand over the eyes and a Sage's beard hangs
+   * from the mouth, both underneath whatever cosmetic is on top (SPEC §21.9); a frame whose art already wears a
    * nightcap keeps the tufts and leaves the cosmetic off. A frame with no
    * anchor has no head to speak of — the egg, the gravestone — and wears
    * nothing.
@@ -588,7 +590,8 @@ export class Room {
     layer(ctx, () => {
       ctx.translate(0, PET_Y);
       ctx.scale(scale, scale);
-      if (this.stage === "ELDER") this.atlas.draw(ctx, "elderBrows", anchor.brows.x, anchor.brows.y);
+      if (isOld(this.stage)) this.atlas.draw(ctx, "elderBrows", anchor.brows.x, anchor.brows.y);
+      if (this.stage === "SAGE") this.atlas.draw(ctx, "sageBeard", anchor.beard.x, anchor.beard.y);
       if (anchor.nightcap) return;
       ctx.translate(anchor.x, anchor.y);
       this.renderCosmetic(ctx);

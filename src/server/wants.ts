@@ -7,10 +7,11 @@
 // nothing to do.
 
 import type { Db } from "mongodb";
-import { isAlive, phaseAt, type Generation, type PetState } from "@/sim/model";
+import { isAlive, meditationStartTickOf, phaseAt, type Generation, type PetState } from "@/sim/model";
+import { MEDITATION_TICKS, type LifeStage } from "@/sim/tuning";
 import { WANT_REWARD_COINS, WANT_WINDOW_TICKS, wantAt, windowEndTick, windowIndexAt } from "@/sim/wants";
 import type { Milestone } from "@/sim/events";
-import { creditCoins } from "./social";
+import { creditCoins, wisdomCoins } from "./social";
 import { scheduleFor } from "./schedule";
 import type { PetEngine } from "./engine/engine";
 
@@ -25,10 +26,25 @@ export const settleWantFulfillment = async (
   database: Db,
   caretakerId: string,
   milestones: readonly Milestone[],
+  /** The pet's stage at the action: a Sage pays the wisdom bonus. */
+  stage: LifeStage,
 ): Promise<number> => {
   if (!milestones.some((milestone) => milestone.kind === "WANT_FULFILLED")) return 0;
-  await creditCoins(database, caretakerId, WANT_REWARD_COINS);
-  return WANT_REWARD_COINS;
+  const coins = wisdomCoins(WANT_REWARD_COINS, stage);
+  await creditCoins(database, caretakerId, coins);
+  return coins;
+};
+
+/**
+ * Whether a want window keeps clear of the elder's meditation (SPEC §2.8).
+ * A meditating pet turns away the very care a want asks for, and an
+ * expiring want debits joy the stasis is meant to hold still, so no window
+ * that touches the two days may open.
+ */
+export const windowClearOfMeditation = (state: PetState, windowIndex: number): boolean => {
+  const start = meditationStartTickOf(state);
+  if (start === null) return true;
+  return windowEndTick(windowIndex) <= start || windowIndex * WANT_WINDOW_TICKS >= start + MEDITATION_TICKS;
 };
 
 /**
@@ -70,7 +86,11 @@ export const observeWants = async (
     const settled = latest.wantSettledWindow ?? null;
     if (settled === null || windowIndex > settled) {
       const want = wantAt(generation, windowIndex);
-      if (want && windowIsScheduledAwake(generation.genesisEpochMs, windowIndex, timeZone)) {
+      if (
+        want &&
+        windowClearOfMeditation(latest, windowIndex) &&
+        windowIsScheduledAwake(generation.genesisEpochMs, windowIndex, timeZone)
+      ) {
         latest = await engine.openWant(generation, windowIndex, want);
       }
     }

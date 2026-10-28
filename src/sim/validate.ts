@@ -5,7 +5,7 @@
 // An exhausted caretaker budget is deliberately NOT a rejection: the action
 // validates and applies zero (SPEC §2.5) — the UI explains separately.
 
-import { isAlive, type PetState, type ProjectionContext } from "./model";
+import { isAlive, meditatingAt, type PetState, type ProjectionContext } from "./model";
 import { drinkItem, medicineItem } from "./economy";
 import { COOLDOWNS, LULLABY_ENERGY_GATE, PLAY_ENERGY_GATE, type CareAction } from "./tuning";
 
@@ -15,6 +15,7 @@ export type RejectionReason =
   | "COOLDOWN_GLOBAL" // the pet is busy — a property of the pet, not the player
   | "COOLDOWN_CARETAKER"
   | "ASLEEP"
+  | "MEDITATING" // the elder's two days of stillness (SPEC §2.8)
   | "TOO_TIRED" // PLAY needs energy
   | "NOT_SICK" // MEDICATE without illness
   | "NOT_SLEEPY"; // LULLABY needs an awake pet that is running low on energy
@@ -62,6 +63,8 @@ export const cooldownWindow = (
   return binding;
 };
 
+const MEDITATION_BLOCKS: ReadonlySet<CareAction> = new Set(["FEED", "PLAY", "CLEAN", "LULLABY"]);
+
 export const canPerform = (
   state: PetState,
   action: CareAction,
@@ -71,6 +74,10 @@ export const canPerform = (
 ): ValidationResult => {
   if (state.bornAtTick === null) return reject("NOT_BORN");
   if (!isAlive(state)) return reject("DEAD");
+  // Meditation turns away everything that would rouse the pet, as sleep does,
+  // and says so ahead of any cooldown: no wait would make the action possible.
+  // A pat and medicine are gentle enough to stay (SPEC §2.8).
+  if (meditatingAt(state, state.tick) && MEDITATION_BLOCKS.has(action)) return reject("MEDITATING");
 
   // Emergency medicine cures instantly — cooldowns are bypassed (SPEC §13.2).
   const bypassCooldowns = action === "MEDICATE" && medicineItem(itemId) !== null;

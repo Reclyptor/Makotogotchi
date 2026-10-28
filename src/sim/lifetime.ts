@@ -2,15 +2,16 @@
 // on the link card, which must not disagree about how old Makoto is.
 
 import type { PetState } from "./model";
-import { TICKS_PER_DAY, TICKS_PER_HOUR } from "./tuning";
+import { TICKS_PER_DAY, TICKS_PER_HOUR, type LifeStage } from "./tuning";
 
-export const STAGE_LABELS: Record<string, string> = {
+export const STAGE_LABELS: Record<LifeStage, string> = {
   EGG: "Egg",
   HATCHLING: "Hatchling",
   PUP: "Pup",
   JUVENILE: "Juvenile",
   ADULT: "Adult",
   ELDER: "Elder",
+  SAGE: "Sage",
 };
 
 export const ageText = (state: PetState): string => {

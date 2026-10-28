@@ -42,20 +42,20 @@ describe("contributions and streaks (SPEC §2.11)", () => {
     const database = await db();
     const base = { caretakerId: "ct-streak", generationId: "gen-x", action: "FEED" as const };
 
-    const day1 = await recordContribution(database, { ...base, applied: 200_000, tick: 100 });
+    const day1 = await recordContribution(database, { stage: "ADULT", ...base, applied: 200_000, tick: 100 });
     expect(day1.score).toBe(200); // applied × weight 10 / 10_000
     expect(day1.streakDays).toBe(1);
 
     // Same day: streak unchanged.
-    const day1b = await recordContribution(database, { ...base, applied: 100_000, tick: 200 });
+    const day1b = await recordContribution(database, { stage: "ADULT", ...base, applied: 100_000, tick: 200 });
     expect(day1b.streakDays).toBe(1);
 
     // Next pet-day: streak grows.
-    const day2 = await recordContribution(database, { ...base, applied: 100_000, tick: TICKS_PER_DAY + 100 });
+    const day2 = await recordContribution(database, { stage: "ADULT", ...base, applied: 100_000, tick: TICKS_PER_DAY + 100 });
     expect(day2.streakDays).toBe(2);
 
     // A skipped day resets to 1.
-    const day4 = await recordContribution(database, { ...base, applied: 100_000, tick: 3 * TICKS_PER_DAY + 100 });
+    const day4 = await recordContribution(database, { stage: "ADULT", ...base, applied: 100_000, tick: 3 * TICKS_PER_DAY + 100 });
     expect(day4.streakDays).toBe(1);
 
     const profile = await caretakerProfile(database, "ct-streak");
