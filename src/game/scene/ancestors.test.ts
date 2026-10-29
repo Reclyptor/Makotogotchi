@@ -4,8 +4,8 @@
 // holds what, and what fits on a plate (SPEC §22.10).
 
 import { describe, expect, it } from "vitest";
-import { compile, engraving, FamilyWall, MOULDING, plaqueCapacity, WALL_SLOTS } from "./ancestors";
-import { ANCESTOR_PALETTE, ANCESTOR_PICTURES } from "./ancestors.generated";
+import { compile, engraving, FamilyWall, MOULDING, plaqueCapacity, WALL_SLOTS, wallKey } from "./ancestors";
+import { ANCESTOR_PALETTE, ANCESTOR_PICTURES, SAGE_ANCESTOR_PICTURES } from "./ancestors.generated";
 import { ROOM_WIDTH } from "./backdrop";
 import type { SceneContext } from "../engine/digest";
 
@@ -29,27 +29,42 @@ const layingContext = () => {
 };
 
 describe("the generated portraits", () => {
-  it("come at every size the wall hangs, square, on the shared palette", () => {
-    for (const slot of WALL_SLOTS) {
-      const picture = ANCESTOR_PICTURES.find((candidate) => candidate.size === slot.art);
-      expect(picture, `${slot.art}px`).toBeDefined();
-      expect(picture!.rows.length).toBe(slot.art);
-      for (const row of picture!.rows) {
-        expect(row.length).toBe(slot.art);
-        for (const letter of row) expect(ANCESTOR_PALETTE[letter], `'${letter}'`).toBeDefined();
+  it("come at every size the wall hangs, square, on the shared palette, plain and Sage", () => {
+    for (const set of [ANCESTOR_PICTURES, SAGE_ANCESTOR_PICTURES]) {
+      for (const slot of WALL_SLOTS) {
+        const picture = set.find((candidate) => candidate.size === slot.art);
+        expect(picture, `${slot.art}px`).toBeDefined();
+        expect(picture!.rows.length).toBe(slot.art);
+        for (const row of picture!.rows) {
+          expect(row.length).toBe(slot.art);
+          for (const letter of row) expect(ANCESTOR_PALETTE[letter], `'${letter}'`).toBeDefined();
+        }
       }
     }
   });
 
+  // The beard's white sat in one palette box with the paper and the belly,
+  // and came out as neither: a Sage's portrait with its beard washed out.
+  it("hang the beard in its own white on a Sage, and nowhere on the plain set", () => {
+    const white = Object.entries(ANCESTOR_PALETTE).find(([, colour]) => colour.every((channel) => channel === 255));
+    expect(white).toBeDefined();
+    const uses = (set: typeof ANCESTOR_PICTURES, size: number): number =>
+      set.find((picture) => picture.size === size)!.rows.join("").split(white![0]).length - 1;
+    for (const slot of WALL_SLOTS) {
+      expect(uses(SAGE_ANCESTOR_PICTURES, slot.art), `${slot.art}px`).toBeGreaterThan(0);
+      expect(uses(ANCESTOR_PICTURES, slot.art), `${slot.art}px`).toBe(0);
+    }
+  });
+
   it("fade toward sepia the further back the slot hangs, and not at all in front", () => {
-    const parent = compile(WALL_SLOTS[0]!);
+    const parent = compile(WALL_SLOTS[0]!, false);
     const picture = ANCESTOR_PICTURES.find((candidate) => candidate.size === WALL_SLOTS[0]!.art)!;
     const first = ANCESTOR_PALETTE[picture.rows[0]![0]!]!;
     expect([...parent.subarray(0, 3)]).toEqual([...first]);
     // Sepia pulls blue down relative to red; a deeper fade pulls it further.
     const ratio = (pixels: Uint8ClampedArray): number => pixels[2]! / pixels[0]!;
-    expect(ratio(compile(WALL_SLOTS[1]!))).toBeLessThan(ratio(parent));
-    expect(ratio(compile(WALL_SLOTS[4]!))).toBeLessThan(ratio(compile(WALL_SLOTS[1]!)));
+    expect(ratio(compile(WALL_SLOTS[1]!, false))).toBeLessThan(ratio(parent));
+    expect(ratio(compile(WALL_SLOTS[4]!, false))).toBeLessThan(ratio(compile(WALL_SLOTS[1]!, false)));
   });
 });
 
@@ -92,7 +107,7 @@ describe("the plaque", () => {
 describe("the wall", () => {
   it("lays each picture inside its frame and plates it below", () => {
     const { ctx, laid, fills } = layingContext();
-    new FamilyWall().render(ctx, [{ ordinal: 2, name: "Makoto" }]);
+    new FamilyWall().render(ctx, [{ ordinal: 2, name: "Makoto", sage: false }]);
     const slot = WALL_SLOTS[0]!;
     expect(laid).toHaveLength(1);
     expect(laid[0]).toMatchObject({ dx: slot.x + MOULDING, dy: slot.y + MOULDING, width: slot.art, height: slot.art });
@@ -108,8 +123,8 @@ describe("the wall", () => {
   it("hangs the grandparent's plate over its frame, clear of the pet's head", () => {
     const { ctx, fills } = layingContext();
     new FamilyWall().render(ctx, [
-      { ordinal: 3, name: "Makoto" },
-      { ordinal: 2, name: "Mochi" },
+      { ordinal: 3, name: "Makoto", sage: false },
+      { ordinal: 2, name: "Mochi", sage: false },
     ]);
     const slot = WALL_SLOTS[1]!;
     expect(slot.plate).toBe("above");
@@ -118,12 +133,30 @@ describe("the wall", () => {
     expect(plate!.y).toBeGreaterThanOrEqual(0);
   });
 
+  it("hangs a Sage in the bearded picture and every other generation in the plain one", () => {
+    const { ctx, laid } = layingContext();
+    new FamilyWall().render(ctx, [
+      { ordinal: 3, name: "Makoto", sage: true },
+      { ordinal: 2, name: "Mochi", sage: false },
+    ]);
+    expect(laid[0]!.data).toEqual(compile(WALL_SLOTS[0]!, true));
+    expect(laid[0]!.data).not.toEqual(compile(WALL_SLOTS[0]!, false));
+    expect(laid[1]!.data).toEqual(compile(WALL_SLOTS[1]!, false));
+  });
+
+  it("tells the scene which slots hang a Sage, so a new one repaints the wall", () => {
+    const makoto = { ordinal: 2, name: "Makoto", sage: false };
+    expect(wallKey([])).toBe("");
+    expect(wallKey([makoto, { ...makoto, ordinal: 1, sage: true }])).toBe("-S");
+    expect(wallKey(Array.from({ length: 7 }, () => makoto))).toHaveLength(WALL_SLOTS.length);
+  });
+
   it("caches the picture: the second frame lays the same bytes", () => {
     const wall = new FamilyWall();
     const first = layingContext();
-    wall.render(first.ctx, [{ ordinal: 2, name: "Makoto" }]);
+    wall.render(first.ctx, [{ ordinal: 2, name: "Makoto", sage: false }]);
     const second = layingContext();
-    wall.render(second.ctx, [{ ordinal: 2, name: "Makoto" }]);
+    wall.render(second.ctx, [{ ordinal: 2, name: "Makoto", sage: false }]);
     expect(second.laid[0]!.data).toEqual(first.laid[0]!.data);
   });
 });

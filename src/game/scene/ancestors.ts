@@ -7,10 +7,13 @@
 import type { SceneContext } from "../engine/digest";
 import { lay, makeCanvas } from "../engine/offscreen";
 import { drawTiny, TINY_HEIGHT, TINY_PITCH, tinyGlyphs } from "../engine/tinyfont";
-import { ANCESTOR_PALETTE, ANCESTOR_PICTURES } from "./ancestors.generated";
+import { ANCESTOR_PALETTE, ANCESTOR_PICTURES, SAGE_ANCESTOR_PICTURES } from "./ancestors.generated";
 
-/** A sealed generation as the wall needs it: which one, and what it was called. */
-export type Ancestor = { ordinal: number; name: string };
+/**
+ * A sealed generation as the wall needs it: which one, what it was called,
+ * and whether it died a Sage — its portrait then wears the beard (SPEC §22.10).
+ */
+export type Ancestor = { ordinal: number; name: string; sage: boolean };
 
 export type WallSlot = {
   /** The picture's size; the frame adds MOULDING on every side. */
@@ -77,9 +80,10 @@ const sepia = (colour: RGB, fade: number): RGB => {
  * apart; it throws here, where ancestors.test.ts reads every slot on every
  * run, rather than hanging a picture with a hole in it.
  */
-export const compile = (slot: WallSlot): Uint8ClampedArray => {
-  const picture = ANCESTOR_PICTURES.find((candidate) => candidate.size === slot.art);
-  if (!picture) throw new Error(`no ancestor portrait is generated at ${slot.art} pixels`);
+export const compile = (slot: WallSlot, sage: boolean): Uint8ClampedArray => {
+  const set = sage ? SAGE_ANCESTOR_PICTURES : ANCESTOR_PICTURES;
+  const picture = set.find((candidate) => candidate.size === slot.art);
+  if (!picture) throw new Error(`no ${sage ? "Sage " : ""}ancestor portrait is generated at ${slot.art} pixels`);
   const faded = new Map<string, RGB>();
   const buffer = new Uint8ClampedArray(slot.art * slot.art * 4);
   picture.rows.forEach((row, y) => {
@@ -104,20 +108,34 @@ const FRAME = { face: "#6a5238", light: "#8a6d4a", shade: "#4a3828" } as const;
 const PLATE = { brass: "#b08c46", light: "#d6b464", engraving: "#46321a" } as const;
 
 /**
- * The wall itself. Pictures are compiled and cached per slot on first use —
- * the room paints twice a frame (§10.1), and a 32-pixel picture is a
+ * What the wall's pictures are, for the scene's digest (engine/digest.ts): a
+ * picture lands as a blit whose call is the same whichever set it came from,
+ * so which slots hang a Sage has to be told to it in so many words.
+ */
+export const wallKey = (ancestors: readonly Ancestor[]): string =>
+  ancestors
+    .slice(0, WALL_SLOTS.length)
+    .map((ancestor) => (ancestor.sage ? "S" : "-"))
+    .join("");
+
+/** Which of a slot's two pictures, as one cache key. */
+const pictureKey = (index: number, sage: boolean): string => `${index}${sage ? "S" : ""}`;
+
+/**
+ * The wall itself. Pictures are compiled and cached per slot and set on first
+ * use — the room paints twice a frame (§10.1), and a 32-pixel picture is a
  * thousand rectangles if it is not one blit.
  */
 export class FamilyWall {
-  private readonly pixels = new Map<number, Uint8ClampedArray>();
-  private readonly canvases = new Map<number, HTMLCanvasElement | null>();
+  private readonly pixels = new Map<string, Uint8ClampedArray>();
+  private readonly canvases = new Map<string, HTMLCanvasElement | null>();
 
   render(ctx: SceneContext, ancestors: readonly Ancestor[]): void {
     WALL_SLOTS.forEach((slot, index) => {
       const ancestor = ancestors[index];
       if (!ancestor) return;
       this.renderFrame(ctx, slot);
-      this.renderPicture(ctx, slot, index);
+      this.renderPicture(ctx, slot, index, ancestor.sage);
       this.renderPlate(ctx, slot, ancestor.name);
     });
   }
@@ -135,21 +153,22 @@ export class FamilyWall {
     px(slot.x + outer - 1, slot.y, 1, outer, FRAME.shade);
   }
 
-  private renderPicture(ctx: SceneContext, slot: WallSlot, index: number): void {
+  private renderPicture(ctx: SceneContext, slot: WallSlot, index: number, sage: boolean): void {
     const x = slot.x + MOULDING;
     const y = slot.y + MOULDING;
-    let pixels = this.pixels.get(index);
+    const key = pictureKey(index, sage);
+    let pixels = this.pixels.get(key);
     if (!pixels) {
-      pixels = compile(slot);
-      this.pixels.set(index, pixels);
+      pixels = compile(slot, sage);
+      this.pixels.set(key, pixels);
     }
-    if (!this.canvases.has(index)) {
+    if (!this.canvases.has(key)) {
       const canvas = makeCanvas(slot.art, slot.art);
       const target = canvas?.getContext("2d");
       if (canvas && target) lay(target, pixels, slot.art, slot.art);
-      this.canvases.set(index, canvas && target ? canvas : null);
+      this.canvases.set(key, canvas && target ? canvas : null);
     }
-    const canvas = this.canvases.get(index);
+    const canvas = this.canvases.get(key);
     if (canvas) {
       ctx.drawImage(canvas, x, y);
       return;

@@ -2,7 +2,7 @@
 // after any change under art/ and review the contact sheet.
 
 /** The packed sheet these frame rectangles index — hashed together, stale never. */
-export const SPRITE_SHEET_URL = "/sprites.a700620e04.png";
+export const SPRITE_SHEET_URL = "/sprites.f36cc72c18.png";
 
 export type SpriteFrame = { x: number; y: number; w: number; h: number };
 
@@ -119,3 +119,18 @@ export const SPRITE_FRAMES = {
 } as const satisfies Record<string, SpriteFrame>;
 
 export type FrameName = keyof typeof SPRITE_FRAMES;
+
+/** A prop frame's occluder, keyed by the frame: opaque where the prop stands in front of the head's overlays. */
+export const SPRITE_MASKS: Partial<Record<FrameName, SpriteFrame>> = {
+  eat1: { x: 592, y: 1583, w: 126, h: 137 },
+  eat2: { x: 726, y: 1583, w: 126, h: 137 },
+  game1: { x: 860, y: 1583, w: 137, h: 121 },
+  game2: { x: 1005, y: 1583, w: 137, h: 121 },
+  game3: { x: 1150, y: 1583, w: 137, h: 121 },
+  sleep1: { x: 1295, y: 1583, w: 137, h: 132 },
+  sleep2: { x: 1440, y: 1583, w: 137, h: 132 },
+  tea1: { x: 8, y: 1734, w: 138, h: 121 },
+  tea2: { x: 154, y: 1734, w: 138, h: 121 },
+  unhappyEat1: { x: 300, y: 1734, w: 126, h: 132 },
+  unhappyEat2: { x: 434, y: 1734, w: 126, h: 132 },
+};

@@ -7,11 +7,11 @@ import { describe, expect, it, vi } from "vitest";
 import { Room, ROOM_HEIGHT, ROOM_WIDTH, STAGE_SCALE, stageScale, wanderBand } from "./room";
 import { RUG } from "./backdrop";
 import { SPECTACLE_MS } from "./party";
-import { drawRect } from "../engine/atlas";
+import { drawRect, overlayOffset } from "../engine/placement";
 import { BASE_CLIPS, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP } from "../anim/clips";
 import { HEAD_ANCHORS } from "./head";
 import { MOULDING, WALL_SLOTS } from "./ancestors";
-import { SPRITE_FRAMES, type FrameName } from "../atlas.generated";
+import { SPRITE_FRAMES, SPRITE_MASKS, type FrameName } from "../atlas.generated";
 import { derive } from "@/sim/derive";
 import { hatchedState, projectImmortal, testCtx } from "@/sim/testkit";
 import { HEALTH_MAX, NEED_MAX, STAGE_STARTS, TICKS_PER_DAY, type LifeStage } from "@/sim/tuning";
@@ -473,7 +473,7 @@ describe("a hat on the head", () => {
       sick: false,
       asleep: false,
     };
-    return { room, derived: derive(aged) };
+    return { room, aged, derived: derive(aged) };
   };
 
   it("hangs a Sage's beard from the mouth, under its tufts, and none on an elder", () => {
@@ -499,6 +499,51 @@ describe("a hat on the head", () => {
     const elderRecorder = recordingContext();
     elder.room.render(elderRecorder.ctx, 1000);
     expect(elderRecorder.drawn.some((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES.sageBeard.w)).toBe(false);
+  });
+
+  // The beard was drawn over everything, so a Sage in bed wore it on top of
+  // the quilt and drank its tea through it.
+  it("tucks a Sage's beard under the quilt by the frame's mask, where the plain draw would hang it", () => {
+    const strip: { args: unknown[]; composite: string }[] = [];
+    const stripCtx = {
+      globalCompositeOperation: "source-over",
+      save: () => {},
+      restore() {
+        this.globalCompositeOperation = "source-over";
+      },
+      beginPath: () => {},
+      rect: () => {},
+      clip: () => {},
+      clearRect: () => {},
+      drawImage(...args: unknown[]) {
+        strip.push({ args, composite: this.globalCompositeOperation });
+      },
+      // The room's other caches compose on the same stubbed document.
+      createImageData: (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h }),
+      putImageData: () => {},
+    };
+    vi.stubGlobal("document", { createElement: () => ({ width: 0, height: 0, getContext: () => stripCtx }) });
+    try {
+      const { room, aged } = agedRoom(43);
+      room.reducedMotion = true;
+      room.syncDerived(derive({ ...aged, asleep: true, sleepReason: "NIGHT" }), true, 0);
+      const recorder = recordingContext();
+      room.render(recorder.ctx, 1000);
+      const frame = BASE_CLIPS.sleeping.frames[0]!;
+      const { beard } = HEAD_ANCHORS[frame]!;
+      const sprite = recorder.drawn.find((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES[frame].w)!;
+      const drawnBeard = recorder.drawn.find((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES.sageBeard.w)!;
+      expect(drawnBeard).toBeDefined();
+      // Where the room hung it over the sprite is where the mask was read from.
+      const offset = overlayOffset(SPRITE_FRAMES[frame], SPRITE_FRAMES.sageBeard, beard.x, beard.y);
+      expect({ x: drawnBeard.x0 - sprite.x0, y: drawnBeard.y0 - sprite.y0 }).toEqual(offset);
+      const mask = SPRITE_MASKS[frame]!;
+      const erased = strip.find((entry) => entry.composite === "destination-out");
+      expect(erased?.args.slice(1, 5)).toEqual([mask.x, mask.y, mask.w, mask.h]);
+      expect(erased?.args[6]).toBe(-offset.y);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("sits a meditating elder in the meditation pose, tufts on and no beard yet", () => {
@@ -552,9 +597,9 @@ describe("a hat on the head", () => {
 // one framed picture per ancestor in its slot, none anywhere else.
 describe("the family wall", () => {
   const ancestors = [
-    { ordinal: 4, name: "Makoto" },
-    { ordinal: 3, name: "Mochi" },
-    { ordinal: 2, name: "Pepper" },
+    { ordinal: 4, name: "Makoto", sage: false },
+    { ordinal: 3, name: "Mochi", sage: false },
+    { ordinal: 2, name: "Pepper", sage: false },
   ];
 
   it("hangs one picture per ancestor, parent first, in the slots the spec lays out", () => {
@@ -581,7 +626,7 @@ describe("the family wall", () => {
     expect(bare.blits).toEqual([]);
 
     const crowded = recordingContext();
-    room.decor = { decor: [], activeCosmetic: null, ancestors: Array.from({ length: 9 }, (_, i) => ({ ordinal: 9 - i, name: "Makoto" })) };
+    room.decor = { decor: [], activeCosmetic: null, ancestors: Array.from({ length: 9 }, (_, i) => ({ ordinal: 9 - i, name: "Makoto", sage: false })) };
     room.render(crowded.ctx, 2000);
     expect(crowded.blits.length).toBe(WALL_SLOTS.length);
   });

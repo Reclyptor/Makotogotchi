@@ -8,7 +8,7 @@ import { Particles, type ParticleKind } from "../engine/particles";
 import { DigestContext, type SceneContext } from "../engine/digest";
 import { Toasts } from "./toasts";
 import { Portrait, PORTRAIT_HEIGHT, PORTRAIT_WIDTH } from "./portrait";
-import { FamilyWall, type Ancestor } from "./ancestors";
+import { FamilyWall, wallKey, type Ancestor } from "./ancestors";
 import { Spectacle } from "./party";
 import { AnimationMachine } from "../anim/machine";
 import { BASE_CLIPS, BUTTERFLY_CLIP, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP, type OneShotName } from "../anim/clips";
@@ -385,6 +385,8 @@ export class Room {
     // The architecture arrives as a cached blit whose draw call says nothing
     // about what is in it; the key that composed those pixels does.
     this.digest.text(keyOf({ ...this.backdropKey, condition: this.condition }));
+    // So do the wall's pictures, cached per slot and set (scene/ancestors.ts).
+    this.digest.text(wallKey(this.decor.ancestors));
     layer(this.digest, () => this.paint(this.digest, nowMs));
     if (this.digest.value === this.painted) return;
     this.painted = this.digest.value;
@@ -579,9 +581,11 @@ export class Room {
    * a hatchling's hat is a hatchling-sized hat, and at this frame's own
    * anchors (SPEC §10.5) so it sits between the ears wherever the pose put
    * them. An elder's brow tufts stand over the eyes and a Sage's beard hangs
-   * from the mouth, both underneath whatever cosmetic is on top (SPEC §21.9); a frame whose art already wears a
-   * nightcap keeps the tufts and leaves the cosmetic off. A frame with no
-   * anchor has no head to speak of — the egg, the gravestone — and wears
+   * from the mouth, both underneath whatever cosmetic is on top (SPEC §21.9),
+   * and the beard behind whatever the frame's mask says is held in front of
+   * the chest — the cup, the controller, the quilt. A frame whose art already
+   * wears a nightcap keeps the tufts and leaves the cosmetic off. A frame with
+   * no anchor has no head to speak of — the egg, the gravestone — and wears
    * nothing.
    */
   private renderHead(ctx: SceneContext, frame: FrameName, scale: number): void {
@@ -591,7 +595,7 @@ export class Room {
       ctx.translate(0, PET_Y);
       ctx.scale(scale, scale);
       if (isOld(this.stage)) this.atlas.draw(ctx, "elderBrows", anchor.brows.x, anchor.brows.y);
-      if (this.stage === "SAGE") this.atlas.draw(ctx, "sageBeard", anchor.beard.x, anchor.beard.y);
+      if (this.stage === "SAGE") this.atlas.drawOver(ctx, "sageBeard", anchor.beard.x, anchor.beard.y, frame);
       if (anchor.nightcap) return;
       ctx.translate(anchor.x, anchor.y);
       this.renderCosmetic(ctx);

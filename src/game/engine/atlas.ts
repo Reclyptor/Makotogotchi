@@ -4,7 +4,10 @@
 // to a late pet, never a permanently empty room.
 
 import type { SceneContext } from "./digest";
-import { SPRITE_FRAMES, type FrameName, type SpriteFrame } from "../atlas.generated";
+import { SPRITE_FRAMES, SPRITE_MASKS, type FrameName } from "../atlas.generated";
+import { layer } from "./layer";
+import { makeCanvas } from "./offscreen";
+import { drawRect, overlayOffset } from "./placement";
 
 const LOAD_ATTEMPTS = 4;
 const RETRY_BASE_MS = 600;
@@ -37,24 +40,18 @@ export const loadSpriteSheet = async (src: string): Promise<HTMLImageElement | n
   return null;
 };
 
+/** Every frame with a prop in front of the head, in the order their slots sit on a strip. */
+const MASKED = Object.keys(SPRITE_MASKS) as FrameName[];
+
 /**
- * Where a frame lands on the canvas: bottom-center anchored at (x, y),
- * scaled, and snapped to whole pixels so the art never lands half a pixel
- * off and blurs. Pure, so the life-stage scaling is directly testable.
+ * One overlay, clipped once per masked frame: slot i holds it as it shows on
+ * MASKED[i], composed at the anchor recorded beside it.
  */
-export const drawRect = (
-  frame: SpriteFrame,
-  x: number,
-  y: number,
-  scale: number,
-): { dx: number; dy: number; dw: number; dh: number } => {
-  const dw = Math.round(frame.w * scale);
-  const dh = Math.round(frame.h * scale);
-  return { dx: Math.round(x - dw / 2), dy: Math.round(y - dh), dw, dh };
-};
+type Strip = { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; composedAt: Map<FrameName, string> };
 
 export class Atlas {
   private image: HTMLImageElement | null = null;
+  private readonly strips = new Map<FrameName, Strip | null>();
 
   async load(src: string): Promise<void> {
     this.image = await loadSpriteSheet(src);
@@ -74,5 +71,60 @@ export class Atlas {
     const frame = SPRITE_FRAMES[name];
     const { dx, dy, dw, dh } = drawRect(frame, x, y, scale);
     ctx.drawImage(this.image, frame.x, frame.y, frame.w, frame.h, dx, dy, dw, dh);
+  }
+
+  /**
+   * Draw an overlay at full size as `draw` does, behind whatever `under`'s
+   * mask says stands in front of the head there — the cup, the controller,
+   * the quilt (SPEC §21.9). A frame with no mask has nothing in front, and
+   * gets the plain draw.
+   *
+   * The clipped overlay is composed once per frame into its slot of one
+   * offscreen strip and blitted from there, so a paint allocates nothing and
+   * the slot's source rectangle names the frame to the digest the way a
+   * sheet rectangle does (engine/digest.ts). Slots sit on the strip's top
+   * row, which no sheet rectangle does — the packer starts below a gutter.
+   */
+  drawOver(ctx: SceneContext, name: FrameName, x: number, y: number, under: FrameName): void {
+    const image = this.image;
+    if (!image) return;
+    const mask = SPRITE_MASKS[under];
+    const strip = mask ? this.strip(name) : null;
+    // No document to compose on (the tests), or a browser out of contexts:
+    // the overlay still has to land, over the prop rather than not at all.
+    if (!mask || !strip) {
+      this.draw(ctx, name, x, y);
+      return;
+    }
+    const overlay = SPRITE_FRAMES[name];
+    const slot = MASKED.indexOf(under) * overlay.w;
+    const at = `${x},${y}`;
+    if (strip.composedAt.get(under) !== at) {
+      const offset = overlayOffset(SPRITE_FRAMES[under], overlay, x, y);
+      const target = strip.ctx;
+      layer(target, () => {
+        target.beginPath();
+        target.rect(slot, 0, overlay.w, overlay.h);
+        target.clip();
+        target.clearRect(slot, 0, overlay.w, overlay.h);
+        target.drawImage(image, overlay.x, overlay.y, overlay.w, overlay.h, slot, 0, overlay.w, overlay.h);
+        // The mask is in the frame's own pixels; the slot is the overlay's.
+        target.globalCompositeOperation = "destination-out";
+        target.drawImage(image, mask.x, mask.y, mask.w, mask.h, slot - offset.x, -offset.y, mask.w, mask.h);
+      });
+      strip.composedAt.set(under, at);
+    }
+    const { dx, dy, dw, dh } = drawRect(overlay, x, y, 1);
+    ctx.drawImage(strip.canvas, slot, 0, overlay.w, overlay.h, dx, dy, dw, dh);
+  }
+
+  private strip(name: FrameName): Strip | null {
+    if (!this.strips.has(name)) {
+      const overlay = SPRITE_FRAMES[name];
+      const canvas = makeCanvas(overlay.w * MASKED.length, overlay.h);
+      const ctx = canvas?.getContext("2d");
+      this.strips.set(name, canvas && ctx ? { canvas, ctx, composedAt: new Map() } : null);
+    }
+    return this.strips.get(name)!;
   }
 }

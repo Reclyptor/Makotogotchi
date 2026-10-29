@@ -71,9 +71,19 @@ export const downscale = (
  * Median cut: repeatedly split the box whose colours are most spread out, along
  * the channel they are most spread out on, until there are as many boxes as
  * colours wanted. Each box's mean becomes a palette entry, lightest first.
+ *
+ * `pinned` colours join the palette as they are, on top of the `colours` the
+ * cut finds, and the cells already that colour sit out of the cut. A small
+ * patch of a colour close to a large one would otherwise be averaged into it:
+ * the Sage's white beard into cream paper and a pale grey belly.
  */
-export const quantize = (grid: RGB[][], colours: number): { palette: RGB[]; indices: number[][] } => {
-  let boxes: RGB[][] = [grid.flat()];
+export const quantize = (
+  grid: RGB[][],
+  colours: number,
+  pinned: readonly RGB[] = [],
+): { palette: RGB[]; indices: number[][] } => {
+  const isPinned = (pixel: RGB): boolean => pinned.some((p) => p[0] === pixel[0] && p[1] === pixel[1] && p[2] === pixel[2]);
+  let boxes: RGB[][] = [grid.flat().filter((pixel) => !isPinned(pixel))];
   for (;;) {
     if (boxes.length >= colours) break;
     let target = -1;
@@ -106,6 +116,7 @@ export const quantize = (grid: RGB[][], colours: number): { palette: RGB[]; indi
     const sum = box.reduce((acc, p) => [acc[0] + p[0]!, acc[1] + p[1]!, acc[2] + p[2]!], [0, 0, 0]);
     return sum.map((value) => Math.round(value / box.length)) as RGB;
   });
+  palette.push(...pinned.map((colour) => [...colour] as RGB));
   // Lightest first, so the letters run light to dark and the grid reads as a
   // picture in a diff rather than as noise.
   palette.sort((a, b) => b[0] + b[1] + b[2] - (a[0] + a[1] + a[2]));
