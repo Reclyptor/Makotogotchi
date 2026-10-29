@@ -2,7 +2,7 @@
 // after any change under art/ and review the contact sheet.
 
 /** The packed sheet these frame rectangles index — hashed together, stale never. */
-export const SPRITE_SHEET_URL = "/sprites.3ee2c9b6c9.png";
+export const SPRITE_SHEET_URL = "/sprites.dfef5c49b6.png";
 
 export type SpriteFrame = { x: number; y: number; w: number; h: number };
 
