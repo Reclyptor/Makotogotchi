@@ -46,7 +46,9 @@ Everything in
 [`art/original/jingles-sprites.png`](./art/original/jingles-sprites.png) is
 Jingles' work. The derived frames in `art/pet/` are modifications of it,
 among them the Sage's beard (`sageBeard@1x.png`) and the meditation pose
-(`meditate1@1x.png`, `meditate2@1x.png`).
+(`meditate1@1x.png`, `meditate2@1x.png`). The Halloween wizard costume
+(`wizardHat@1x.png`; the robe is cloth painted from the pose, in colours of the same style) and the props in `art/holiday/` are
+modifications too, drawn in her line style.
 
 The chinchilla is Jingles' design and Jingles' linework — she drew it, and
 this project exists because of it. Fork the code freely; if you take the

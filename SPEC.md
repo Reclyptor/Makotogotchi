@@ -3387,8 +3387,9 @@ negative, fractional, oversized and non-finite entries all collapse to
 something every client agrees on.
 
 **Paying for it.** Tickets are claimed **before** coins are charged, and
-only what lands is billed. Votes are non-refundable, so the failure that
-must be impossible is taking coins for a ticket that did not fit; a ticket
+only what lands is billed. Votes are non-refundable (but see §22.11: a
+holiday that keeps Makoto home pays its day's tickets back), so the failure
+that must be impossible is taking coins for a ticket that did not fit; a ticket
 counter briefly high harms nobody, since the ballot it belongs to is
 tomorrow's. `POST /api/shop/vote` takes **tickets**, not coins — the cap is
 denominated in tickets, so that is the unit the server clamps in — and is
@@ -3471,6 +3472,121 @@ scene keeps the ancestors with its decor. The digest (§10.1) repaints the room
 when the list changes, like any other decor change. Which slots hang a Sage
 is folded into it in so many words (`wallKey`), because a picture lands as a
 blit that looks the same whichever set it came from.
+
+### 22.11 Holidays
+
+A small calendar of dated holidays. Halloween, Oct 31, is the first, and it
+returns every year without a code change. Like venues (§22.8), a holiday is
+**presentation**: it is derived from the pet's calendar day, which every
+client and the server already hold, and nothing about it enters `PetState` or
+the event log.
+
+**The calendar.** `src/sim/holidays.ts` holds `HOLIDAYS`, each a
+`{ id, month, day }`, and `holidayOn(dayIndex)`, which answers "which holiday
+is it" for the pet's `dayIndex` (§22.1) and is the only place that answers.
+The index is epoch days, so `civilFromDays` (`clock.ts`) inverts
+`daysFromCivil` to read the month and day back. A holiday therefore starts and
+ends at the pet's midnight, wherever the viewer is.
+
+**Home all day.** `sceneVenueAt` returns `home` on a holiday, whatever the
+tickets say, so the scene and the caption (both read it) agree.
+
+**The scene.** A holiday's `HolidayScene` (`scene/holidays/`) replaces the
+room's dressing for the day:
+
+- its `theme` stands in for the home theme. It is a `RoomTheme` like the
+  others, hue-shifted (§22.5), but kept out of `THEME_IDS` and the shop. The
+  `BackdropKey` carries `holidayId`, so the composed-room cache and the
+  repaint check turn over with it;
+- the communal decor and grand furniture (§13.2, §21.8) are not drawn: the
+  lamp, the tank, the plant, the picture, the window seat, the kotatsu and the
+  family wall all stay off the walls for the day. The scene's `props` are
+  drawn instead, each behind or in front of the pet, and a `flicker` prop
+  breathes a warm glow around itself;
+- the window gets its night touches from the scene: a tint for the moon, and
+  bats crossing the pane. Everything here freezes under reduced motion (§10.1)
+  like the rest of the room.
+
+**The costume.** On a holiday Makoto wears the scene's costume all day, a
+robe and a hat in the Sage's beard's style. The draw order is robe, then the
+elder's brow tufts, then the Sage's beard, then the hat, and robe and hat go
+through the frame's mask like the beard does (§21.9), so the cup, the
+controller and the quilt still stand in front of them. The costume hat takes
+the place of the worn cosmetic (§13.2) for the day, and a frame whose art
+already wears a nightcap keeps it.
+
+**The ballot.** A vote for a holiday is rejected with `HOLIDAY`, charging
+nothing, and the shop closes that day's ballot rows with the same line,
+"Makoto is staying home for Halloween." Tickets that exist from before the
+rule are paid back: the leader's tick claims the marker `holiday-refund:<day>`
+before anyone is paid, as the Sage's ascension does (§2.8), then credits each
+caretaker what they spent on that day's row. It pays at most once a day,
+across leaders and restarts.
+
+**The greeting.** The caption slot that holds "Out at…" reads
+"🎃 Happy Halloween!" all day, from a per-holiday copy table. The feed says
+once per pet-day, per browser, that Makoto is dressed up as a wizard. The
+status line is unchanged.
+
+**The page.** The whole UI dresses up, not just the canvas. The root element
+carries `data-holiday="<id>"` while `holidayOn` says so: the server sets it
+when it renders, from `PET_TIMEZONE`, so there is no flash of the ordinary
+theme, and the client keeps it in step from the stream's zone, across the
+pet's midnight. The layout therefore renders per request. Every override lives
+under that attribute in one stylesheet (`src/app/holidays/`), as token
+overrides and additive decoration, so nothing leaks into other days. The
+display font is declared through `next/font` every day with preloading off,
+so another day pays only the few bytes of its `@font-face`. The care buttons'
+and the feed's emoji come from the holiday's icon table; their labels and
+accessible names do not change.
+
+### 22.12 Worn Garments
+
+A body costume is worn, not pasted on. It used to be one fixed sprite hung in
+front of the pet, so the arms and the body's edges showed around it and it read
+as a sticker. A **garment** is drawn from the pose's own silhouette: every fur
+cell of the body below the neckline is repainted in the garment's ramp, so the
+arms become sleeves, and the outline stays on top, so the cloth follows every
+contour. A holiday's scene supplies a `Garment` as data (`costume.robe`); the
+rules are `src/game/scene/garment.ts`.
+
+**Regions.** `npm run garment-regions` (after `npm run atlas` and
+`npm run head-anchors`) reads each pet frame's pixels and writes
+`garment.generated.ts`, using `scripts/head-parts.ts` for the mouth and the
+eyes. Each frame is read back onto its own art grid first (a native cut sits on
+5.5px cells starting some pixels in). Then:
+
+- the **neckline** is the row under the mouth, never nearer than two rows under
+  the eyes, and the beard's anchor stands in where no mouth shows;
+- the **body** is the largest 4-connected region of fur, with outline, props and
+  transparency as walls, so the tail is a region of its own and stays fur;
+- the **feet** are the bottom rows whose fur runs are narrow and split in two,
+  and stay bare. The last body row above them is the garment's last;
+- the **paws** are an arm's bottom edge against the body, found as an interior
+  horizontal outline run. The fur above it is the bare paw and the row above
+  that the cuff. A pose whose arm is raised or hidden uses the pose's standard
+  arm instead, and none where that would sit above the collar.
+
+A frame in bed, under a nightcap, in the dust bath or under the ice pack wears
+no garment.
+
+**The Garment type.** A four-colour ramp (cloth, collar, trim, line), and the
+optional pieces each costume chooses:
+
+- an open **slit**, five columns wide, per facing, where the fur shows, with
+  trim on each side; or a closed **seam**, one trim column with no fur showing;
+  both close five rows above the floor on a seated pose;
+- **cuffs** above bare paws, or sleeves to the paw;
+- a **belt** with a buckle, two rows above the hem;
+- **tails** and flare past the hem;
+- a **hem pattern** on the last rows of cloth, which a seated pose can lift a row.
+
+The white belly maps to the cloth too: it is a marking, not light.
+
+**Drawing.** The room paints the garment once per frame and holiday into its
+own canvas, behind the frame's prop and mouth masks, and blits it from there,
+so a paint allocates nothing and a still room stays still for the digest
+(§10.1). Brows, beard and hat go on over it.
 
 ---
 
