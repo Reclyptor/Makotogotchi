@@ -200,6 +200,15 @@ export const meditatingAt = (state: PetState, tick: number): boolean => {
 };
 
 /**
+ * Whether the meditation is on its second day at `tick`, when the room
+ * gathers an aura around the pet (SPEC §2.8). Derived, never stored.
+ */
+export const deepMeditationAt = (state: PetState, tick: number): boolean => {
+  const start = meditationStartTickOf(state);
+  return start !== null && meditatingAt(state, tick) && tick >= start + TICKS_PER_DAY;
+};
+
+/**
  * Whole days into the elder ramp, or null while the pet still ages by the rule
  * every history written before the ramp folds under (no ELDER_RAMP event yet).
  * The ramp counts from the later of the event and the first elder day, so a

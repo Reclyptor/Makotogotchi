@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { derive } from "./derive";
 import type { PetEvent } from "./events";
 import { healthTerms } from "./health";
-import { meditatingAt, meditationStartTickOf, sageStartTickOf, stageOf, type PetState } from "./model";
+import { deepMeditationAt, meditatingAt, meditationStartTickOf, sageStartTickOf, stageOf, type PetState } from "./model";
 import { project } from "./project";
 import { reduce } from "./reduce";
 import { hatchedState, projectImmortal, QUIET_SEED, testCtx, withSeed } from "./testkit";
@@ -101,6 +101,37 @@ describe("stage", () => {
     const release = 46 * TICKS_PER_DAY;
     const { milestones } = project(recordedAt(release), release + 10, ctx);
     expect(milestones).toContainEqual({ kind: "MEDITATING", tick: release + 1 });
+  });
+});
+
+describe("the second day of meditation", () => {
+  const state = recordedAt(5);
+  const start = MEDITATION_STARTS_AT;
+  const end = start + MEDITATION_TICKS;
+
+  it("is not deep on the first day", () => {
+    expect(deepMeditationAt(state, start)).toBe(false);
+    expect(deepMeditationAt(state, start + TICKS_PER_DAY - 1)).toBe(false);
+  });
+
+  it("is deep from the first tick of day 2 to the last tick of meditation", () => {
+    expect(deepMeditationAt(state, start + TICKS_PER_DAY)).toBe(true);
+    expect(deepMeditationAt(state, end - 1)).toBe(true);
+  });
+
+  it("ends the moment the pet is a Sage", () => {
+    expect(deepMeditationAt(state, end)).toBe(false);
+    expect(deepMeditationAt(state, end + TICKS_PER_DAY)).toBe(false);
+  });
+
+  it("is never deep for a pet the rule has not reached", () => {
+    const young = projectImmortal(hatchedState(ctx, generation), start + TICKS_PER_DAY, ctx);
+    expect(deepMeditationAt(young, start + TICKS_PER_DAY)).toBe(false);
+  });
+
+  it("reaches the derived state only while the pet meditates deeply", () => {
+    const at = (tick: number) => derive({ ...projectImmortal(state, tick, ctx) }).deepMeditation;
+    expect([at(start + 10), at(start + TICKS_PER_DAY), at(end + 10)]).toEqual([false, true, false]);
   });
 });
 

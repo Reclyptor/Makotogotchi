@@ -5,7 +5,7 @@
 
 import { careMultiplier, DIFFICULTY_BASELINE, presencePermilleOf } from "./difficulty";
 import { healthTerms, type HealthTerms } from "./health";
-import { isAlive, meditatingAt, rulesVersionOf, sageStartTickOf, stageOf, type PetState } from "./model";
+import { deepMeditationAt, isAlive, meditatingAt, rulesVersionOf, sageStartTickOf, stageOf, type PetState } from "./model";
 import {
   AILMENT_THRESHOLDS,
   CRITICAL_THRESHOLD,
@@ -70,6 +70,8 @@ export type DerivedState = {
   stage: LifeStage;
   /** The tick an elder's meditation ends, while it is meditating (SPEC §2.8). */
   meditatingUntilTick: number | null;
+  /** Whether the meditation is on its second day, when the room draws an aura (SPEC §2.8). */
+  deepMeditation: boolean;
   ailments: Ailment[];
   animation: AnimationKey;
   alert: AlertLevel;
@@ -172,6 +174,7 @@ export const derive = (state: PetState): DerivedState => {
   return {
     stage,
     meditatingUntilTick: meditating ? sageStartTickOf(state) : null,
+    deepMeditation: meditating && deepMeditationAt(state, state.tick),
     ailments,
     animation,
     alert,

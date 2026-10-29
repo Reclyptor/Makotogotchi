@@ -15,6 +15,7 @@ import { Room, ROOM_HEIGHT, ROOM_WIDTH, type FoodTaste } from "@/game/scene/room
 import { petClock } from "@/game/scene/backdrop";
 import { sceneVenueAt } from "@/sim/atmosphere";
 import { startLoop } from "@/game/engine/loop";
+import { AURA } from "@/game/scene/aura";
 import { wantToast } from "@/app/components/WantBanner/copy";
 import type { PetStream } from "@/app/hooks/usePetStream";
 import type { SpectacleMood } from "@/sim/secret";
@@ -108,6 +109,7 @@ export default function PetCanvas({ stream, localSecret = null }: PetCanvasProps
 
     const room = new Room();
     roomRef.current = room;
+    room.aura = AURA;
     void room.atlas.load(SPRITE_SHEET_URL);
 
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");

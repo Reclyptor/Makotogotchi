@@ -14,6 +14,7 @@ import { AnimationMachine } from "../anim/machine";
 import { BASE_CLIPS, BUTTERFLY_CLIP, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP, type OneShotName } from "../anim/clips";
 import { SPRITE_FRAMES, type FrameName } from "../atlas.generated";
 import { HEAD_ANCHORS } from "./head";
+import { PET_Y, type AuraPainter } from "./auraTypes";
 import { Backdrop, keyOf, ROOM_HEIGHT, ROOM_WIDTH, RUG, venueSpec, WINDOW, type BackdropKey, type Condition } from "./backdrop";
 import { celestialAt, seasonFor, skyMomentAt, weatherFor, type Celestial } from "@/sim/atmosphere";
 import type { DerivedState } from "@/sim/derive";
@@ -23,7 +24,7 @@ import { isOld, type CareAction, type LifeStage } from "@/sim/tuning";
 
 export { ROOM_WIDTH, ROOM_HEIGHT } from "./backdrop";
 const PET_X = ROOM_WIDTH / 2;
-const PET_Y = 172;
+const MEDITATION_FRAMES: readonly FrameName[] = BASE_CLIPS.meditating.frames;
 
 /** What the room needs from the pet's own calendar to dress itself (§22.1). */
 export type AtmosphereInput = {
@@ -197,6 +198,9 @@ export class Room {
   private celestial: Celestial = celestialAt(13, 0);
   private asleep = false;
   private stage: LifeStage = "EGG";
+  private deepMeditation = false;
+  /** The art of the second meditation day's aura. The room draws none until it is given some. */
+  aura: AuraPainter | null = null;
   private ambientMs = 0;
   private petX = PET_X;
   private facingRight = false;
@@ -222,6 +226,7 @@ export class Room {
     this.machine.setBase(derived.animation, nowMs);
     this.asleep = asleep;
     this.stage = derived.stage;
+    this.deepMeditation = derived.deepMeditation;
     this.condition = ALERT_CONDITION[derived.alert];
   }
 
@@ -439,10 +444,12 @@ export class Room {
       layer(ctx, () => {
         ctx.translate(x, 0);
         if (mirrored) ctx.scale(-1, 1);
+        this.renderAura(ctx, frame, nowMs, scale, "behind");
         this.atlas.draw(ctx, frame, 0, PET_Y, scale);
         // Whatever the head wears is drawn in the same transform, so it
         // mirrors with the pet and finds the head wherever this frame put it.
         this.renderHead(ctx, frame, scale);
+        this.renderAura(ctx, frame, nowMs, scale, "front");
       });
     }
 
@@ -574,6 +581,21 @@ export class Room {
       px(100, 146, 4, 8, "#6f4630"); // legs
       px(156, 146, 4, 8, "#6f4630");
     }
+  }
+
+  /**
+   * One half of the aura around a pet on the second day of its meditation
+   * (SPEC §2.8, §21.9), drawn on the meditation frames only and inside the
+   * pet's own mirror (auraTypes.ts). The gate is the frame being drawn, not the
+   * base clip: a pat plays another clip over the meditation, and the aura is
+   * shaped for the seated pose alone. It rides the room's animation clock and
+   * is told when motion is reduced, so the still frame is the art's to
+   * choose. Without art, or off the second day, it costs a comparison.
+   */
+  private renderAura(ctx: SceneContext, frame: FrameName, nowMs: number, scale: number, half: keyof AuraPainter): void {
+    const aura = this.aura;
+    if (!aura || !this.deepMeditation || !MEDITATION_FRAMES.includes(frame)) return;
+    layer(ctx, () => aura[half](ctx, this.atlas, frame, nowMs, scale, this.reducedMotion));
   }
 
   /**

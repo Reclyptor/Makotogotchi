@@ -635,6 +635,13 @@ callers holding a state use `stageOf(state, tick)`, which supplies it. The
 `meditating` flag is `meditatingAt(state, tick)`, derived and never stored,
 and a meditating pet is still an `ELDER`.
 
+**The second day.** From `meditationStartTickOf + TICKS_PER_DAY` to the end of
+the meditation a ki aura gathers around the pet (§21.9), the sign that the
+change is close. The first day is plain, and the aura stops the tick the pet is
+a Sage. `deepMeditationAt(state, tick)` is that window, derived beside
+`meditatingAt` and never stored, and `derive` carries it as `deepMeditation`.
+It changes nothing in the sim and nothing in the status line.
+
 **The Sage's blessing.** An egg laid after a Sage's death carries
 `Generation.sageBlessed: true`, pinned at egg-laying like `foodCatalogSize`
 (§21.4) and absent on every other egg. Its adult form is decided against lines
@@ -2933,6 +2940,16 @@ pet just never looks different. Presentation-layer only:
   closed and a slow breath. Those frames carry the brow and beard anchors like
   any other. The key outranks sleep, so a meditating pet seen at night is still
   meditating.
+  - **Aura** (the second day, `derived.deepMeditation`, §2.8): drawn by
+    the `AURA` painter in `scene/aura.ts` (`scene/auraTypes.ts`), in two halves. The behind half is drawn before the pet's
+    sprite and the front half after the head layer, so the near side of an
+    orbit passes over the body and whatever the head wears. Each is
+    called inside the pet's own mirror with the meditation frame, the room's
+    animation clock, the pet's scale and the reduced-motion flag (a still
+    frame, aura visible), and only while the base clip is `meditating`. It is
+    plain draws on the shared context, so the digest (§10.1) sees it turn and,
+    once still, skips the frame. Nothing is allocated per frame, and nothing is
+    drawn off the second day or without a painter.
 
 The stage scale applies everywhere the room draws the pet (idle, wander,
 one-shots). Minigames keep drawing the adult frames — the game canvas is a

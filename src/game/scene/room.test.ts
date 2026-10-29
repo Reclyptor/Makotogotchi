@@ -6,6 +6,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { Room, ROOM_HEIGHT, ROOM_WIDTH, STAGE_SCALE, stageScale, wanderBand } from "./room";
 import { RUG } from "./backdrop";
+import type { AuraPaint, AuraPainter } from "./auraTypes";
 import { SPECTACLE_MS } from "./party";
 import { drawRect, overlayOffset } from "../engine/placement";
 import { BASE_CLIPS, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP } from "../anim/clips";
@@ -15,6 +16,19 @@ import { SPRITE_FRAMES, SPRITE_MASKS, type FrameName } from "../atlas.generated"
 import { derive } from "@/sim/derive";
 import { hatchedState, projectImmortal, testCtx } from "@/sim/testkit";
 import { HEALTH_MAX, NEED_MAX, STAGE_STARTS, TICKS_PER_DAY, type LifeStage } from "@/sim/tuning";
+
+// The aura's art is Fable's to choose (scene/aura.ts); what the room owes it is
+// when, in what order and with what clock it is called. The stand-in marks each
+// half in a shared log and puts one rectangle on the canvas that rides the
+// clock, so the digest has something to see move.
+const drawLog: { half: "behind" | "front" | "pet"; frame: string; nowMs: number; scale: number; reduced: boolean }[] = [];
+const stubHalf =
+  (half: "behind" | "front"): AuraPaint =>
+  (ctx, _atlas, frame, nowMs, scale, reduced) => {
+    drawLog.push({ half, frame, nowMs, scale, reduced });
+    ctx.fillRect(reduced ? 0 : Math.round(nowMs / 10), 0, 2, 2);
+  };
+const STUB_AURA: AuraPainter = { behind: stubHalf("behind"), front: stubHalf("front") };
 
 const ctx = testCtx();
 const RAMP: LifeStage[] = ["HATCHLING", "PUP", "JUVENILE", "ADULT", "ELDER", "SAGE"];
@@ -164,6 +178,19 @@ const contentedRoom = (days = 1) => {
   };
   room.syncAtmosphere({ hour: 13, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, venueId: "home" });
   return { room, state: contented, derived: derive(contented) };
+};
+
+// Brought to ruleset 4 on its 22nd day: it meditates from day 40 and is a
+// Sage from day 42 (SPEC §2.8).
+const agedRoom = (days: number) => {
+  const { room, state } = contentedRoom(22);
+  const aged = {
+    ...projectImmortal({ ...state, sageRuleFromTick: state.tick }, days * TICKS_PER_DAY, ctx),
+    needs: state.needs,
+    sick: false,
+    asleep: false,
+  };
+  return { room, aged, derived: derive(aged) };
 };
 
 describe("stage scale", () => {
@@ -462,19 +489,6 @@ describe("a hat on the head", () => {
     room.render(mourning.ctx, 3000);
     expect(mourning.drawn.map((entry) => entry.x1 - entry.x0)).toEqual([SPRITE_FRAMES.dead1.w]);
   });
-
-  // Brought to ruleset 4 on its 22nd day: it meditates from day 40 and is a
-  // Sage from day 42 (SPEC §2.8).
-  const agedRoom = (days: number) => {
-    const { room, state } = contentedRoom(22);
-    const aged = {
-      ...projectImmortal({ ...state, sageRuleFromTick: state.tick }, days * TICKS_PER_DAY, ctx),
-      needs: state.needs,
-      sick: false,
-      asleep: false,
-    };
-    return { room, aged, derived: derive(aged) };
-  };
 
   it("hangs a Sage's beard from the mouth, under its tufts, and none on an elder", () => {
     const { room, derived } = agedRoom(43);
@@ -1018,5 +1032,106 @@ describe("the skip never hides a frame that differs", () => {
     const second = callLog();
     room.render(second.ctx, 1000);
     expect(second.log).not.toEqual(first.log);
+  });
+});
+
+describe("the ki aura on the second day of meditation", () => {
+  const rooms = (days: number) => {
+    const { room, aged, derived } = agedRoom(days);
+    room.aura = STUB_AURA;
+    room.syncDerived(derived, false, 0);
+    return { room, aged, derived };
+  };
+  /** A first frame is painted twice, once into the digest and once onto the canvas; this is the canvas's. */
+  const onCanvas = () => drawLog.slice(drawLog.length / 2);
+  const drawnOn = (days: number): string[] => {
+    const { room } = rooms(days);
+    drawLog.length = 0;
+    room.render(recordingContext().ctx, 1000);
+    return onCanvas().map((entry) => entry.half);
+  };
+
+  it("is drawn, behind then in front, only on the second day", () => {
+    expect(rooms(41).derived.deepMeditation).toBe(true);
+    expect(drawnOn(41)).toEqual(["behind", "front"]);
+  });
+
+  it("is not drawn on the first day, for an elder who is not meditating, or for a Sage", () => {
+    expect(rooms(40.5).derived.deepMeditation).toBe(false);
+    expect(drawnOn(40.5)).toEqual([]);
+    expect(drawnOn(30)).toEqual([]);
+    expect(rooms(43).derived.stage).toBe("SAGE");
+    expect(drawnOn(43)).toEqual([]);
+  });
+
+  it("lays the back half down before the pet's sprite and the front half after it", () => {
+    const { room } = rooms(41);
+    const recorder = recordingContext();
+    const petWidths: number[] = [SPRITE_FRAMES.meditate1.w, SPRITE_FRAMES.meditate2.w];
+    const blit = recorder.ctx.drawImage.bind(recorder.ctx) as unknown as (...args: number[]) => void;
+    const drawImage = (...args: number[]): void => {
+      if (petWidths.includes(args[7]!)) drawLog.push({ half: "pet", frame: "", nowMs: 0, scale: 1, reduced: false });
+      blit(...args);
+    };
+    (recorder.ctx as unknown as { drawImage: typeof drawImage }).drawImage = drawImage;
+    drawLog.length = 0;
+    room.render(recorder.ctx, 1000);
+    expect(onCanvas().map((entry) => entry.half)).toEqual(["behind", "pet", "front"]);
+  });
+
+  it("lets go of the aura while a pat plays another clip over the meditation", () => {
+    const { room } = rooms(41);
+    room.onCare("PET", "petted", 1000);
+    drawLog.length = 0;
+    room.render(recordingContext().ctx, 1100);
+    expect(drawLog).toEqual([]);
+    // The pat's clip lapses and the seated pose, and the aura, come back.
+    room.render(recordingContext().ctx, 1000 + 4 * 450 + 100);
+    expect(drawLog.length).toBeGreaterThan(0);
+  });
+
+  it("hands the art the meditation frame on screen and the pet's own scale", () => {
+    const { room } = rooms(41);
+    drawLog.length = 0;
+    room.render(recordingContext().ctx, 1000);
+    for (const call of onCanvas()) {
+      expect(BASE_CLIPS.meditating.frames).toContain(call.frame);
+      expect(call.scale).toBe(room.petScale);
+    }
+  });
+
+  it("draws nothing, and does not fail, when no art has been given", () => {
+    const { room } = rooms(41);
+    room.aura = null;
+    drawLog.length = 0;
+    room.render(recordingContext().ctx, 1000);
+    expect(drawLog).toEqual([]);
+  });
+
+  it("hands the art the animation clock, and tells it when motion is reduced", () => {
+    const { room } = rooms(41);
+    drawLog.length = 0;
+    room.render(recordingContext().ctx, 1000);
+    expect(onCanvas().map((call) => [call.nowMs, call.reduced])).toEqual([[1000, false], [1000, false]]);
+    room.reducedMotion = true;
+    drawLog.length = 0;
+    room.render(recordingContext().ctx, 1500);
+    expect(onCanvas().map((call) => [call.nowMs, call.reduced])).toEqual([[1500, true], [1500, true]]);
+  });
+
+  it("repaints as the aura turns, and stays quiet once it is still", () => {
+    const { room } = rooms(41);
+    const recorder = recordingContext();
+    const calls = (nowMs: number): number => {
+      const before = recorder.calls();
+      room.render(recorder.ctx, nowMs);
+      return recorder.calls() - before;
+    };
+    calls(1000);
+    // Inside one meditation frame (1600ms) the sprite holds, so only the aura moves.
+    expect(calls(1200)).toBeGreaterThan(0);
+    room.reducedMotion = true;
+    calls(1300);
+    expect(calls(1400)).toBe(0);
   });
 });
