@@ -54,6 +54,7 @@ export default function Shell({ gameId, onClose, onReact }: ShellProps) {
   const scoreRef = useRef(0);
   const cheerIdRef = useRef(0);
   const finishedRef = useRef(false);
+  const gameAreaRef = useRef<HTMLDivElement | null>(null);
 
   // Start the run and load the sheet together; play begins when both land.
   useEffect(() => {
@@ -134,6 +135,31 @@ export default function Shell({ gameId, onClose, onReact }: ShellProps) {
     };
   }, [phase, onReact]);
 
+  // Nothing on the page is selectable while a game is open, and a selection
+  // left over from before is dropped once, here.
+  useEffect(() => {
+    const root = document.documentElement;
+    window.getSelection()?.removeAllRanges();
+    root.classList.add("minigame-open");
+    return () => root.classList.remove("minigame-open");
+  }, []);
+
+  const showsGameArea = phase === "playing" || phase === "loading" || phase === "reporting";
+
+  // Touches on the canvas belong to the game. It has to be a native listener:
+  // React's onTouchStart is passive, so preventDefault() would do nothing.
+  // Only the canvas is blocked — a blocked touchstart also cancels the click,
+  // and the pads under Simon Squeaks and Natsumi Says are buttons.
+  useEffect(() => {
+    const area = gameAreaRef.current;
+    if (!area) return;
+    const claimCanvasTouch = (event: TouchEvent): void => {
+      if (event.target instanceof HTMLCanvasElement) event.preventDefault();
+    };
+    area.addEventListener("touchstart", claimCanvasTouch, { passive: false });
+    return () => area.removeEventListener("touchstart", claimCanvasTouch);
+  }, [showsGameArea]);
+
   const reportScore = useCallback((score: number) => {
     scoreRef.current = score;
   }, []);
@@ -170,9 +196,13 @@ export default function Shell({ gameId, onClose, onReact }: ShellProps) {
   const Game = game.Component;
   // A long press is the browser's gesture too: on a phone it starts a text
   // selection (and on Android a context menu), and taking the touch over
-  // fires pointercancel — which a hold game rightly reads as letting go. So
-  // nothing in the dialog is selectable and the menu never opens; a run's
-  // hold belongs to the game.
+  // fires pointercancel — which a hold game rightly reads as letting go. CSS
+  // alone was not enough: iOS Safari falls back to selecting whatever text is
+  // still selectable behind the overlay. So the dialog is select-none and the
+  // menu never opens, the page is made unselectable while a game is open
+  // (`minigame-open`, globals.css), and a touch on the canvas is claimed
+  // outright — the one thing iOS reliably obeys. A run's hold belongs to the
+  // game.
   return (
     <div
       role="dialog"
@@ -196,9 +226,9 @@ export default function Shell({ gameId, onClose, onReact }: ShellProps) {
             </button>
           </>
         )}
-        {(phase === "playing" || phase === "loading" || phase === "reporting") && (
+        {showsGameArea && (
           <>
-            <div className="relative w-full">
+            <div ref={gameAreaRef} className="relative w-full">
               {phase === "playing" && sheet ? (
                 <Game sheet={sheet} reportScore={reportScore} finish={finish} />
               ) : (

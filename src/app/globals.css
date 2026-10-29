@@ -52,6 +52,16 @@
   color-scheme: dark;
 }
 
+/* Set by the minigame Shell while a game is open. Dialog-level select-none
+   was not enough on iOS, which falls back to selecting any text left behind
+   the overlay on a long press. */
+.minigame-open,
+.minigame-open * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 body {
   color: var(--color-foreground);
   background-color: var(--color-background);

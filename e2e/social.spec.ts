@@ -8,7 +8,7 @@
 // refuse each other; keeping them in one serial file keeps that impossible.
 
 import { execFileSync } from "node:child_process";
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Locator } from "@playwright/test";
 import { MINIGAME_COUNTDOWN_MS } from "@/sim/minigames";
 
 const seedCoins = (caretakerId: string, coins: number): void => {
@@ -303,5 +303,67 @@ test.describe("social and economy", () => {
 
     await watcher.close();
     await player.close();
+  });
+});
+
+// A cancelable touchstart straight at an element: whether the page called
+// preventDefault() on it is the whole question, and a synthetic event answers
+// it without a real long press.
+const touchstartPrevented = (locator: Locator): Promise<boolean> =>
+  locator.evaluate((element) => {
+    const event = new Event("touchstart", { bubbles: true, cancelable: true });
+    element.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+
+test.describe("minigame touch handling", () => {
+  test.use({ hasTouch: true });
+
+  test("the canvas claims its touches and the root is unselectable while a game is open", async ({ page }) => {
+    test.setTimeout(150_000);
+    await page.goto("/?game=dustdash");
+    await expect(page.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
+    const root = page.locator("html");
+    await expect(root).not.toHaveClass(/minigame-open/);
+
+    const play = page.getByRole("button", { name: /^Play/ });
+    await expect(play).not.toHaveAttribute("aria-disabled", "true", { timeout: 90_000 });
+    await play.click();
+    const dialog = page.getByRole("dialog", { name: /Dust Dash/ });
+    await expect(dialog.locator("canvas")).toBeVisible({ timeout: 10_000 });
+    await expect(root).toHaveClass(/minigame-open/);
+    expect(await touchstartPrevented(dialog.locator("canvas"))).toBe(true);
+
+    // The run ends on the first dust bunny; Done is the dialog's own button
+    // and must keep its click.
+    const done = dialog.getByRole("button", { name: "Done" });
+    await expect(done).toBeVisible({ timeout: 20_000 });
+    expect(await touchstartPrevented(done)).toBe(false);
+    await done.click();
+    await expect(dialog).toBeHidden();
+    await expect(root).not.toHaveClass(/minigame-open/);
+  });
+
+  test("a Simon Squeaks pad keeps its touch and its tap still registers", async ({ page }) => {
+    test.setTimeout(150_000);
+    await page.goto("/?game=simon");
+    await expect(page.getByRole("status")).toHaveText(/live/, { timeout: 15_000 });
+    const play = page.getByRole("button", { name: /^Play/ });
+    await expect(play).not.toHaveAttribute("aria-disabled", "true", { timeout: 90_000 });
+    await play.click();
+    const dialog = page.getByRole("dialog", { name: /Simon Squeaks/ });
+    const pad = dialog.getByRole("button", { name: "Gold pad" });
+    await expect(pad).toBeVisible({ timeout: 15_000 });
+    expect(await touchstartPrevented(pad)).toBe(false);
+
+    // Pads are inert until the sequence has played. A real touch tap then
+    // either advances the round or, on the wrong pad, ends the run (so soon
+    // that the server calls it implausible, which is fine here) — both only
+    // happen if the click survived.
+    await expect(pad).not.toHaveAttribute("aria-disabled", "true", { timeout: 15_000 });
+    await pad.tap();
+    await expect(dialog.getByText("Round 2").or(dialog.getByRole("button", { name: "Done" }))).toBeVisible({ timeout: 5_000 });
+
+    await page.request.post("/api/play", { data: { phase: "finish", score: 0, inputs: 0 } });
   });
 });
