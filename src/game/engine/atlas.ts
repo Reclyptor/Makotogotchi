@@ -4,7 +4,7 @@
 // to a late pet, never a permanently empty room.
 
 import type { SceneContext } from "./digest";
-import { SPRITE_FRAMES, SPRITE_MASKS, type FrameName } from "../atlas.generated";
+import { SPRITE_FRAMES, SPRITE_MASKS, SPRITE_MOUTHS, type FrameName } from "../atlas.generated";
 import { layer } from "./layer";
 import { makeCanvas } from "./offscreen";
 import { drawRect, overlayOffset } from "./placement";
@@ -40,8 +40,12 @@ export const loadSpriteSheet = async (src: string): Promise<HTMLImageElement | n
   return null;
 };
 
-/** Every frame with a prop in front of the head, in the order their slots sit on a strip. */
-const MASKED = Object.keys(SPRITE_MASKS) as FrameName[];
+/**
+ * Every frame with something in front of the head — a prop, or a mouth — in
+ * the order their slots sit on a strip. The prop frames come first, so a slot
+ * never moves when a mouth is found on another frame.
+ */
+const MASKED = [...new Set([...Object.keys(SPRITE_MASKS), ...Object.keys(SPRITE_MOUTHS)])] as FrameName[];
 
 /**
  * One overlay, clipped once per masked frame: slot i holds it as it shows on
@@ -76,8 +80,8 @@ export class Atlas {
   /**
    * Draw an overlay at full size as `draw` does, behind whatever `under`'s
    * mask says stands in front of the head there — the cup, the controller,
-   * the quilt (SPEC §21.9). A frame with no mask has nothing in front, and
-   * gets the plain draw.
+   * the quilt — and behind the frame's own mouth (SPEC §21.9). A frame with
+   * neither has nothing in front, and gets the plain draw.
    *
    * The clipped overlay is composed once per frame into its slot of one
    * offscreen strip and blitted from there, so a paint allocates nothing and
@@ -88,11 +92,11 @@ export class Atlas {
   drawOver(ctx: SceneContext, name: FrameName, x: number, y: number, under: FrameName): void {
     const image = this.image;
     if (!image) return;
-    const mask = SPRITE_MASKS[under];
-    const strip = mask ? this.strip(name) : null;
+    const masks = [SPRITE_MASKS[under], SPRITE_MOUTHS[under]].flatMap((mask) => mask ?? []);
+    const strip = masks.length > 0 ? this.strip(name) : null;
     // No document to compose on (the tests), or a browser out of contexts:
     // the overlay still has to land, over the prop rather than not at all.
-    if (!mask || !strip) {
+    if (!strip) {
       this.draw(ctx, name, x, y);
       return;
     }
@@ -108,9 +112,11 @@ export class Atlas {
         target.clip();
         target.clearRect(slot, 0, overlay.w, overlay.h);
         target.drawImage(image, overlay.x, overlay.y, overlay.w, overlay.h, slot, 0, overlay.w, overlay.h);
-        // The mask is in the frame's own pixels; the slot is the overlay's.
+        // The masks are in the frame's own pixels; the slot is the overlay's.
         target.globalCompositeOperation = "destination-out";
-        target.drawImage(image, mask.x, mask.y, mask.w, mask.h, slot - offset.x, -offset.y, mask.w, mask.h);
+        for (const mask of masks) {
+          target.drawImage(image, mask.x, mask.y, mask.w, mask.h, slot - offset.x, -offset.y, mask.w, mask.h);
+        }
       });
       strip.composedAt.set(under, at);
     }

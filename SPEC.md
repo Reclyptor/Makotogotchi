@@ -1543,6 +1543,12 @@ adding one never moves a frame. They are indexed by frame in `SPRITE_MASKS`. A
 mask with no frame beside it, or one that is not its frame's size, is a build
 error: it is read in its frame's own pixels.
 
+A frame with a mouth carries a second occluder that is never a file: the packer
+finds the mouth in the frame's own pixels (`scripts/head-parts.ts`, the
+detection `scripts/head-anchors.ts` anchors the beard on) and packs it after
+the prop masks, indexed by frame in `SPRITE_MOUTHS`. A frame whose ears, eyes
+or mouth are hidden has none.
+
 The served sheet is **content-hashed**: the packer writes
 `public/sprites.<hash>.png`, prunes stale sheets, and emits
 `SPRITE_SHEET_URL` in `atlas.generated.ts` — the only way client code may
@@ -2904,10 +2910,24 @@ pet just never looks different. Presentation-layer only:
     still shows past it. Each frame's clipped beard is composed once, into its
     own slot of one offscreen strip, so a paint allocates nothing. The slot's
     source rectangle tells the digest (§10.1) which frame it is, the way a
-    sheet rectangle does. A frame with no mask draws the beard straight from
-    the sheet, and so does a page with no canvas to compose on, over the
-    prop rather than not at all. The brows sit above the eyes, clear of every
-    prop, and are never clipped.
+    sheet rectangle does. A frame with no mask and no mouth draws the beard
+    straight from the sheet, and so does a page with no canvas to compose on,
+    over the prop rather than not at all. The brows sit above the eyes, clear
+    of every prop, and are never clipped.
+  - **The mouth over the beard.** The moustache hangs from the mouth's top
+    row, so the frame's own mouth is drawn over it. The mouth is found
+    automatically on every frame, by the detection that anchors the beard
+    (`scripts/head-parts.ts`): the small enclosed black marks — the nose dot
+    and the curls of the smile, or whatever the pose pulls them into — that
+    start at least one art pixel under the eyes and within four, and sit
+    inside the eyes' outer edges (a paw raised to the face reaches those
+    edges), plus the pink of a tongue inside their bounding box. Those pixels
+    are packed as the frame's mouth mask, `SPRITE_MOUTHS`, and the beard is
+    erased by the union of that and the prop mask, so no beard pixel lands on
+    a mouth pixel. A frame with no detectable mouth has no mouth mask. Nothing
+    is drawn per frame: the masks regenerate from the art, so a redrawn
+    pose (the meditation arms) gets its mouth for free. The family wall's Sage
+    portraits (§22.10) keep the mouth in front the same way.
 - **Meditating** (an elder, §2.8): the `meditating` animation key plays its
   own two-frame clip, `meditate1`/`meditate2`, a seated pose with the eyes
   closed and a slow breath. Those frames carry the brow and beard anchors like
@@ -3366,8 +3386,8 @@ the wall are made the same way.
 **A Sage's portrait.** A generation that died a Sage (§2.8) hangs wearing its
 beard. The script generates a second set from the same frame, with
 `sageBeard` composited at the frame's `beard` anchor, placed exactly as the
-room places it (`engine/placement.ts`), then put through the same filter. It
-is never hand-drawn, so it stays in step with the beard. Both sets share one
+room places it (`engine/placement.ts`) and the frame's own mouth kept in front of
+it (§21.9), then put through the same filter. It is never hand-drawn, so it stays in step with the beard. Both sets share one
 palette, cut from their two largest pictures together, with the beard's
 `#ffffff` pinned into it on top of the 8 colours the cut finds. Unpinned, the
 beard's white fell into one box with the paper and the `#e0e0e0` belly and

@@ -32,37 +32,18 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { PNG } from "pngjs";
 import { SPRITE_FRAMES, SPRITE_SHEET_URL, type FrameName } from "../src/game/atlas.generated.ts";
 import { BASE_CLIPS, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP } from "../src/game/anim/clips.ts";
+import { centreOf, earDip, eyes, isPink, mouth, rasterOf, type Raster, type Rgba } from "./head-parts.ts";
 
 const SHEET = new URL(`../public${SPRITE_SHEET_URL}`, import.meta.url);
 const CONTACT = new URL("./head-anchors-contact.png", import.meta.url);
-/** Pink blobs smaller than this are a tongue tip or a stray highlight. */
-const MIN_EAR_PIXELS = 12;
-/** How far apart a pair of eyes can be, centre to centre, in frame pixels. */
-const EYE_SPACING = { min: 25, max: 50 };
 /** Rows between the bottom of the brow bars and the top of the eyes: one art pixel. */
 const BROW_GAP = 5;
-/**
- * Rows of fur between the bottom of the eyes and the top of the mouth: at
- * least one art pixel. A mark any nearer is the eye's own corner — the droop
- * of a tired eye, the wings of a happy ^ ^ — not a piece of the mouth.
- */
-const MOUTH_GAP = 5;
-/** How far below the eyes the mouth can start, in frame pixels: four art pixels. */
-const MOUTH_REACH = 22;
-/** A mark bigger than this under the eyes is a paw or a prop, not a piece of the mouth. */
-const MAX_MOUTH_PIECE = 100;
 const BROWS = SPRITE_FRAMES.elderBrows;
 const BEARD = SPRITE_FRAMES.sageBeard;
 
-type Rgba = [number, number, number, number];
-
 const sheet = PNG.sync.read(readFileSync(SHEET));
-const at = (x: number, y: number): Rgba => {
-  const i = (y * sheet.width + x) * 4;
-  return [sheet.data[i]!, sheet.data[i + 1]!, sheet.data[i + 2]!, sheet.data[i + 3]!];
-};
-const isPink = ([r, g, b, a]: Rgba): boolean => a > 0 && r > 200 && g > 110 && g < 200 && b > 110 && b < 200 && r - g > 40;
-const isBlack = ([r, g, b, a]: Rgba): boolean => a > 0 && r < 50 && g < 50 && b < 50;
+const { at } = rasterOf(sheet);
+const frameOf = (name: FrameName): Raster => rasterOf(sheet, SPRITE_FRAMES[name]);
 /**
  * A vivid colour the pet never is — its outline, fur and inner ears are all
  * grey or pink. The muted blue-greys of the dust bath's cloud and the sick
@@ -82,122 +63,23 @@ const petFrames = (): FrameName[] => {
   return [...names].sort();
 };
 
-type Blob = { x0: number; x1: number; y0: number; y1: number; size: number };
 type Point = { x: number; y: number };
 type Candidate = { name: FrameName; hat: (Point & { nightcap: boolean }) | null; brows: Point | null; beard: Point | null };
 
-/**
- * Four-connected blobs of `matches` pixels within rows [0, rows), with
- * whether each one reached a transparent pixel or one `walls` says it stops at.
- */
-const blobs = (
-  name: FrameName,
-  rows: number,
-  matches: (pixel: Rgba) => boolean,
-  walls: (pixel: Rgba) => boolean = () => false,
-): (Blob & { touched: boolean })[] => {
-  const f = SPRITE_FRAMES[name];
-  const seen = new Set<number>();
-  const found: (Blob & { touched: boolean })[] = [];
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < f.w; x++) {
-      if (seen.has(y * f.w + x) || !matches(at(f.x + x, f.y + y))) continue;
-      const blob = { x0: x, x1: x, y0: y, y1: y, size: 0, touched: false };
-      const stack: [number, number][] = [[x, y]];
-      while (stack.length > 0) {
-        const [cx, cy] = stack.pop()!;
-        if (cx < 0 || cy < 0 || cx >= f.w || cy >= f.h) {
-          blob.touched = true;
-          continue;
-        }
-        const pixel = at(f.x + cx, f.y + cy);
-        if (pixel[3] === 0 || walls(pixel)) {
-          blob.touched = true;
-          continue;
-        }
-        if (seen.has(cy * f.w + cx) || !matches(pixel)) continue;
-        seen.add(cy * f.w + cx);
-        blob.size += 1;
-        blob.x0 = Math.min(blob.x0, cx);
-        blob.x1 = Math.max(blob.x1, cx);
-        blob.y0 = Math.min(blob.y0, cy);
-        blob.y1 = Math.max(blob.y1, cy);
-        stack.push([cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]);
-      }
-      found.push(blob);
-    }
-  }
-  return found;
-};
-
-const centreOf = (blob: Blob): number => (blob.x0 + blob.x1) / 2;
-
-/** The topmost pair of eyes below the ear dip, in frame pixels, or null where they are hidden. */
-const eyes = (name: FrameName, dipRow: number): [Blob, Blob] | null => {
-  const f = SPRITE_FRAMES[name];
-  const enclosed = blobs(name, f.h, isBlack, isPink)
-    .filter((blob) => !blob.touched && blob.y0 > dipRow)
-    .sort((p, q) => p.y0 - q.y0 || p.x0 - q.x0);
-  for (const left of enclosed) {
-    const right = enclosed.find((other) => {
-      const spacing = centreOf(other) - centreOf(left);
-      return other !== left && other.y0 === left.y0 && spacing >= EYE_SPACING.min && spacing <= EYE_SPACING.max;
-    });
-    if (right) return [left, right];
-  }
-  return null;
-};
-
-/**
- * The mouth's bounding box, in frame pixels: every small enclosed black mark
- * that starts within reach below the eyes and sits strictly inside their
- * outer edges — a paw raised to the face reaches those edges and is not a
- * piece of the mouth. Null where nothing is left showing.
- */
-const mouth = (name: FrameName, [left, right]: [Blob, Blob]): Blob | null => {
-  const f = SPRITE_FRAMES[name];
-  const pieces = blobs(name, f.h, isBlack, isPink).filter(
-    (blob) =>
-      !blob.touched &&
-      blob.size <= MAX_MOUTH_PIECE &&
-      blob.y0 > left.y1 + MOUTH_GAP &&
-      blob.y0 <= left.y1 + MOUTH_REACH &&
-      blob.x0 > left.x0 &&
-      blob.x1 < right.x1,
-  );
-  if (pieces.length === 0) return null;
-  return {
-    x0: Math.min(...pieces.map((piece) => piece.x0)),
-    x1: Math.max(...pieces.map((piece) => piece.x1)),
-    y0: Math.min(...pieces.map((piece) => piece.y0)),
-    y1: Math.max(...pieces.map((piece) => piece.y1)),
-    size: pieces.reduce((total, piece) => total + piece.size, 0),
-  };
-};
-
 const candidate = (name: FrameName): Candidate => {
   const f = SPRITE_FRAMES[name];
-  const ears = blobs(name, Math.floor(f.h / 2), isPink)
-    .filter((blob) => blob.size >= MIN_EAR_PIXELS)
-    .sort((p, q) => p.x0 - q.x0);
-  if (ears.length < 2) return { name, hat: null, brows: null, beard: null };
-  const left = ears[0]!;
-  const right = ears[ears.length - 1]!;
-  let floor = 0;
-  for (let x = left.x1 + 1; x < right.x0; x++) {
-    let y = 0;
-    while (y < f.h && at(f.x + x, f.y + y)[3] === 0) y++;
-    floor = Math.max(floor, y);
-  }
-  const centre = Math.round((centreOf(left) + centreOf(right)) / 2);
+  const frame = frameOf(name);
+  const dip = earDip(frame);
+  if (!dip) return { name, hat: null, brows: null, beard: null };
+  const { centre, floor } = dip;
   let crown = 0;
-  while (crown < f.h && at(f.x + centre, f.y + crown)[3] === 0) crown++;
-  const nightcap = isWorn(at(f.x + centre, f.y + crown));
+  while (crown < f.h && frame.at(centre, crown)[3] === 0) crown++;
+  const nightcap = isWorn(frame.at(centre, crown));
   // Frame coordinates → the room's head space: columns from the frame's
   // bottom-centre as the atlas snaps it, rows from the frame's bottom edge.
   const toHeadSpace = (x: number, y: number): Point => ({ x: Math.round(x) - Math.floor(f.w / 2), y: y - f.h });
-  const pair = eyes(name, floor);
-  const lips = pair && mouth(name, pair);
+  const pair = eyes(frame, floor);
+  const lips = pair && mouth(frame, pair);
   return {
     name,
     hat: { ...toHeadSpace(centre, floor), nightcap },

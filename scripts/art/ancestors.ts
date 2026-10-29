@@ -10,7 +10,8 @@
 // shrinking the largest on the canvas would turn pixel art to mush.
 //
 // A generation that died a Sage hangs in a second set: the same frame with
-// the beard composited where the room hangs it, then the same filter. It is
+// the beard composited where the room hangs it and the frame's own mouth kept
+// in front of it, then the same filter. It is
 // generated, never drawn, so it follows the beard wherever the beard goes.
 //
 // One palette serves every size of both sets, taken from the two largest
@@ -21,7 +22,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { PNG } from "pngjs";
 import { downscale, letterRows, paletteEntries, quantize, toPalette, type RGB } from "./filter.ts";
-import { SPRITE_FRAMES, SPRITE_SHEET_URL } from "../../src/game/atlas.generated.ts";
+import { SPRITE_FRAMES, SPRITE_MOUTHS, SPRITE_SHEET_URL } from "../../src/game/atlas.generated.ts";
 import { overlayOffset } from "../../src/game/engine/placement.ts";
 import { HEAD_ANCHORS } from "../../src/game/scene/head.ts";
 
@@ -46,6 +47,9 @@ const PAPER: RGB = [236, 226, 200];
 const BEARD = SPRITE_FRAMES.sageBeard;
 const BEARD_AT = overlayOffset(FRAME, BEARD, HEAD_ANCHORS.idleFront1!.beard.x, HEAD_ANCHORS.idleFront1!.beard.y);
 
+/** The frame's mouth, in the frame's own pixels: the beard never covers it (SPEC §21.9). */
+const MOUTH = SPRITE_MOUTHS.idleFront1!;
+
 const sheet = PNG.sync.read(readFileSync(SHEET));
 /** A sheet pixel, or null where it is transparent. */
 const sheetAt = (x: number, y: number): RGB | null => {
@@ -55,6 +59,7 @@ const sheetAt = (x: number, y: number): RGB | null => {
 };
 const plainAt = (x: number, y: number): RGB => sheetAt(FRAME.x + x, FRAME.y + y) ?? PAPER;
 const sageAt = (x: number, y: number): RGB => {
+  if (sheetAt(MOUTH.x + x, MOUTH.y + y)) return plainAt(x, y);
   const bx = x - BEARD_AT.x;
   const by = y - BEARD_AT.y;
   const inBeard = bx >= 0 && by >= 0 && bx < BEARD.w && by < BEARD.h;
