@@ -482,4 +482,38 @@ describe("the beard over a garment", () => {
       }
     }
   });
+
+  // The stick in the paw stands in front of the beard, and the beard's end
+  // peeked out beside its grip as one white cell boxed in by black. Nothing of
+  // the beard may be left within a cell of where the stick is drawn.
+  it("leaves no beard cell within a cell of the cane or the staff held on a frame", () => {
+    const problems: string[] = [];
+    for (const stick of ["sageCane", "wizardStaff"] as const) {
+      const sprite = SPRITE_FRAMES[stick];
+      for (const [name, region] of REGIONS) {
+        const cane = HEAD_ANCHORS[name]!.cane;
+        if (!cane || cane.behind) continue;
+        const beardAt = overlayOffset(SPRITE_FRAMES[name], BEARD, HEAD_ANCHORS[name]!.beard.x, HEAD_ANCHORS[name]!.beard.y);
+        const stickAt = overlayOffset(SPRITE_FRAMES[name], sprite, cane.x, cane.y);
+        const clipped = new Set(beardClipCells(region, { ...stickAt, w: sprite.w, h: sprite.h }).map(keyOf));
+        const stickCells = new Set<string>();
+        for (let sy = 0; sy < sprite.h; sy++) {
+          for (let sx = 0; sx < sprite.w; sx++) if (pixelAt(sprite, sx, sy)) stickCells.add(keyOf(cellAt(region, stickAt.x + sx, stickAt.y + sy)));
+        }
+        let beardLeft = 0;
+        for (let by = 0; by < BEARD.h; by++) {
+          for (let bx = 0; bx < BEARD.w; bx++) {
+            if (!pixelAt(BEARD, bx, by)) continue;
+            const cell = cellAt(region, beardAt.x + bx, beardAt.y + by);
+            if (clipped.has(keyOf(cell))) continue;
+            beardLeft++;
+            const near = [-1, 0, 1].some((dy) => [-1, 0, 1].some((dx) => stickCells.has(keyOf({ x: cell.x + dx, y: cell.y + dy }))));
+            if (near) problems.push(`${name} ${stick}: beard pixel ${bx},${by} at ${cell.x},${cell.y} is left beside the stick`);
+          }
+        }
+        if (beardLeft === 0) problems.push(`${name} ${stick}: no beard left`);
+      }
+    }
+    expect(problems).toEqual([]);
+  });
 });

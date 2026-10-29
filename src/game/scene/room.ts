@@ -4,6 +4,7 @@
 
 import { Atlas } from "../engine/atlas";
 import { layer } from "../engine/layer";
+import { overlayOffset } from "../engine/placement";
 import { Particles, type ParticleKind } from "../engine/particles";
 import { DigestContext, type SceneContext } from "../engine/digest";
 import { Toasts } from "./toasts";
@@ -676,6 +677,12 @@ export class Room {
       ctx.translate(0, PET_Y);
       ctx.scale(scale, scale);
       const region = GARMENT_REGIONS[frame];
+      const cane = this.caneAnchor(frame);
+      const sprite = this.caneSprite();
+      const stick =
+        cane && !cane.behind
+          ? { sprite, box: { ...overlayOffset(SPRITE_FRAMES[frame], SPRITE_FRAMES[sprite], cane.x, cane.y), w: SPRITE_FRAMES[sprite].w, h: SPRITE_FRAMES[sprite].h } }
+          : undefined;
       if (worn && region) {
         this.atlas.drawPainted(ctx, worn.key, frame, garmentExtent(SPRITE_FRAMES[frame], region), (target) =>
           paintGarment(target, region, worn.garment),
@@ -685,11 +692,11 @@ export class Room {
       if (this.stage === "SAGE") {
         // Under any garment the beard keeps to the middle of the cloth: its
         // drooping ends would otherwise show as specks on the silhouette's edge.
-        const clip = worn && region ? { key: worn.key, paint: (target: SceneContext) => paintBeardClip(target, region) } : undefined;
+        // The stick in the paw stands in front of it too.
+        const clip = worn && region ? { key: `${worn.key}:${stick?.sprite ?? ""}`, paint: (target: SceneContext) => paintBeardClip(target, region, stick?.box) } : undefined;
         this.atlas.drawOver(ctx, "sageBeard", anchor.beard.x, anchor.beard.y, frame, clip);
       }
-      const cane = this.caneAnchor(frame);
-      if (cane && !cane.behind) this.atlas.draw(ctx, this.caneSprite(), cane.x, cane.y);
+      if (cane && !cane.behind) this.atlas.draw(ctx, sprite, cane.x, cane.y);
       if (anchor.nightcap) return;
       if (costume) {
         this.atlas.drawOver(ctx, costume.hat, anchor.x, anchor.y, frame);

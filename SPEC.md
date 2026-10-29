@@ -3620,7 +3620,9 @@ The white belly maps to the cloth too: it is a marking, not light.
 **Drawing.** The room paints the garment once per frame and holiday into its
 own canvas, behind the frame's prop and mouth masks, and blits it from there,
 so a paint allocates nothing and a still room stays still for the digest
-(§10.1). Brows, beard and hat go on over it.
+(§10.1). Brows, beard and hat go on over it. The beard is cut a cell clear of a held
+cane or staff's rectangle, since the stick and the paw stand in front of the
+moustache's end.
 
 ---
 

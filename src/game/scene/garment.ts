@@ -353,6 +353,23 @@ const BEARD_REACH_CELLS = 8;
 /** How many cells in from the silhouette's outline the beard stays out of. */
 const BEARD_EDGE_CELLS = 2;
 
+/** How many cells clear of a held stick's rectangle the beard stays. */
+const STICK_CLEARANCE_CELLS = 1;
+
+/** A rectangle in the frame's own pixels: where a stick held in the paw lands. */
+export type StickBox = { x: number; y: number; w: number; h: number };
+
+/** The cells on one axis, up to `extent`, whose span meets [lo, hi), and the clearance cells either side. */
+const cellsMeeting = (lo: number, hi: number, offset: number, extent: number): number[] => {
+  const hit: number[] = [];
+  for (let i = -BEARD_REACH_CELLS; i < extent; i++) {
+    if (cellEdge(i + 1, offset) > lo && cellEdge(i, offset) < hi) hit.push(i);
+  }
+  const first = hit[0]! - STICK_CLEARANCE_CELLS;
+  const last = hit[hit.length - 1]! + STICK_CLEARANCE_CELLS;
+  return Array.from({ length: last - first + 1 }, (_, i) => first + i);
+};
+
 /**
  * The cells where the beard is not drawn on a dressed frame. At any row, the
  * silhouette's own edge (an outline cell with a transparent neighbour) and
@@ -361,8 +378,13 @@ const BEARD_EDGE_CELLS = 2;
  * down, also the outline cell of each row and the two cells inward of it on
  * either side, tail included, so the garment's edge reads clean. Frames that
  * wear no garment are untouched.
+ *
+ * A Sage's stick, held in the paw, stands in front of the beard and the paw's
+ * own outline with it, so the beard's end is cut a cell clear of the stick's
+ * rectangle: left alone it showed past the grip as one white cell boxed in by
+ * black, a stray speck.
  */
-export const beardClipCells = (region: GarmentRegion): { x: number; y: number }[] => {
+export const beardClipCells = (region: GarmentRegion, stick?: StickBox): { x: number; y: number }[] => {
   const cells: { x: number; y: number }[] = [];
   const rows = [...region.head, ...region.rows];
   const at = (x: number, y: number): string => (x < 0 || x >= region.w || y < 0 ? "." : (rows[y]?.[x] ?? "o"));
@@ -377,14 +399,21 @@ export const beardClipCells = (region: GarmentRegion): { x: number; y: number }[
       if (cell === "." || edge || margin) cells.push({ x, y });
     }
   });
+  if (stick) {
+    const extent = Math.max(region.w, rows.length) + BEARD_REACH_CELLS;
+    const columns = cellsMeeting(stick.x, stick.x + stick.w, region.ox, extent);
+    for (const y of cellsMeeting(stick.y, stick.y + stick.h, region.oy, extent)) {
+      for (const x of columns) cells.push({ x, y });
+    }
+  }
   return cells;
 };
 
 /** Paint the beard's clip in the frame's own pixels, to be cut out of the beard. */
-export const paintBeardClip = (ctx: SceneContext, region: GarmentRegion): void => {
+export const paintBeardClip = (ctx: SceneContext, region: GarmentRegion, stick?: StickBox): void => {
   const { ox, oy } = region;
   ctx.fillStyle = "#000";
-  for (const cell of beardClipCells(region)) {
+  for (const cell of beardClipCells(region, stick)) {
     const x = cellEdge(cell.x, ox);
     const y = cellEdge(cell.y, oy);
     ctx.fillRect(x, y, cellEdge(cell.x + 1, ox) - x, cellEdge(cell.y + 1, oy) - y);
