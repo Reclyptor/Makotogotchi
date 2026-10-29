@@ -82,7 +82,9 @@ export type Garment = {
   /**
    * A floor-length skirt: the cloth widens below the waist and falls as one
    * closed bell over the legs and the gap between them, ending in an outline
-   * row on the first row of the feet, so only the toes show beneath it.
+   * row on the first row of the feet, so only the toes show beneath it. An
+   * open slit stays open on the rows above the last row of cloth: the skirt
+   * does not cover the fur the slit shows.
    */
   skirt?: boolean;
   /**
@@ -167,7 +169,12 @@ export const garmentCells = (region: GarmentRegion, garment: Garment): GarmentCe
   });
 
   // The skirt goes down before the pattern, so a hem's stars fall on it too.
-  if (garment.skirt) cells.push(...skirtCells(region).map((cell) => ({ ...cell, piece: true })));
+  // It closes over the legs but not over an open front above the last row of
+  // cloth, where the slit's fur stays in view.
+  const slitFur = (cx: number, cy: number): boolean => inSlit(cx, cy) && cy < bottom && region.rows[cy - (neck - 1)]?.[cx] === "f";
+  if (garment.skirt) {
+    cells.push(...skirtCells(region).filter((cell) => !slitFur(cell.x, cell.y)).map((cell) => ({ ...cell, piece: true })));
+  }
 
   const pattern = garment.hemPattern;
   if (pattern) {

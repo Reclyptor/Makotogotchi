@@ -4,6 +4,7 @@
 // generated table that has drifted from the sheet dresses a body that is no
 // longer there.
 
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { PNG } from "pngjs";
 import { describe, expect, it } from "vitest";
@@ -16,6 +17,8 @@ import { beardClipCells, cellEdge, garmentCells, garmentExtent, type Garment, ty
 import { GARMENT_REGIONS } from "./garment.generated";
 import { TEST_GARMENT } from "./garment.testkit";
 import { HEAD_ANCHORS } from "./head";
+import { WIZARD_ROBE } from "./holidays/halloween";
+import { SAGE_CLOAK } from "./sageCloak";
 
 const SHEET = PNG.sync.read(readFileSync(new URL(`../../../public${SPRITE_SHEET_URL}`, import.meta.url)));
 const REGIONS = Object.entries(GARMENT_REGIONS) as [FrameName, GarmentRegion][];
@@ -251,6 +254,45 @@ describe("a worn garment", () => {
       const skirtRows = garmentCells(region, starry).filter((cell) => cell.piece && cell.y === hem - 1 && !same(cell.color, starry.ramp.line));
       expect(skirtRows.length).toBeGreaterThan(0);
       expect(skirtRows.every((cell) => same(cell.color, starry.ramp.trim))).toBe(true);
+    });
+
+    it("leaves the wizard robe's cells as they were: it has no slit to keep open", () => {
+      const digest = createHash("sha256");
+      for (const [name, region] of REGIONS) digest.update(name).update(JSON.stringify(garmentCells(region, WIZARD_ROBE)));
+      expect(digest.digest("hex")).toBe("594de4d58a132f2227de0f5fab6d019882265adfe812fd3f618b5ab9136c3924");
+    });
+
+    describe("over an open front", () => {
+      const slitOf = (region: GarmentRegion): readonly [number, number] => (region.face === "front" || region.face === "sit" ? SAGE_CLOAK.slit!.front : SAGE_CLOAK.slit!.side);
+      const sealedLap = (region: GarmentRegion, y: number): boolean => (region.face === "sit" ? y > region.bottom - 5 : false);
+
+      it("keeps the slit's fur in view on every row above the last row of cloth", () => {
+        for (const [name, region] of REGIONS) {
+          const [from, to] = slitOf(region);
+          const painted = new Set(garmentCells(region, SAGE_CLOAK).map(keyOf));
+          let open = 0;
+          for (let y = region.neck; y < region.bottom; y++) {
+            if (sealedLap(region, y)) continue;
+            for (let x = region.col0 + from; x <= region.col0 + to; x++) {
+              if (cellOf(region, x, y) !== "f") continue;
+              open++;
+              expect(painted.has(keyOf({ x, y })), `${name} ${x},${y}`).toBe(false);
+            }
+          }
+          expect(open, name).toBeGreaterThan(0);
+        }
+      });
+
+      it("still closes the hem line across the slit, and the legs on either side of it", () => {
+        for (const [name, region] of REGIONS) {
+          const [from, to] = slitOf(region);
+          const hem = hemLineOf(region);
+          const cells = garmentCells(region, SAGE_CLOAK);
+          const lineAt = (x: number) => cells.some((cell) => cell.piece && cell.x === x && cell.y === hem && same(cell.color, SAGE_CLOAK.ramp.line));
+          for (let x = region.col0 + from; x <= region.col0 + to; x++) expect(lineAt(x), `${name} ${x}`).toBe(true);
+          expect(cells.some((cell) => cell.piece && cell.y < hem && cell.x < region.col0 + from), name).toBe(true);
+        }
+      });
     });
 
     it("stays inside the canvas it is drawn on, on every frame", () => {
