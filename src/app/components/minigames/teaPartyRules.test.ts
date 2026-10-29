@@ -36,7 +36,12 @@ describe("the tray", () => {
     }
   });
 
-  it("is never a dish nobody wants while anyone is waiting — across thousands of random steps", () => {
+  // 200,000 steps: a failing expect() per step would cost more than the rules
+  // do, and under a loaded machine (parallel suites, a build) that pushed this
+  // past vitest's 5s default. The loop records each violation instead and
+  // the assertion runs once; the seeds are fixed, so a real break reproduces.
+  it("is never a dish nobody wants while anyone is waiting — across thousands of random steps", { timeout: 30_000 }, () => {
+    const violations: string[] = [];
     for (let seed = 1; seed <= 40; seed++) {
       const rng = seeded(seed);
       let table = createTable(rng);
@@ -44,11 +49,12 @@ describe("the tray", () => {
         table = advance(table, 16 + Math.floor(rng() * 300), rng).table;
         if (rng() < 0.3) table = serve(table, Math.floor(rng() * SEATS)).table;
         const waiting = table.guests.some((guest) => guest.phase === "waiting");
-        if (table.tray !== null && waiting) {
-          expect(wantedDishes(table.guests)).toContain(table.tray);
+        if (table.tray !== null && waiting && !wantedDishes(table.guests).includes(table.tray)) {
+          violations.push(`seed ${seed}, step ${step}: tray ${table.tray}`);
         }
       }
     }
+    expect(violations).toEqual([]);
   });
 
   it("is taken back and re-plated when its only taker walks out", () => {
