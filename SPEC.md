@@ -3604,6 +3604,16 @@ optional pieces each costume chooses:
 - a **belt** with a buckle, two rows above the hem;
 - **tails** and flare past the hem;
 - a **hem pattern** on the last rows of cloth, which a seated pose can lift a row.
+- a floor-length **skirt** that widens below the waist and closes over the legs
+  in one bell, ending in an outline row on the first foot row so only the toes
+  show. An open slit stays open above the last row of cloth, so a coat still
+  reads open while its hem closes.
+
+**The Sage's cloak.** A Sage with no holiday costume wears `SAGE_CLOAK`
+(`src/game/scene/sageCloak.ts`) in the robe's place: a floor-length red coat
+with sleeves to cuffs and bare paws, an open slit under the beard, and black
+flame tongues rising from the hem. A holiday's robe replaces it for the day,
+and an elder never wears it.
 
 The white belly maps to the cloth too: it is a marking, not light.
 

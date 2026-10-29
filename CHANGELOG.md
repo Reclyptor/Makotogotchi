@@ -30,6 +30,9 @@ minigame problems are fixed.
   own silhouette, so the arms become sleeves with the paws out of the cuffs and
   no fur shows round the edges; the Sage's moustache stays clear of the
   costume's outline (`a432616`)
+- **The Sage wears a cloak.** A floor-length red coat with sleeves, black
+  flames rising from the hem and an open front under the beard. A holiday's
+  costume replaces it for the day (`9cc2964`)
 - **The Sage carries a cane.** A Master Roshi style walking stick in whichever
   paw is free, on every pose that leaves one free; eating, games, sleep,
   bathing and meditation put it away (`f25d370`). On Halloween it becomes a
