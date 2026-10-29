@@ -6,6 +6,54 @@ follow [Semantic Versioning]. Pre-1.0, so game-rule changes are minor bumps.
 [Keep a Changelog]: https://keepachangelog.com/en/1.1.0/
 [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
 
+## [Unreleased]
+
+The meditation gets its second day and a better look. Ruleset 5 (`RULES{5}`,
+appended once on deploy) makes the second day of deep meditation whole and
+untouchable: the elder is restored and nothing can reach it until it rises a
+Sage. Every log written under ruleset 4 or below folds byte-identically, and
+keeps the old second day, where a pat and medicine still got through. Around
+that, the Sage gets a new beard, a first-day line and a ki aura, and two
+minigame problems are fixed.
+
+### Added
+
+- **Day two of meditation is whole and untouchable (ruleset 5).** On the first
+  tick of the second day every need and health go to full and any sickness is
+  cured. After that every care button, a pat and medicine included, is turned
+  away with "in deep meditation — nothing can reach it now", until the Sage
+  rises. A pet already in its second day when ruleset 5 is recorded is restored
+  at that moment. The first day is unchanged (`4c0ef85`)
+- **A white ki aura on the second day of meditation.** It gathers around the
+  sitting pet, passing behind and in front of it (beard included), and stands
+  still under reduced motion. It stops when the pet becomes a Sage
+  (`bf58ae5`)
+- **The Sage's first-day status line:** "has become a Sage!" for the first
+  24 hours, in place of the well line. Sleep, ailments, weakness and slipping
+  needs still take over (`faa6ca2`)
+
+### Changed
+
+- **The Sage's beard is a wispy hermit's:** a full moustache with drooping
+  ends over a long beard that tapers in wisps, in place of the long narrow
+  wedge that read as a trunk. The pet's own mouth shows over the moustache on
+  every pose, and the family wall's Sage portraits match (`da0bc4e`)
+- **The elder's and Sage's brows are white,** to match the beard (`da0bc4e`)
+
+### Fixed
+
+- Makoto is centred in the tub in Bubble Bath Pop, not left of the middle
+  (`7dbd334`)
+- Holding in a minigame on a phone no longer starts a text selection that
+  ended the hold, which made Sneaky Brew unplayable. The play area takes its
+  own touches, and nothing on the page is selectable while a game is open
+  (`ef75dbc`)
+- The meditation pose has the short rounded stub arms of the idle pose, not
+  thin stick arms (`c8e9419`)
+- The meditation pose's feet are placed like the tired pose's (`f78bb45`)
+- A Tea Party rules test that timed out when the machine was busy now has a
+  timeout that fits it; the rules were never wrong (`b21b974`)
+
 ## [0.8.0] — 2026-10-28
 
 An elder can grow old well. Ruleset 4 (`RULES{4}`, appended once on deploy)
