@@ -38,7 +38,14 @@ test.describe("the feed chooser", () => {
     await context.close();
   });
 
+  // The e2e files run side by side against one shared pet, and the pet's own
+  // "busy" (a global cooldown, 50s for a feed) outranks a caretaker's lack of
+  // coins as the reason a row is locked. Another spec's feed can land first, so
+  // the shortfall is waited for rather than assumed on first paint.
+  const BUSY_WINDOW_MS = 60_000;
+
   test("lists every food and drink with its price, and a broke caretaker is told how far short", async ({ browser }) => {
+    test.setTimeout(BUSY_WINDOW_MS + 60_000);
     const context = await browser.newContext();
     const page = await context.newPage();
     await page.goto("/");
@@ -53,7 +60,7 @@ test.describe("the feed chooser", () => {
       // A fresh caretaker has nothing: every row is locked with the shortfall,
       // in the tab order with its reason in the name (SPEC §11.3).
       await expect(row).toHaveAttribute("aria-disabled", "true");
-      await expect(row).toHaveAccessibleName(/Needs \d+ more/);
+      await expect(row).toHaveAccessibleName(/Needs \d+ more/, { timeout: BUSY_WINDOW_MS });
     }
     await context.close();
   });
