@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { PetEvent } from "./events";
-import { deepMeditationAt, deepStillnessStartTickOf, type PetState } from "./model";
+import { deepMeditationAt, deepStillnessDays, deepStillnessStartTickOf, type PetState } from "./model";
 import { project } from "./project";
 import { reduce } from "./reduce";
 import { hatchedState, projectImmortal, QUIET_SEED, testCtx, withSeed } from "./testkit";
@@ -62,6 +62,24 @@ describe("when day two restores the pet", () => {
     const once = recordedAt(5, RULES_SINCE.DEEP_STILLNESS);
     const twice = reduce(projectImmortal(once, 10, ctx), rulesEvent(10, RULES_SINCE.DEEP_STILLNESS), ctx).state;
     expect(twice.deepStillnessFromTick).toBe(5);
+  });
+});
+
+describe("the pet-days the stillness touches", () => {
+  it("spans the live pet's day two to the day it rises a Sage", () => {
+    const live: PetState = { ...hatchedState(ctx, generation), bornAtTick: 180, rulesVersion: 5, sageRuleFromTick: 401_643, deepStillnessFromTick: 408_606 };
+    expect(deepStillnessDays(live)).toEqual({ first: 47, last: 48 });
+  });
+
+  it("is null under ruleset 4", () => {
+    expect(deepStillnessDays(recordedAt(5, RULES_SINCE.DEEP_STILLNESS - 1))).toBeNull();
+  });
+
+  it("starts the tick after a rule recorded inside day two", () => {
+    const release = dayTwo + 123;
+    const meditating = projectImmortal(recordedAt(5, RULES_SINCE.SAGE), release, ctx);
+    const state = reduce(meditating, rulesEvent(release, RULES_SINCE.DEEP_STILLNESS), ctx).state;
+    expect(deepStillnessDays(state)).toEqual({ first: Math.floor((release + 1) / TICKS_PER_DAY), last: Math.floor((sageStart - 1) / TICKS_PER_DAY) });
   });
 });
 

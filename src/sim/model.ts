@@ -15,6 +15,7 @@ import {
   type NeedKey,
   type SleepPhase,
 } from "./tuning";
+import { petDay } from "./score";
 import type { WantKind } from "./wants";
 
 export type Needs = Record<NeedKey, number>;
@@ -234,6 +235,22 @@ export const deepStillnessStartTickOf = (state: PetState): number | null => {
  */
 export const deepStillnessAt = (state: PetState, tick: number): boolean =>
   rulesVersionOf(state) >= RULES_SINCE.DEEP_STILLNESS && deepMeditationAt(state, tick);
+
+/** A run of pet-days, first to last inclusive. */
+export type PetDayRange = { first: number; last: number };
+
+/**
+ * The pet-days the deep stillness touches, first to last inclusive, or null
+ * for a pet not under ruleset 5 or that will never meditate. A day it only
+ * overlaps counts: the stillness begins and ends mid-day, and nobody could
+ * act through it (SPEC §2.11). Derived, never stored.
+ */
+export const deepStillnessDays = (state: PetState): PetDayRange | null => {
+  const start = deepStillnessStartTickOf(state);
+  const sage = sageStartTickOf(state);
+  if (start === null || sage === null || rulesVersionOf(state) < RULES_SINCE.DEEP_STILLNESS) return null;
+  return { first: petDay(start), last: petDay(sage - 1) };
+};
 
 /**
  * Whole days into the elder ramp, or null while the pet still ages by the rule
