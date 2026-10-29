@@ -18,6 +18,18 @@ minigame problems are fixed.
 
 ### Added
 
+- **Halloween (October 31, pet time).** Makoto stays home all day in a
+  Halloween room: the lamp, fish tank and other decor are put away for
+  pumpkins, candles, a cauldron, cobwebs and a bat garland. Makoto wears a
+  wizard hat and a floor-length starry robe, and the whole UI, meters
+  included, is dressed for the day (`2d7f20d`)
+- **Holidays keep Makoto home.** Trips are closed for a holiday, and coins
+  already spent backing a trip for that day are refunded to each caretaker,
+  once. The calendar is shared so later holidays plug into it (`baddade`)
+- **Costumes are worn, not pasted on.** A body costume is cut from each pose's
+  own silhouette, so the arms become sleeves with the paws out of the cuffs and
+  no fur shows round the edges; the Sage's moustache stays clear of the
+  costume's outline (`a432616`)
 - **Day two of meditation is whole and untouchable (ruleset 5).** On the first
   tick of the second day every need and health go to full and any sickness is
   cured. After that every care button, a pat and medicine included, is turned
