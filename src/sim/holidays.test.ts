@@ -5,8 +5,8 @@
 // Instants are literal epoch milliseconds, for the reason clock.test.ts gives.
 
 import { describe, expect, it } from "vitest";
-import { petClock } from "./clock";
-import { HOLIDAYS, holidayOn, isHolidayId } from "./holidays";
+import { daysFromCivil, petClock } from "./clock";
+import { fireworksAt, HOLIDAYS, holidayOn, isHolidayId } from "./holidays";
 
 const ZONE = "America/Chicago";
 
@@ -49,6 +49,78 @@ describe("the holiday calendar", () => {
   it("names every holiday it can return", () => {
     expect(HOLIDAYS.every((holiday) => isHolidayId(holiday.id))).toBe(true);
     expect(isHolidayId("halloween")).toBe(true);
-    expect(isHolidayId("christmas")).toBe(false);
+    expect(isHolidayId("easter")).toBe(false);
+  });
+});
+
+describe("the rest of the calendar", () => {
+  const onDay = (year: number, month: number, day: number): ReturnType<typeof holidayOn> => holidayOn(daysFromCivil(year, month, day));
+
+  it("finds Thanksgiving on the fourth Thursday of November, whichever day that is", () => {
+    expect(onDay(2026, 11, 26)).toBe("thanksgiving");
+    expect(onDay(2027, 11, 25)).toBe("thanksgiving");
+    expect(onDay(2028, 11, 23)).toBe("thanksgiving");
+    // Not the Thursdays either side, nor the fourth day of another weekday.
+    for (const [year, month, day] of [[2026, 11, 19], [2026, 12, 3], [2026, 11, 25], [2026, 11, 27]] as const) {
+      expect(onDay(year, month, day), `${year}-${month}-${day}`).toBeNull();
+    }
+  });
+
+  it("finds Thanksgiving when November starts on a Thursday, and when it ends on one", () => {
+    // 2029 opens on a Thursday: the fourth is the 22nd. 2024 puts the fourth on the 28th.
+    expect(onDay(2029, 11, 22)).toBe("thanksgiving");
+    expect(onDay(2024, 11, 28)).toBe("thanksgiving");
+    expect(onDay(2024, 11, 21)).toBeNull();
+  });
+
+  it("finds Christmas, New Year's Day and Valentine's Day every year", () => {
+    for (const year of [2026, 2027, 2028, 2100]) {
+      expect(onDay(year, 12, 25), `${year} Christmas`).toBe("christmas");
+      expect(onDay(year, 1, 1), `${year} New Year`).toBe("newYear");
+      expect(onDay(year, 2, 14), `${year} Valentine's`).toBe("valentines");
+    }
+  });
+
+  it("turns over at the year's end: Dec 31 is ordinary, Jan 1 is New Year's Day", () => {
+    expect(onDay(2026, 12, 31)).toBeNull();
+    expect(onDay(2027, 1, 1)).toBe("newYear");
+    expect(onDay(2027, 1, 2)).toBeNull();
+  });
+
+  it("is quiet on every other day of a year", () => {
+    const first = daysFromCivil(2027, 1, 1);
+    const named = Array.from({ length: 365 }, (_, i) => holidayOn(first + i)).filter((id) => id !== null);
+    expect(named).toEqual(["newYear", "valentines", "halloween", "thanksgiving", "christmas"]);
+  });
+});
+
+describe("New Year's Eve's fireworks", () => {
+  const at = (month: number, day: number, hour: number) => fireworksAt({ hour, dayIndex: daysFromCivil(2026, month, day) });
+
+  it("start at 23:00 on Dec 31 and end at 01:00 on Jan 1", () => {
+    expect(at(12, 31, 22)).toBe(false);
+    expect(at(12, 31, 23)).toBe(true);
+    expect(at(1, 1, 0)).toBe(true);
+    expect(at(1, 1, 1)).toBe(false);
+  });
+
+  it("are not lit by day, or on any other night", () => {
+    expect(at(12, 31, 12)).toBe(false);
+    expect(at(1, 1, 13)).toBe(false);
+    expect(at(12, 30, 23)).toBe(false);
+    expect(at(1, 2, 0)).toBe(false);
+  });
+
+  it("follow the pet's own midnight in its zone", () => {
+    /** 2026-12-31T23:30-06:00, Chicago's own half past eleven. */
+    const NYE_2330 = 1_798_781_400_000;
+    const HOUR_MS = 3_600_000;
+    const lit = (nowMs: number, zone = "America/Chicago") => fireworksAt(petClock(zone, nowMs));
+    expect(lit(NYE_2330 - HOUR_MS)).toBe(false); // 22:30
+    expect(lit(NYE_2330)).toBe(true); // 23:30
+    expect(lit(NYE_2330 + HOUR_MS)).toBe(true); // 00:30, the pet's New Year
+    expect(lit(NYE_2330 + 2 * HOUR_MS)).toBe(false); // 01:30
+    // The same instant is already January 2nd in Tokyo, where it is not the Eve.
+    expect(lit(NYE_2330, "Asia/Tokyo")).toBe(false);
   });
 });
