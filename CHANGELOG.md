@@ -18,6 +18,14 @@ minigame problems are fixed.
 
 ### Added
 
+- **Thanksgiving, Christmas, New Year's Day and Valentine's Day.** Each is a
+  stay-at-home day like Halloween, with its own room, costume, staff and
+  dressed-up UI: a pilgrim hat, cranberry cape and corn-stalk staff on the
+  fourth Thursday of November; a Santa hat, coat and candy cane on December 25;
+  a tux, party hat and sparkler on January 1; and a fedora, velvet smoking
+  jacket and mic stand on February 14. Trips are closed and backing coins
+  refunded on each, and each day's font loads only on that day (`aa6c002`)
+- **Fireworks on New Year's Eve,** in the window from 23:00 to 01:00 (`146202b`)
 - **Halloween (October 31, pet time).** Makoto stays home all day in a
   Halloween room: the lamp, fish tank and other decor are put away for
   pumpkins, candles, a cauldron, cobwebs and a bat garland. Makoto wears a

@@ -3499,15 +3499,27 @@ blit that looks the same whichever set it came from.
 
 ### 22.11 Holidays
 
-A small calendar of dated holidays. Halloween, Oct 31, is the first, and it
-returns every year without a code change. Like venues (§22.8), a holiday is
+A small calendar of dated holidays, each returning every year without a code
+change:
+
+| id | Day | Costume | Staff |
+|---|---|---|---|
+| `valentines` | Feb 14 | black fedora, burgundy smoking jacket | brass mic stand |
+| `halloween` | Oct 31 | wizard hat and robe | wizard staff |
+| `thanksgiving` | the 4th Thursday of November | pilgrim hat, cranberry cape | harvest staff |
+| `christmas` | Dec 25 | Santa hat and coat | candy cane |
+| `newYear` | Jan 1 | party hat, midnight tuxedo | sparkler |
+
+New Year's Eve has fireworks too, below. Like venues (§22.8), a holiday is
 **presentation**: it is derived from the pet's calendar day, which every
 client and the server already hold, and nothing about it enters `PetState` or
 the event log.
 
-**The calendar.** `src/sim/holidays.ts` holds `HOLIDAYS`, each a
-`{ id, month, day }`, and `holidayOn(dayIndex)`, which answers "which holiday
-is it" for the pet's `dayIndex` (§22.1) and is the only place that answers.
+**The calendar.** `src/sim/holidays.ts` holds `HOLIDAYS`, each an id with a
+rule: a fixed `{ month, day }`, or an nth weekday
+(`{ month: 11, weekday: 4, nth: 4 }` is the 4th Thursday of November, with
+Sunday 0). `holidayOn(dayIndex)` answers "which holiday is it" for the pet's
+`dayIndex` (§22.1) and is the only place that answers.
 The index is epoch days, so `civilFromDays` (`clock.ts`) inverts
 `daysFromCivil` to read the month and day back. A holiday therefore starts and
 ends at the pet's midnight, wherever the viewer is.
@@ -3552,6 +3564,19 @@ across leaders and restarts.
 once per pet-day, per browser, that Makoto is dressed up as a wizard. The
 status line is unchanged.
 
+**New Year's Eve's fireworks.** `fireworksAt(clock)` is true from 23:00 on
+Dec 31 until 01:00 on Jan 1, pet time. While it is, the window draws shells
+that rise and burst into fading sparks, in the New Year scene's
+`window.fireworks` palette; the room around them is the ordinary Dec 31 room
+until midnight and New Year's from then. It is a presentation moment, not a
+holiday day, so it rides the backdrop's key and not a holiday. Reduced motion
+holds one burst, in the palette's first colour.
+
+**Fonts.** Each holiday's display face is declared in every page's stylesheet
+but with preloading off and its `font-family` applied only under its own
+`data-holiday`, so a browser fetches it on its own day and on no other (checked
+in e2e/winter.spec.ts).
+
 **The page.** The whole UI dresses up, not just the canvas. The root element
 carries `data-holiday="<id>"` while `holidayOn` says so: the server sets it
 when it renders, from `PET_TIMEZONE`, so there is no flash of the ordinary
@@ -3582,8 +3607,10 @@ eyes. Each frame is read back onto its own art grid first (a native cut sits on
 
 - the **neckline** is the row under the mouth, never nearer than two rows under
   the eyes, and the beard's anchor stands in where no mouth shows;
-- the **body** is the largest 4-connected region of fur, with outline, props and
-  transparency as walls, so the tail is a region of its own and stays fur;
+- the **fur** that is dressed is every 4-connected region of fur below the
+  neckline, with outline, props and transparency as walls: the body, and the
+  arms an outline sets apart from it. Only the tail stays fur, found as the
+  tall region on the right, at least five rows, which no arm is;
 - the **feet** are the bottom rows whose fur runs are narrow and split in two,
   and stay bare. The last body row above them is the garment's last;
 - the **paws** are an arm's bottom edge against the body, found as an interior
@@ -3594,20 +3621,28 @@ eyes. Each frame is read back onto its own art grid first (a native cut sits on
 A frame in bed, under a nightcap, in the dust bath or under the ice pack wears
 no garment.
 
-**The Garment type.** A four-colour ramp (cloth, collar, trim, line), and the
+**The Garment type.** A ramp of cloth, collar, trim and line, with an optional
+cuff colour (the trim by default) and shirt (the cloth by default), and the
 optional pieces each costume chooses:
 
 - an open **slit**, five columns wide, per facing, where the fur shows, with
-  trim on each side; or a closed **seam**, one trim column with no fur showing;
-  both close five rows above the floor on a seated pose;
+  trim on each side, closing five rows above the floor on a seated pose;
+- a **front pattern**, painted over the cloth from the neckline down: lapels, a
+  shirt front, a bow tie, a button, a closed seam, an opening that widens. Each
+  row is a string over the body's columns with the letters c cloth, l collar,
+  t trim, k line, s shirt and f for the fur showing through; `rest` repeats the
+  last row down to the hem, and a pose in the lap has a shorter set of rows of
+  its own, which is how a seam or an opening closes above it. It touches only
+  cells already painted cloth, collar or trim: never the collar's top line, a
+  cuff, a paw, an outline or a prop;
+- a floor-length **skirt** that widens below the waist and closes over the legs
+  in one bell, ending in an outline row on the first foot row so only the toes
+  show. An open slit or front pattern stays open above the last row of cloth, so
+  a coat still reads open while its hem closes;
 - **cuffs** above bare paws, or sleeves to the paw;
 - a **belt** with a buckle, two rows above the hem;
 - **tails** and flare past the hem;
 - a **hem pattern** on the last rows of cloth, which a seated pose can lift a row.
-- a floor-length **skirt** that widens below the waist and closes over the legs
-  in one bell, ending in an outline row on the first foot row so only the toes
-  show. An open slit stays open above the last row of cloth, so a coat still
-  reads open while its hem closes.
 
 **The Sage's cloak.** A Sage with no holiday costume wears `SAGE_CLOAK`
 (`src/game/scene/sageCloak.ts`) in the robe's place: a floor-length red coat

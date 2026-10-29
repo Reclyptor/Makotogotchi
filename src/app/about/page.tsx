@@ -80,7 +80,7 @@ export default function AboutPage() {
             CC BY 4.0
           </a>
           . Take either — just credit Jingles for the sprites. The meditation pose, the Sage&apos;s beard and cane, and the
-          Halloween costume and props are modifications of her work, drawn in her style.
+          costumes and props for Halloween, Thanksgiving, Christmas, New Year and Valentine&apos;s Day are modifications of her work, drawn in her style.
         </p>
       </div>
     </main>
