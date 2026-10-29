@@ -20,6 +20,7 @@ import { PushDispatcher } from "./push/dispatcher";
 import { pushConfigured, webPushSender } from "./push/sender";
 import { CURRENT_RULES_VERSION, TICK_SECONDS, TICKS_PER_HOUR } from "@/sim/tuning";
 import { ambientAt } from "@/sim/ambient";
+import { petClock } from "@/sim/clock";
 import { worthRecording } from "@/sim/difficulty";
 import { activeCaretakers } from "./population";
 import { subscribeToEvents } from "./stream/hub";
@@ -27,6 +28,7 @@ import { primeRoomCache } from "./snapshot";
 import type { EngineMessage } from "./engine/messages";
 import { settleQuest } from "./quests";
 import { settleAscension } from "./ascension";
+import { settleHolidayRefund } from "./holidays";
 import { observeWants } from "./wants";
 import { isAlive, rulesVersionOf, type Generation } from "@/sim/model";
 
@@ -150,6 +152,8 @@ const boot = async (): Promise<Runtime> => {
         if (settled) await engine.milestone(current, "QUEST_DONE", settled.quest.id);
         // The Sage's ascension (SPEC §2.8): claimed once, then paid.
         await settleAscension(database, current, state);
+        // Tickets bought for a holiday before it kept Makoto home (SPEC §22.11).
+        await settleHolidayRefund(database, petClock(env().PET_TIMEZONE, Date.now()).dayIndex);
       }
       if (!successor && isAlive(state) && state.tick - lastPopulationTick >= TICKS_PER_HOUR) {
         lastPopulationTick = state.tick;

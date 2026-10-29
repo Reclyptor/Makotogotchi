@@ -9,6 +9,7 @@ import { iconTables, shopTabs, initialTab, type CareGate, type ShopModel, type S
 import { hatchedState, testCtx } from "@/sim/testkit";
 import { projectImmortal } from "@/sim/testkit";
 import type { RoomView } from "@/server/shop";
+import { daysFromCivil } from "@/sim/clock";
 import { AWAKE_HOURS, TICKS_PER_HOUR } from "@/sim/tuning";
 
 const CATALOG = {
@@ -194,6 +195,16 @@ describe("shop tabs", () => {
     expect(rows.find((row) => row.id === "meadow")?.action).toMatchObject({ kind: "vote", venueId: "meadow" });
     // The beach is not funded here, so it is still a pool rather than a ballot.
     expect(rows.find((row) => row.id === "beach")?.action).toMatchObject({ kind: "fund" });
+  });
+
+  it("closes every ballot row when tomorrow is a holiday", () => {
+    const eve = daysFromCivil(2026, 10, 30);
+    const rows = rowsOf(tab(shopTabs(model({ petDay: eve }), gate()), "room"));
+    for (const id of ["garden", "meadow"]) {
+      const row = rows.find((candidate) => candidate.id === id);
+      expect(row?.action).toEqual({ kind: "badge", label: "Closed" });
+      expect(row?.detail).toBe("Makoto is staying home for Halloween.");
+    }
   });
 
   it("turns a venue's row into its ballot once the room unlocks it", () => {

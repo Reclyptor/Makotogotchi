@@ -24,6 +24,7 @@ const bodySchema = z.object({
 const STATUS: Record<string, number> = {
   UNKNOWN_VENUE: 400,
   NOT_IN_ROTATION: 409,
+  HOLIDAY: 409,
   INSUFFICIENT_COINS: 402,
   BALLOT_FULL: 409,
 };
@@ -45,7 +46,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const database = await db();
   const result = await voteForTomorrow(database, identity.caretakerId, parsed.data.venueId, parsed.data.tickets);
   if (!result.ok) {
-    return withCookie(NextResponse.json({ error: result.reason }, { status: STATUS[result.reason] ?? 400 }));
+    const body = result.reason === "HOLIDAY" ? { error: result.reason, holidayId: result.holidayId } : { error: result.reason };
+    return withCookie(NextResponse.json(body, { status: STATUS[result.reason] ?? 400 }));
   }
 
   // The new ballot rides the room broadcast `voteForTomorrow` already sent;

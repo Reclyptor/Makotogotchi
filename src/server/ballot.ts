@@ -12,6 +12,7 @@
 
 import type { Collection, Db } from "mongodb";
 import { BALLOT_MAX_EXTRA_TICKETS, VENUE_TICKET_COINS, type DayBallot } from "@/sim/atmosphere";
+import type { HolidayId } from "@/sim/holidays";
 import { isDuplicateKeyError } from "./db/collections";
 import { once } from "./once";
 
@@ -56,7 +57,9 @@ export const ballotsAround = async (db: Db, today: number): Promise<DayBallot[]>
 
 export type VoteResult =
   | { ok: true; venueId: string; tickets: number; spent: number; forDay: number }
-  | { ok: false; reason: "UNKNOWN_VENUE" | "NOT_IN_ROTATION" | "BALLOT_FULL" | "INSUFFICIENT_COINS" };
+  | { ok: false; reason: "UNKNOWN_VENUE" | "NOT_IN_ROTATION" | "BALLOT_FULL" | "INSUFFICIENT_COINS" }
+  /** The day is a holiday, which keeps Makoto home whatever the tickets say (SPEC §22.11). */
+  | { ok: false; reason: "HOLIDAY"; holidayId: HolidayId };
 
 /** How many tickets a request may actually buy, given the cap and the purse. */
 export const clampTickets = (input: { wanted: number; held: number; balance: number }): number =>

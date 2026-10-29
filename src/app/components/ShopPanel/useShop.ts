@@ -17,6 +17,8 @@ import { useCallback, useEffect, useState } from "react";
 import { isLockReason, rejectionText } from "../ActionBar/copy";
 import type { ShopCatalog } from "./tabs";
 import type { FundingView } from "@/server/shop";
+import { isHolidayId } from "@/sim/holidays";
+import { stayingHomeLine } from "@/app/copy/holidays";
 
 /**
  * The parts of GET /api/shop the shop still reads. The response also carries
@@ -48,6 +50,11 @@ const errorOf = (body: unknown): string | undefined =>
 const reasonOf = (body: unknown): string | undefined =>
   typeof body === "object" && body !== null && "reason" in body && typeof body.reason === "string"
     ? body.reason
+    : undefined;
+
+const holidayOf = (body: unknown): string | undefined =>
+  typeof body === "object" && body !== null && "holidayId" in body && typeof body.holidayId === "string"
+    ? body.holidayId
     : undefined;
 
 /** What a failed spend means, said the way a player would say it. */
@@ -155,7 +162,12 @@ export const useShop = (petName: string, onFunded: (listener: () => void) => () 
         const body = result.body as { spent: number };
         setNotice(`Backed it for tomorrow — ${body.spent} 🪙.`);
       } else {
-        setNotice(spendNotice(errorOf(result.body), "Couldn't vote."));
+        const holidayId = holidayOf(result.body);
+        setNotice(
+          errorOf(result.body) === "HOLIDAY" && isHolidayId(holidayId)
+            ? stayingHomeLine(holidayId)
+            : spendNotice(errorOf(result.body), "Couldn't vote."),
+        );
       }
       await refresh();
     },

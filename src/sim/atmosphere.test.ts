@@ -4,6 +4,7 @@ import {
   BLEND_STEPS,
   DAY_SEGMENTS,
   rotationPool,
+  sceneVenueAt,
   seasonFor,
   skyMomentAt,
   ticketsFor,
@@ -13,6 +14,7 @@ import {
   type Season,
   type Weather,
 } from "./atmosphere";
+import { daysFromCivil } from "./clock";
 import { SLEEP_HOUR, WAKE_HOUR } from "./tuning";
 
 describe("sky moments", () => {
@@ -231,5 +233,27 @@ describe("the rotation pool", () => {
   it("cannot be made to list a venue twice", () => {
     const pool = rotationPool(["garden", "garden", "pond", "pond"]);
     expect(pool).toEqual(["garden", "meadow", "pond"]);
+  });
+});
+
+describe("where the scene is set", () => {
+  const OCT_30 = daysFromCivil(2026, 10, 30);
+  const OCT_31 = daysFromCivil(2026, 10, 31);
+  // Every ticket on the meadow, so the draw is a certainty on any ordinary day.
+  const scene = (dayIndex: number) =>
+    sceneVenueAt({
+      seed: 7,
+      dayIndex,
+      decor: [],
+      ballots: [{ forDay: dayIndex, tickets: { meadow: BALLOT_MAX_EXTRA_TICKETS } }],
+      sleepReason: null,
+    });
+
+  it("follows the ballot on an ordinary day", () => {
+    expect(scene(OCT_30)).toBe("meadow");
+  });
+
+  it("keeps Makoto home on a holiday, whatever the tickets say", () => {
+    expect(scene(OCT_31)).toBe("home");
   });
 });

@@ -11,6 +11,7 @@
 import type { Collection, Db } from "mongodb";
 import { DRINK_ITEMS, FOOD_ITEMS, MEDICINE_ITEMS, TOY_ITEMS } from "@/sim/economy";
 import { petClock } from "@/sim/clock";
+import { holidayOn } from "@/sim/holidays";
 import { isVenueId, rotationPool, type DayBallot, type VenueId } from "@/sim/atmosphere";
 import { ballotsAround, voteForVenue, type VoteResult } from "./ballot";
 import { env } from "./env";
@@ -512,8 +513,13 @@ export const voteForTomorrow = async (
   const room = await roomState(db);
   if (!rotationPool(room.decor).includes(venueId)) return { ok: false, reason: "NOT_IN_ROTATION" };
 
-  const balance = (await caretakerProfile(db, caretakerId))?.coins ?? 0;
+  // A holiday keeps Makoto home, so a ticket for it would be coins for nothing
+  // (SPEC §22.11).
   const today = petClock(env().PET_TIMEZONE, Date.now()).dayIndex;
+  const holidayId = holidayOn(today + 1);
+  if (holidayId) return { ok: false, reason: "HOLIDAY", holidayId };
+
+  const balance = (await caretakerProfile(db, caretakerId))?.coins ?? 0;
   const result = await voteForVenue(db, caretakerId, venueId, tickets, today + 1, balance, (coins) =>
     spendCoins(db, caretakerId, coins),
   );

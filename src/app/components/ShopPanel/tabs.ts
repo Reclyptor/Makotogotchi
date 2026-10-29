@@ -13,8 +13,10 @@
 
 import { THEMES, venueSpec } from "@/game/scene/backdrop";
 import { BALLOT_MAX_EXTRA_TICKETS, rotationPool, ticketsFor, VENUE_TICKET_COINS, type VenueId } from "@/sim/atmosphere";
+import { holidayOn } from "@/sim/holidays";
 import { canPerform } from "@/sim/validate";
 import type { DrinkItem, FoodItem } from "@/sim/economy";
+import { stayingHomeLine } from "@/app/copy/holidays";
 import { CATEGORY_ICONS, drinkDetail, foodDetail, ITEM_ICONS, needsMoreCoins } from "@/app/copy/items";
 import type { PetState, ProjectionContext } from "@/sim/model";
 import type { catalog, FundingView, RoomView } from "@/server/shop";
@@ -367,7 +369,19 @@ const roomTab = (shop: ShopModel): ShopTab => {
     Math.min(BALLOT_MAX_EXTRA_TICKETS, Math.max(0, Math.floor(tomorrow[venueId] ?? 0)));
   const backed = pool.reduce((sum, venueId) => sum + ticketsOn(venueId), 0);
 
+  // A holiday tomorrow keeps Makoto home, so nothing can be backed for it.
+  const holidayTomorrow = shop.petDay === null ? null : holidayOn(shop.petDay + 1);
+
   const venueRow = (venueId: string, name: string): ShopRow => {
+    if (holidayTomorrow) {
+      return {
+        id: venueId,
+        icon: icon(venueId, CATEGORY_ICONS.venue),
+        name,
+        detail: stayingHomeLine(holidayTomorrow),
+        action: { kind: "badge", label: "Closed" },
+      };
+    }
     const held = ticketsOn(venueId);
     const room = BALLOT_MAX_EXTRA_TICKETS - held;
     const share = backed === 0 ? 0 : Math.round((held / backed) * 100);

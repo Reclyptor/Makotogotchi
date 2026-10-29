@@ -50,13 +50,32 @@ const formatterFor = (timeZone: string): Intl.DateTimeFormat => {
  * that rule is worth more than the line it costs: it is what stops the
  * simulation from ever quietly reading the machine's clock.
  */
-const daysFromCivil = (year: number, month: number, day: number): number => {
+export const daysFromCivil = (year: number, month: number, day: number): number => {
   const y = year - (month <= 2 ? 1 : 0);
   const era = Math.floor(y / 400);
   const yearOfEra = y - era * 400; // [0, 399]
   const dayOfYear = Math.floor((153 * (month + (month > 2 ? -3 : 9)) + 2) / 5) + day - 1; // [0, 365]
   const dayOfEra = yearOfEra * 365 + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100) + dayOfYear;
   return era * 146_097 + dayOfEra - 719_468;
+};
+
+/**
+ * The civil date of a day count — `daysFromCivil`'s inverse, from the same
+ * algorithm, so a calendar can ask which month and day a `dayIndex` is.
+ */
+export const civilFromDays = (days: number): { year: number; month: number; day: number } => {
+  const shifted = days + 719_468;
+  const era = Math.floor(shifted / 146_097);
+  const dayOfEra = shifted - era * 146_097; // [0, 146096]
+  const yearOfEra = Math.floor((dayOfEra - Math.floor(dayOfEra / 1_460) + Math.floor(dayOfEra / 36_524) - Math.floor(dayOfEra / 146_096)) / 365); // [0, 399]
+  const dayOfYear = dayOfEra - (365 * yearOfEra + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100)); // [0, 365]
+  const monthIndex = Math.floor((5 * dayOfYear + 2) / 153); // [0, 11], counted from March
+  const month = monthIndex < 10 ? monthIndex + 3 : monthIndex - 9;
+  return {
+    year: yearOfEra + era * 400 + (month <= 2 ? 1 : 0),
+    month,
+    day: dayOfYear - Math.floor((153 * monthIndex + 2) / 5) + 1,
+  };
 };
 
 /**

@@ -7,6 +7,7 @@
 // Nothing here reaches PetState. The backdrop is derived exactly the way the
 // animation key is (SPEC §4.3).
 
+import { holidayOn } from "./holidays";
 import type { SleepReason } from "./model";
 import { draw32, RNG_PURPOSE } from "./rng";
 import { HOUR_BEFORE_SLEEP, WAKE_HOUR } from "./tuning";
@@ -305,6 +306,9 @@ export const isVenueId = (value: unknown): value is VenueId =>
  * as bedtime. A nap that runs past bedtime is promoted to NIGHT by the
  * projection, so the pet is home by the time it matters.
  *
+ * A holiday keeps Makoto home all day, whatever the tickets say (SPEC
+ * §22.11): the room is dressed for it, and there is no venue to dress.
+ *
  * The scene and the caption both come through here. That is the point: they
  * are two renderings of one answer rather than two answers that have to be
  * kept in step.
@@ -317,6 +321,6 @@ export const sceneVenueAt = (input: {
   ballots: readonly DayBallot[];
   sleepReason: SleepReason | null;
 }): VenueId => {
-  if (input.sleepReason === "NIGHT") return "home";
+  if (input.sleepReason === "NIGHT" || holidayOn(input.dayIndex)) return "home";
   return venueAt(input.seed, input.dayIndex, rotationPool(input.decor), ticketsFor(input.ballots, input.dayIndex));
 };

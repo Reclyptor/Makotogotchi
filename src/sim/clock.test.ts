@@ -6,7 +6,7 @@
 // clock itself obeys, and the reason it can live in the pure layer at all.
 
 import { describe, expect, it } from "vitest";
-import { petClock } from "./clock";
+import { civilFromDays, daysFromCivil, petClock } from "./clock";
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
@@ -90,5 +90,27 @@ describe("the pet's clock", () => {
     expect(petClock("UTC", 1_709_208_000_000).dayIndex).toBe(leapDay);
     expect(petClock("UTC", 1_709_208_000_000)).toMatchObject({ month: 2 });
     expect(petClock("UTC", -43_200_000).dayIndex).toBe(-1); // 1969-12-31T12:00Z
+  });
+});
+
+describe("the civil calendar", () => {
+  it("reads the epoch, a leap day and the days either side of it", () => {
+    expect(civilFromDays(0)).toEqual({ year: 1970, month: 1, day: 1 });
+    expect(civilFromDays(-1)).toEqual({ year: 1969, month: 12, day: 31 });
+    expect(civilFromDays(Math.floor(1_709_208_000_000 / DAY_MS))).toEqual({ year: 2024, month: 2, day: 29 });
+    expect(civilFromDays(Math.floor(1_709_208_000_000 / DAY_MS) + 1)).toEqual({ year: 2024, month: 3, day: 1 });
+  });
+
+  it("inverts daysFromCivil on every day across four centuries", () => {
+    // 400 years is a whole Gregorian cycle, and takes in the century years
+    // that are not leap years (1900, 2100) and the one that is (2000).
+    const first = daysFromCivil(1900, 1, 1);
+    const last = daysFromCivil(2300, 1, 1);
+    for (let days = first; days < last; days++) {
+      const { year, month, day } = civilFromDays(days);
+      if (daysFromCivil(year, month, day) !== days) {
+        expect({ days, year, month, day }).toBe("a round trip");
+      }
+    }
   });
 });
