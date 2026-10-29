@@ -16,6 +16,7 @@ import { SPRITE_FRAMES, SPRITE_MASKS, type FrameName } from "../atlas.generated"
 import type { HolidayScene } from "./holidays/scene";
 import { GARMENT_REGIONS } from "./garment.generated";
 import { TEST_GARMENT } from "./garment.testkit";
+import { SAGE_CLOAK } from "./sageCloak";
 import { derive } from "@/sim/derive";
 import { hatchedState, projectImmortal, testCtx } from "@/sim/testkit";
 import { HEALTH_MAX, NEED_MAX, STAGE_STARTS, TICKS_PER_DAY, type LifeStage } from "@/sim/tuning";
@@ -766,6 +767,43 @@ describe("a hat on the head", () => {
     const sageRecorder = recordingContext();
     sage.room.render(sageRecorder.ctx, 1000);
     expect(drawnFrame(sageRecorder, "wizardStaff")).toBe(-1);
+  });
+
+  describe("a Sage's cloak", () => {
+    const CLOAK = `rgb(${SAGE_CLOAK.ramp.cloth.join(", ")})`;
+    const clothOn = (room: Room): boolean => {
+      room.reducedMotion = true;
+      const recorder = recordingContext();
+      room.render(recorder.ctx, 1000);
+      return recorder.trail.some((step) => step.fill === CLOAK);
+    };
+
+    it("is worn by a Sage on an ordinary day", () => {
+      const { room, derived } = agedRoom(43);
+      room.syncDerived(derived, false, 0);
+      expect(derived.stage).toBe("SAGE");
+      expect(clothOn(room)).toBe(true);
+    });
+
+    it("gives way to the costume on a holiday", () => {
+      const { room, derived } = agedRoom(43);
+      onHoliday(room);
+      room.syncDerived(derived, false, 0);
+      expect(clothOn(room)).toBe(false);
+    });
+
+    it("is never worn by an elder", () => {
+      const { room, derived } = agedRoom(41);
+      room.syncDerived(derived, false, 0);
+      expect(derived.stage).toBe("ELDER");
+      expect(clothOn(room)).toBe(false);
+    });
+
+    it("is not worn in bed", () => {
+      const { room, aged } = agedRoom(43);
+      room.syncDerived(derive({ ...aged, asleep: true, sleepReason: "NIGHT" }), true, 0);
+      expect(clothOn(room)).toBe(false);
+    });
   });
 
   it("wears the garment on the pose's own body, from the neckline down", () => {

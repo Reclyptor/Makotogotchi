@@ -1,6 +1,6 @@
-// The Sage's beard on a garment, in the real room (SPEC §22.12). The unit tests
-// hold the clip's arithmetic to the art; this holds what the browser actually
-// paints to it. It drives the real Room in headless Chrome (e2e/harness/room.ts),
+// The Sage's beard on a garment, and its own cloak, in the real room (SPEC
+// §22.12). The unit tests hold the clip's arithmetic to the art; this holds what
+// the browser actually paints to it. It drives the real Room in headless Chrome (e2e/harness/room.ts),
 // draws a Sage and, on the very same room, an Elder, which is the Sage minus its
 // beard: the pixels that differ are exactly the beard's. None of them may sit on
 // the silhouette's edge, outside it, or within two columns of it from the
@@ -151,15 +151,34 @@ test.describe("a Sage in costume, in the real room", () => {
       expect(beard.length, "the Sage's beard is painted").toBeGreaterThan(50);
       expect(violations(region, beard)).toEqual([]);
 
-      // The control: the same Sage out of costume has no clip, and the rule finds the specks.
-      const bareSage = await paint(page, { ...options, holidayId: null, stage: "SAGE" });
-      const bareElder = await paint(page, { ...options, holidayId: null, stage: "ELDER" });
-      expect(violations(region, withoutStick(differing(bareSage, bareElder, frame), frame, "sageCane")).length).toBeGreaterThan(0);
-
       if (frame === "idleSide1") {
         await paint(page, { ...options, stage: "SAGE" });
         await keep(page, testInfo, "live-sage-8x.png", frame);
       }
+    });
+  }
+});
+
+test.describe("a Sage in its own cloak, in the real room", () => {
+  test.use({ deviceScaleFactor: 8 });
+
+  // The cloak's cloth, to tell the coat from the fur and the floor in the crops.
+  const CLOAK_RED = [176, 44, 36];
+
+  for (const frame of ["idleSide1", "walk1", "meditate1"] as const) {
+    test(`wears the cloak on ${frame}`, async ({ page }, testInfo) => {
+      await openHarness(page);
+      const options = { frame, holidayId: null, hour: DAYTIME } as const;
+      const sage = await paint(page, { ...options, stage: "SAGE" });
+      const elder = await paint(page, { ...options, stage: "ELDER" });
+      const dressed = differing(sage, elder, frame).filter(({ x, y }) => {
+        const i = ((y + Math.round(PET_Y - SPRITE_FRAMES[frame].h)) * sage.width + x + Math.round(sage.petX - SPRITE_FRAMES[frame].w / 2)) * 4;
+        return CLOAK_RED.every((channel, c) => sage.pixels[i + c] === channel);
+      });
+      expect(dressed.length, "the cloak's cloth is painted").toBeGreaterThan(200);
+
+      await paint(page, { ...options, stage: "SAGE" });
+      await keep(page, testInfo, `live-cloak-${frame}-8x.png`, frame);
     });
   }
 });

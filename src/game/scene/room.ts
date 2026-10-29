@@ -17,7 +17,8 @@ import { HEAD_ANCHORS, type HeadAnchor } from "./head";
 import { PET_Y, type AuraPainter } from "./auraTypes";
 
 import { GARMENT_REGIONS } from "./garment.generated";
-import { garmentExtent, paintBeardClip, paintGarment } from "./garment";
+import { garmentExtent, paintBeardClip, paintGarment, type Garment } from "./garment";
+import { SAGE_CLOAK } from "./sageCloak";
 import { holidayScene, type HolidayProp } from "./holidays";
 import { Backdrop, keyOf, ROOM_HEIGHT, ROOM_WIDTH, RUG, venueSpec, WINDOW, type BackdropKey, type Condition } from "./backdrop";
 import { celestialAt, seasonFor, skyMomentAt, weatherFor, type Celestial } from "@/sim/atmosphere";
@@ -659,15 +660,18 @@ export class Room {
    * (SPEC §22.11). The robe is a garment worn on the pose's own body (SPEC
    * §22.12), not a sprite hung in front of it. It and the hat go through the
    * frame's mask like the beard, so the cup and the quilt still stand in
-   * front of them.
+   * front of them. A Sage with no costume wears its red cloak in the robe's
+   * place.
    */
   private renderHead(ctx: SceneContext, frame: FrameName, scale: number): void {
     const anchor = HEAD_ANCHORS[frame];
     if (!anchor) return;
     const holidayId = this.backdropKey.holidayId;
     const costume = holidayId ? holidayScene(holidayId).costume : null;
-    // The garment worn this frame, and what names it: a holiday's robe today.
-    const worn = holidayId && costume ? { key: holidayId, garment: costume.robe } : null;
+    // The garment worn this frame, and what names it: a holiday's robe, or a
+    // Sage's own cloak when there is no costume to replace it.
+    const worn: { key: string; garment: Garment } | null =
+      holidayId && costume ? { key: holidayId, garment: costume.robe } : this.stage === "SAGE" ? { key: "sageCloak", garment: SAGE_CLOAK } : null;
     layer(ctx, () => {
       ctx.translate(0, PET_Y);
       ctx.scale(scale, scale);
