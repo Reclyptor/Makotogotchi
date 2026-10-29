@@ -19,6 +19,7 @@
     "verify": "npm run typecheck && npm run lint && npm run test",
     "atlas": "node scripts/atlas.ts",
     "head-anchors": "node scripts/head-anchors.ts",
+    "garment-regions": "node scripts/garment-regions.ts",
     "art:natsumi": "node scripts/art/natsumi.mjs",
     "art:portrait": "node scripts/art/portrait.ts",
     "art:ancestors": "node scripts/art/ancestors.ts",
