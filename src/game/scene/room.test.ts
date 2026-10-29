@@ -46,7 +46,7 @@ vi.mock("./holidays", async () => {
       { frame: "rock1", x: 60, y: 150, layer: "behind" },
       { frame: "sock1", x: 200, y: 170, layer: "front", flicker: true },
     ],
-    costume: { hat: "coffeeMug", robe: TEST_GARMENT },
+    costume: { hat: "coffeeMug", robe: TEST_GARMENT, staff: "wizardStaff" },
     window: { bats: true, moon: [255, 160, 60] },
   };
   return { holidayScene: () => scene };
@@ -587,6 +587,91 @@ describe("a hat on the head", () => {
     }
   });
 
+  // A Sage leans on a cane only when its paws are free (SPEC §21.9). Every
+  // frame that eats, sips, games, sleeps, bathes or meditates carries no cane
+  // anchor, and neither does the gravestone.
+  const BUSY_PAW_FRAMES = [
+    ...BASE_CLIPS.sleeping.frames,
+    ...BASE_CLIPS.meditating.frames,
+    ...BASE_CLIPS.dead.frames,
+    ...ONE_SHOT_CLIPS.eating.frames,
+    ...ONE_SHOT_CLIPS.unhappyEating.frames,
+    ...ONE_SHOT_CLIPS.playing.frames,
+    ...ONE_SHOT_CLIPS.bathing.frames,
+    ...ONE_SHOT_CLIPS.soothed.frames,
+    ...ONE_SHOT_CLIPS.medicated.frames,
+  ];
+
+  it("holds no cane on any frame whose paws are busy", () => {
+    for (const frame of BUSY_PAW_FRAMES) expect(HEAD_ANCHORS[frame]?.cane ?? null, frame).toBeNull();
+  });
+
+  it("holds the cane on the walk and the idle, where the paws are free", () => {
+    for (const frame of [...WALK_CLIP.frames, ...BASE_CLIPS.idle.frames]) expect(HEAD_ANCHORS[frame]?.cane, frame).toBeTruthy();
+  });
+
+  it("leans a Sage on its cane at the frame's anchor, in front of the tufts and the beard, and not an elder", () => {
+    const { room, derived } = agedRoom(43);
+    room.reducedMotion = true;
+    room.syncDerived(derived, false, 0);
+    const recorder = recordingContext();
+    room.render(recorder.ctx, 1000);
+    const frame = BASE_CLIPS.idle.frames[0]!;
+    const cane = HEAD_ANCHORS[frame]!.cane!;
+    const sprite = recorder.drawn.find((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES[frame].w)!;
+    const drawnCane = recorder.drawn.find((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES.sageCane.w)!;
+    expect(drawnCane).toBeDefined();
+    expect(drawnCane.x0 - sprite.x0).toBe(Math.floor(SPRITE_FRAMES[frame].w / 2) + cane.x - Math.floor(SPRITE_FRAMES.sageCane.w / 2));
+    expect(drawnCane.y1 - 172).toBe(cane.y);
+
+    // The paw holds it, so it stands in front of the beard that now reaches the grip; behind the body, first of all.
+    const order = recorder.drawn.map((entry) => entry.x1 - entry.x0);
+    const caneAt = order.indexOf(SPRITE_FRAMES.sageCane.w);
+    if (cane.behind) {
+      expect(caneAt).toBeLessThan(order.indexOf(SPRITE_FRAMES[frame].w));
+    } else {
+      expect(caneAt).toBeGreaterThan(order.indexOf(SPRITE_FRAMES[frame].w));
+      expect(caneAt).toBeGreaterThan(order.indexOf(SPRITE_FRAMES.elderBrows.w));
+      expect(caneAt).toBeGreaterThan(order.indexOf(SPRITE_FRAMES.sageBeard.w));
+    }
+
+    const elder = contentedRoom(22);
+    elder.room.reducedMotion = true;
+    elder.room.syncDerived(elder.derived, false, 0);
+    const elderRecorder = recordingContext();
+    elder.room.render(elderRecorder.ctx, 1000);
+    expect(elderRecorder.drawn.some((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES.sageCane.w)).toBe(false);
+  });
+
+  it("puts the cane down for a sleeping Sage", () => {
+    const { room, aged } = agedRoom(43);
+    room.reducedMotion = true;
+    room.syncDerived(derive({ ...aged, asleep: true, sleepReason: "NIGHT" }), true, 0);
+    const recorder = recordingContext();
+    room.render(recorder.ctx, 1000);
+    expect(recorder.drawn.some((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES.sageCane.w)).toBe(false);
+  });
+
+  it("mirrors the cane with the pet when it faces right", () => {
+    vi.useFakeTimers();
+    try {
+      for (let slot = 0; slot < 64; slot++) {
+        vi.setSystemTime(slot * 9000);
+        const { room, derived } = agedRoom(43);
+        room.syncDerived(derived, false, 0);
+        const recorder = recordingContext();
+        room.render(recorder.ctx, 1000);
+        if (!recorder.drawn.some((entry) => entry.mirrored)) continue;
+        const drawnCane = recorder.drawn.find((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES.sageCane.w);
+        expect(drawnCane?.mirrored).toBe(true);
+        return;
+      }
+      throw new Error("no wander slot sent the pet right");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("sits a meditating elder in the meditation pose, tufts on and no beard yet", () => {
     const { room, derived } = agedRoom(41);
     expect(derived.animation).toBe("meditating");
@@ -625,7 +710,7 @@ describe("a hat on the head", () => {
   const firstOf = (recorder: ReturnType<typeof recordingContext>, find: (step: { fill: string | null; w: number; h: number }) => boolean): number =>
     recorder.trail.findIndex(find);
 
-  it("dresses a Sage on a holiday in robe, tufts, beard, then hat", () => {
+  it("dresses a Sage on a holiday in robe, tufts, beard, staff, then hat", () => {
     const { room, derived } = agedRoom(43);
     onHoliday(room);
     room.reducedMotion = true;
@@ -633,7 +718,7 @@ describe("a hat on the head", () => {
     const recorder = recordingContext();
     room.render(recorder.ctx, 1000);
     const drawnAs = (frame: FrameName) => firstOf(recorder, (step) => step.fill === null && step.w === sizeOf(frame).w && Math.abs(step.h) === sizeOf(frame).h);
-    const worn = [firstOf(recorder, (step) => step.fill === CLOTH), drawnAs("elderBrows"), drawnAs("sageBeard"), drawnAs("coffeeMug")];
+    const worn = [firstOf(recorder, (step) => step.fill === CLOTH), drawnAs("elderBrows"), drawnAs("sageBeard"), drawnAs("wizardStaff"), drawnAs("coffeeMug")];
     expect(worn.every((index) => index >= 0)).toBe(true);
     expect(worn).toEqual([...worn].sort((a, b) => a - b));
 
@@ -644,6 +729,43 @@ describe("a hat on the head", () => {
     const hat = recorder.drawn[drawnFrame(recorder, "coffeeMug")]!;
     expect(hat.y1 - 172).toBe(anchor.y);
     expect(hat.x0 - sprite.x0).toBe(Math.floor(SPRITE_FRAMES[frame].w / 2) + anchor.x - Math.floor(SPRITE_FRAMES.coffeeMug.w / 2));
+  });
+
+  // The staff finishes the costume: the same grip as the cane, drawn in its
+  // place, so a Sage never holds both.
+  it("swaps a Sage's cane for the costume's staff on a holiday, at the cane's own anchor", () => {
+    const { room, derived } = agedRoom(43);
+    onHoliday(room);
+    room.reducedMotion = true;
+    room.syncDerived(derived, false, 0);
+    const recorder = recordingContext();
+    room.render(recorder.ctx, 1000);
+    const frame = BASE_CLIPS.idle.frames[0]!;
+    const cane = HEAD_ANCHORS[frame]!.cane!;
+    const sprite = recorder.drawn.find((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES[frame].w)!;
+    const staff = recorder.drawn[drawnFrame(recorder, "wizardStaff")]!;
+    expect(staff).toBeDefined();
+    expect(drawnFrame(recorder, "sageCane")).toBe(-1);
+    expect(staff.x0 - sprite.x0).toBe(Math.floor(SPRITE_FRAMES[frame].w / 2) + cane.x - Math.floor(SPRITE_FRAMES.wizardStaff.w / 2));
+    expect(staff.y1 - 172).toBe(cane.y);
+  });
+
+  it("gives an elder no staff on a holiday, and a Sage with its paws busy none either", () => {
+    const elder = contentedRoom(22);
+    onHoliday(elder.room);
+    elder.room.reducedMotion = true;
+    elder.room.syncDerived(elder.derived, false, 0);
+    const elderRecorder = recordingContext();
+    elder.room.render(elderRecorder.ctx, 1000);
+    expect(drawnFrame(elderRecorder, "wizardStaff")).toBe(-1);
+
+    const sage = agedRoom(43);
+    onHoliday(sage.room);
+    sage.room.reducedMotion = true;
+    sage.room.syncDerived(derive({ ...sage.aged, asleep: true, sleepReason: "NIGHT" }), true, 0);
+    const sageRecorder = recordingContext();
+    sage.room.render(sageRecorder.ctx, 1000);
+    expect(drawnFrame(sageRecorder, "wizardStaff")).toBe(-1);
   });
 
   it("wears the garment on the pose's own body, from the neckline down", () => {

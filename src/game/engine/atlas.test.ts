@@ -206,3 +206,22 @@ describe("an overlay behind a prop", () => {
     expect(blits[0]![0]).toBe(SHEET_IMAGE);
   });
 });
+
+// The Sage's cane (SPEC §21.9) is packed like the beard, and gripped at an
+// anchor inside the frame that holds it.
+describe("the Sage's cane", () => {
+  it("is packed beside the beard", () => {
+    expect(SPRITE_FRAMES.sageCane.w).toBeGreaterThan(0);
+    expect(SPRITE_FRAMES.sageCane.h).toBeGreaterThan(0);
+  });
+
+  it("is gripped inside every frame that holds it", () => {
+    for (const [frame, anchor] of Object.entries(HEAD_ANCHORS)) {
+      if (!anchor?.cane) continue;
+      const { w, h } = SPRITE_FRAMES[frame as FrameName];
+      expect(Math.abs(anchor.cane.x), frame).toBeLessThanOrEqual(w / 2);
+      expect(anchor.cane.y, frame).toBeLessThanOrEqual(0);
+      expect(anchor.cane.y, frame).toBeGreaterThanOrEqual(-h);
+    }
+  });
+});

@@ -17,6 +17,7 @@ import type { FrameName } from "@/game/atlas.generated";
 import { cellEdge, type GarmentRegion } from "@/game/scene/garment";
 import { GARMENT_REGIONS } from "@/game/scene/garment.generated";
 import { PET_Y } from "@/game/scene/auraTypes";
+import { HEAD_ANCHORS } from "@/game/scene/head";
 import { SPRITE_FRAMES, SPRITE_SHEET_URL } from "@/game/atlas.generated";
 
 const ORIGIN = "http://harness.test";
@@ -86,6 +87,19 @@ const differing = (a: Painted, b: Painted, name: FrameName): { x: number; y: num
   return found;
 };
 
+/**
+ * What differs between a Sage and an Elder, less the stick the Sage leans on:
+ * the cane (or the costume's staff) stands in front of the beard and is the
+ * Sage's alone too, so its rectangle is not the beard's to answer for.
+ */
+const withoutStick = (found: { x: number; y: number }[], frame: FrameName, stick: FrameName): { x: number; y: number }[] => {
+  const grip = HEAD_ANCHORS[frame]!.cane!;
+  const { w, h } = SPRITE_FRAMES[stick];
+  const left = Math.floor(SPRITE_FRAMES[frame].w / 2) + grip.x - Math.floor(w / 2);
+  const top = SPRITE_FRAMES[frame].h + grip.y - h;
+  return found.filter(({ x, y }) => x < left || x >= left + w || y < top || y >= top + h);
+};
+
 /** The beard pixels that break the rule: on an edge, in the air, or inside the margin from the collar's top line. */
 const violations = (region: GarmentRegion, beard: { x: number; y: number }[]): string[] =>
   beard.flatMap(({ x: px, y: py }) => {
@@ -133,14 +147,14 @@ test.describe("a Sage in costume, in the real room", () => {
 
       const sage = await paint(page, { ...options, stage: "SAGE" });
       const elder = await paint(page, { ...options, stage: "ELDER" });
-      const beard = differing(sage, elder, frame);
+      const beard = withoutStick(differing(sage, elder, frame), frame, "wizardStaff");
       expect(beard.length, "the Sage's beard is painted").toBeGreaterThan(50);
       expect(violations(region, beard)).toEqual([]);
 
       // The control: the same Sage out of costume has no clip, and the rule finds the specks.
       const bareSage = await paint(page, { ...options, holidayId: null, stage: "SAGE" });
       const bareElder = await paint(page, { ...options, holidayId: null, stage: "ELDER" });
-      expect(violations(region, differing(bareSage, bareElder, frame)).length).toBeGreaterThan(0);
+      expect(violations(region, withoutStick(differing(bareSage, bareElder, frame), frame, "sageCane")).length).toBeGreaterThan(0);
 
       if (frame === "idleSide1") {
         await paint(page, { ...options, stage: "SAGE" });

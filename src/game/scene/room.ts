@@ -13,7 +13,7 @@ import { Spectacle } from "./party";
 import { AnimationMachine } from "../anim/machine";
 import { BASE_CLIPS, BUTTERFLY_CLIP, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP, type OneShotName } from "../anim/clips";
 import { SPRITE_FRAMES, type FrameName } from "../atlas.generated";
-import { HEAD_ANCHORS } from "./head";
+import { HEAD_ANCHORS, type HeadAnchor } from "./head";
 import { PET_Y, type AuraPainter } from "./auraTypes";
 
 import { GARMENT_REGIONS } from "./garment.generated";
@@ -30,6 +30,9 @@ import { isOld, type CareAction, type LifeStage } from "@/sim/tuning";
 export { ROOM_WIDTH, ROOM_HEIGHT } from "./backdrop";
 const PET_X = ROOM_WIDTH / 2;
 const MEDITATION_FRAMES: readonly FrameName[] = BASE_CLIPS.meditating.frames;
+
+// A Sage's walking stick (SPEC §21.9), drawn at each frame's `cane` anchor.
+const CANE_SPRITE = "sageCane" satisfies FrameName;
 
 /** What the room needs from the pet's own calendar to dress itself (§22.1). */
 export type AtmosphereInput = {
@@ -465,6 +468,7 @@ export class Room {
         ctx.translate(x, 0);
         if (mirrored) ctx.scale(-1, 1);
         this.renderAura(ctx, frame, nowMs, scale, "behind");
+        this.renderCaneBehind(ctx, frame, scale);
         this.atlas.draw(ctx, frame, 0, PET_Y, scale);
         // Whatever the head wears is drawn in the same transform, so it
         // mirrors with the pet and finds the head wherever this frame put it.
@@ -644,9 +648,10 @@ export class Room {
    * them. An elder's brow tufts stand over the eyes and a Sage's beard hangs
    * from the mouth, both underneath whatever cosmetic is on top (SPEC §21.9),
    * and the beard behind whatever the frame's mask says is held in front of
-   * the chest — the cup, the controller, the quilt. A frame whose art already
-   * wears a nightcap keeps the tufts and leaves the cosmetic off. A frame with
-   * no anchor has no head to speak of — the egg, the gravestone — and wears
+   * the chest — the cup, the controller, the quilt. A Sage's cane goes over
+   * the beard, which reaches the grip. A frame whose art already wears a
+   * nightcap keeps the tufts and leaves the cosmetic off. A frame with no
+   * anchor has no head to speak of — the egg, the gravestone — and wears
    * nothing.
    *
    * On a holiday the costume goes on under all of that: the robe, then the
@@ -679,6 +684,8 @@ export class Room {
         const clip = worn && region ? { key: worn.key, paint: (target: SceneContext) => paintBeardClip(target, region) } : undefined;
         this.atlas.drawOver(ctx, "sageBeard", anchor.beard.x, anchor.beard.y, frame, clip);
       }
+      const cane = this.caneAnchor(frame);
+      if (cane && !cane.behind) this.atlas.draw(ctx, this.caneSprite(), cane.x, cane.y);
       if (anchor.nightcap) return;
       if (costume) {
         this.atlas.drawOver(ctx, costume.hat, anchor.x, anchor.y, frame);
@@ -686,6 +693,33 @@ export class Room {
       }
       ctx.translate(anchor.x, anchor.y);
       this.renderCosmetic(ctx);
+    });
+  }
+
+  /**
+   * Where a Sage's cane is gripped on this frame, or null when it isn't held:
+   * the frame's paws are busy (SPEC §21.9), or the pet is not a Sage. No frame
+   * that holds one has a prop mask, so it is drawn plain: `drawOver` would
+   * erase its knob by the frame's mouth mask, which reaches the flank paw.
+   */
+  private caneAnchor(frame: FrameName): NonNullable<HeadAnchor["cane"]> | null {
+    return this.stage === "SAGE" ? (HEAD_ANCHORS[frame]?.cane ?? null) : null;
+  }
+
+  /** What a Sage leans on: the holiday costume's staff when it has one, else the cane. */
+  private caneSprite(): FrameName {
+    const holidayId = this.backdropKey.holidayId;
+    return (holidayId && holidayScene(holidayId).costume.staff) || CANE_SPRITE;
+  }
+
+  /** The cane on a pose that holds it out behind the body: under the sprite, in its transform. */
+  private renderCaneBehind(ctx: SceneContext, frame: FrameName, scale: number): void {
+    const cane = this.caneAnchor(frame);
+    if (!cane?.behind) return;
+    layer(ctx, () => {
+      ctx.translate(0, PET_Y);
+      ctx.scale(scale, scale);
+      this.atlas.draw(ctx, this.caneSprite(), cane.x, cane.y);
     });
   }
 
