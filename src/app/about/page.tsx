@@ -39,7 +39,8 @@ export default function AboutPage() {
           </li>
           <li>
             On its 40th day an elder sits down to meditate. For two days nothing can hurt it: its needs and health hold
-            still, and only a gentle pat or medicine gets through. On the second day an aura gathers around it.
+            still, and only a gentle pat or medicine gets through. On the second day an aura gathers around it, it is
+            made whole again, and nothing can reach it at all.
           </li>
           <li>
             It rises a Sage, with a white beard. A Sage is asked for less — a flat 65% (60% if frail) — and everyone who

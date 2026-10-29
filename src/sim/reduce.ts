@@ -110,6 +110,7 @@ export const reduce = (input: PetState, event: PetEvent, ctx: ProjectionContext)
       if (event.version > rulesVersionOf(state)) state.rulesVersion = event.version;
       // The one rule whose start is a time, not just a version (SPEC §2.8).
       if (event.version >= RULES_SINCE.SAGE) state.sageRuleFromTick ??= event.tick;
+      if (event.version >= RULES_SINCE.DEEP_STILLNESS) state.deepStillnessFromTick ??= event.tick;
       return { state, milestones, applied: 0, changed: true };
     }
 

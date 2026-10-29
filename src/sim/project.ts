@@ -8,7 +8,8 @@
 // Step order within one tick, pinned and load-bearing (changing it changes
 // every replay):
 //   1. stage evolution (EVOLVED; adult form decided at the ADULT boundary;
-//      MEDITATING on the first tick of an elder's meditation)
+//      MEDITATING on the first tick of an elder's meditation; the pet
+//      restored to full on the first tick of its second day)
 //   2. schedule sleep/wake sync
 //   3. need decay / sleep recovery
 //   4. involuntary-nap transitions (post-decay energy)
@@ -21,6 +22,7 @@
 // two days are a stasis (SPEC §2.8).
 
 import {
+  deepStillnessStartTickOf,
   isAlive,
   meditatingAt,
   meditationStartTickOf,
@@ -84,6 +86,7 @@ export const project = (input: PetState, toTick: number, ctx: ProjectionContext)
   // Only a RULES event moves either, and events fold between projections.
   const meditationStart = meditationStartTickOf(state);
   const sageStart = sageStartTickOf(state);
+  const deepStillnessStart = deepStillnessStartTickOf(state);
   const formLines = formThresholds(state.generation.sageBlessed === true);
   let stage = stageAt(bornAtTick, state.tick, sageStart);
   // How hard the community has made the pet (SPEC §23). It is fixed for the
@@ -117,6 +120,16 @@ export const project = (input: PetState, toTick: number, ctx: ProjectionContext)
     }
     if (tick === meditationStart) milestones.push({ kind: "MEDITATING", tick });
     const meditating = meditatingAt(state, tick);
+    if (tick === deepStillnessStart && meditating) {
+      // Day two begins whole (SPEC §2.8): the stasis below holds it there.
+      for (const need of NEED_KEYS) state.needs[need] = NEED_MAX;
+      state.healthRaw = HEALTH_MAX;
+      if (state.sick) {
+        state.sick = false;
+        state.sickSinceTick = null;
+        milestones.push({ kind: "RECOVERED", tick });
+      }
+    }
 
     // 2. Scheduled sleep/wake.
     while (boundaryIdx < boundaries.length && boundaries[boundaryIdx]!.tick <= tick) {

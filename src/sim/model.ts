@@ -6,6 +6,7 @@ import {
   ELDER_STARTS_AT,
   MEDITATION_STARTS_AT,
   MEDITATION_TICKS,
+  RULES_SINCE,
   STAGE_STARTS,
   TICKS_PER_DAY,
   type AdultForm,
@@ -148,6 +149,14 @@ export type PetState = {
    * once by the fold, and absent, not null, in every older history.
    */
   sageRuleFromTick?: number;
+  /**
+   * The tick a RULES event first brought this generation to ruleset 5, which
+   * fixes when day two of the meditation restores the pet (see
+   * `deepStillnessStartTickOf`): a pet already in day two when the rule lands
+   * is restored then, not on a day it already lived. Set once by the fold,
+   * and absent, not null, in every older history.
+   */
+  deepStillnessFromTick?: number;
 };
 
 /** The ruleset a state is lived under: a log with no RULES event is version 1. */
@@ -207,6 +216,24 @@ export const deepMeditationAt = (state: PetState, tick: number): boolean => {
   const start = meditationStartTickOf(state);
   return start !== null && meditatingAt(state, tick) && tick >= start + TICKS_PER_DAY;
 };
+
+/**
+ * The tick day two of the meditation restores the pet, or null for a pet that
+ * is not under ruleset 5 or will never meditate. The first tick of day two,
+ * or the tick after the ruleset was recorded if that is later (SPEC §2.8).
+ */
+export const deepStillnessStartTickOf = (state: PetState): number | null => {
+  const start = meditationStartTickOf(state);
+  if (start === null || state.deepStillnessFromTick === undefined) return null;
+  return Math.max(start + TICKS_PER_DAY, state.deepStillnessFromTick + 1);
+};
+
+/**
+ * Whether day two is a stillness nothing can break at `tick`: the second day
+ * of the meditation, lived under ruleset 5 (SPEC §2.8).
+ */
+export const deepStillnessAt = (state: PetState, tick: number): boolean =>
+  rulesVersionOf(state) >= RULES_SINCE.DEEP_STILLNESS && deepMeditationAt(state, tick);
 
 /**
  * Whole days into the elder ramp, or null while the pet still ages by the rule

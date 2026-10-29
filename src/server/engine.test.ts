@@ -220,6 +220,7 @@ describe("PetEngine", () => {
     advanceClockTicks(30);
     const recorded = await engine.recordRules(generation);
     expect(recorded.rulesVersion).toBe(CURRENT_RULES_VERSION);
+    expect(recorded.deepStillnessFromTick).toBe(recorded.tick);
 
     // A second leader, a retry, a restart: every later call is a skip.
     advanceClockTicks(60);
@@ -235,6 +236,7 @@ describe("PetEngine", () => {
     await infra.clearRedis();
     const recovered = await engine.recover(generation);
     expect(recovered.state.rulesVersion).toBe(CURRENT_RULES_VERSION);
+    expect(recovered.state.deepStillnessFromTick).toBe(recorded.deepStillnessFromTick);
     expect((await engine.recordRules(generation)).rulesVersion).toBe(CURRENT_RULES_VERSION);
     expect((await eventsSince(await db(), generation.id, -1)).filter((event) => event.type === "RULES")).toHaveLength(1);
   });

@@ -332,7 +332,10 @@ rather than a rounder 45s.)
 sleep refuses, and checks it before any cooldown, since no wait would make the
 action possible. `PET` and `MEDICATE` stay available and apply normally: a pat
 is gentle enough, and a pet that sat down sick can still be cured. The copy
-reads "<name> is in deep meditation" (short form "Meditating", glyph 🧘).
+reads "<name> is in deep meditation" (short form "Meditating", glyph 🧘). From
+ruleset 5 the second day turns away everything, a pat and medicine too, with
+`DEEP_MEDITATION`: "<name> is in deep meditation — nothing can reach it now"
+(short form "Deep meditation", glyph 🧘).
 
 **Global cooldown** is a property of *the pet*, not of the player: the pet is
 busy eating; wait for it to finish. The UI says so in those words. This
@@ -640,7 +643,17 @@ the meditation a ki aura gathers around the pet (§21.9), the sign that the
 change is close. The first day is plain, and the aura stops the tick the pet is
 a Sage. `deepMeditationAt(state, tick)` is that window, derived beside
 `meditatingAt` and never stored, and `derive` carries it as `deepMeditation`.
-It changes nothing in the sim and nothing in the status line.
+Under ruleset 4 it changes nothing in the sim and nothing in the status line.
+
+**Day two is whole and untouchable (ruleset 5).** From ruleset 5
+(`RULES_SINCE.DEEP_STILLNESS`) the first tick of day two sets every need to
+`NEED_MAX` and health to `HEALTH_MAX`, and cures any sickness (`RECOVERED` is
+emitted if it was sick); the stasis then holds it there until the Sage. That
+tick is `deepStillnessStartTickOf`: the later of the first tick of day two and
+the tick after `PetState.deepStillnessFromTick`, so a pet already in day two
+when the rule is recorded is restored at once. `canPerform` rejects every
+action on day two, `PET` and `MEDICATE` included, with `DEEP_MEDITATION`,
+checked before `MEDITATING` (§13). Day one keeps its rules.
 
 **The Sage's blessing.** An egg laid after a Sage's death carries
 `Generation.sageBlessed: true`, pinned at egg-laying like `foodCatalogSize`
@@ -3687,6 +3700,14 @@ because the rule has to begin from when it arrived for a pet already past day
 null, in every older history, and a log without `RULES{4}` folds
 byte-identically: it never meditates and stays an `ELDER`. The Sage's coins
 and the blessing's egg (§13.1, §2.8) are server-side and touch no fold.
+
+Ruleset 5 (`RULES_SINCE.DEEP_STILLNESS`) makes the meditation's second day
+whole and untouchable (§2.8). It is a time as well, and the same shape: the
+fold records the first `RULES` event at version 5 or later as
+`PetState.deepStillnessFromTick` (`??=`), because a pet already in its second
+day when the rule arrives is restored then, not on a moment it already lived.
+The field is absent in every older history, and a log without `RULES{5}` folds
+byte-identically: day two restores nothing and still takes a pat.
 
 ### 23.3 Visibility
 

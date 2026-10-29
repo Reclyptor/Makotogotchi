@@ -11,7 +11,7 @@ export const TICK_SECONDS = 10;
 // means raising this number — not adding an event type per change — and
 // gating the new rule on it. Version 1 is every history that predates the
 // event.
-export const CURRENT_RULES_VERSION = 4;
+export const CURRENT_RULES_VERSION = 5;
 /** The ruleset that introduced each gated rule, so no call site carries a bare number. */
 export const RULES_SINCE = {
   /** An elder dying with no need critical, below its line, dies of age (SPEC §2.3). */
@@ -28,6 +28,8 @@ export const RULES_SINCE = {
   LOWER_HOLD_CAP: 3,
   /** An elder meditates on day 40 and rises a SAGE two days later (SPEC §2.8). */
   SAGE: 4,
+  /** The second day of meditation restores the pet once and turns every action away (SPEC §2.8). */
+  DEEP_STILLNESS: 5,
 } as const;
 export const TICKS_PER_HOUR = 360;
 export const TICKS_PER_DAY = 8640;

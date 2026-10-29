@@ -5,7 +5,7 @@
 // An exhausted caretaker budget is deliberately NOT a rejection: the action
 // validates and applies zero (SPEC §2.5) — the UI explains separately.
 
-import { isAlive, meditatingAt, type PetState, type ProjectionContext } from "./model";
+import { deepStillnessAt, isAlive, meditatingAt, type PetState, type ProjectionContext } from "./model";
 import { drinkItem, medicineItem } from "./economy";
 import { COOLDOWNS, LULLABY_ENERGY_GATE, PLAY_ENERGY_GATE, type CareAction } from "./tuning";
 
@@ -15,6 +15,7 @@ export type RejectionReason =
   | "COOLDOWN_GLOBAL" // the pet is busy — a property of the pet, not the player
   | "COOLDOWN_CARETAKER"
   | "ASLEEP"
+  | "DEEP_MEDITATION" // day two: nothing reaches the pet, not even a pat (SPEC §2.8)
   | "MEDITATING" // the elder's two days of stillness (SPEC §2.8)
   | "TOO_TIRED" // PLAY needs energy
   | "NOT_SICK" // MEDICATE without illness
@@ -74,6 +75,9 @@ export const canPerform = (
 ): ValidationResult => {
   if (state.bornAtTick === null) return reject("NOT_BORN");
   if (!isAlive(state)) return reject("DEAD");
+  // Day two turns away every action, gentle ones included, so it is checked
+  // ahead of the day-one rule below.
+  if (deepStillnessAt(state, state.tick)) return reject("DEEP_MEDITATION");
   // Meditation turns away everything that would rouse the pet, as sleep does,
   // and says so ahead of any cooldown: no wait would make the action possible.
   // A pat and medicine are gentle enough to stay (SPEC §2.8).
