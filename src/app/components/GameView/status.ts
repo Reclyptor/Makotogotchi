@@ -7,7 +7,7 @@
 // see what to fix rather than watch the meter and guess.
 
 import type { Ailment, DerivedState, HealthView } from "@/sim/derive";
-import type { PetState, ProjectionContext } from "@/sim/model";
+import { sageStartTickOf, type PetState, type ProjectionContext } from "@/sim/model";
 import { CRITICAL_PERCENT } from "@/app/copy/health";
 import { CAUSE_OF_DEATH_TEXT } from "@/app/copy/death";
 import {
@@ -71,6 +71,16 @@ const WELL_LINE: Record<Exclude<LifeStage, "EGG">, string> = {
   ADULT: "is doing fine.",
   ELDER: "is taking it slow.",
   SAGE: "is radiating calm.",
+};
+
+/** How long a new Sage is greeted as one, from the moment the meditation ends. */
+export const SAGE_DEBUT_TICKS = TICKS_PER_DAY;
+
+/** The well line, except that a Sage's first day announces itself. */
+const wellLine = (petName: string, state: PetState, stage: Exclude<LifeStage, "EGG">): string => {
+  const sageStart = stage === "SAGE" ? sageStartTickOf(state) : null;
+  if (sageStart !== null && state.tick < sageStart + SAGE_DEBUT_TICKS) return `${petName} has become a Sage!`;
+  return `${petName} ${WELL_LINE[stage]}`;
 };
 
 const list = (words: string[]): string =>
@@ -242,7 +252,7 @@ const headline = (
   if (derived.vitality === "frail") return { text: `${petName} is dangerously weak.`, told: { ailments: [], weak: true } };
   const low = slipping(state);
   if (low) return { text: `${petName} ${SLIPPING_LINE[low]}`, told: NOTHING_TOLD };
-  return { text: `${petName} ${WELL_LINE[stage]}`, told: NOTHING_TOLD };
+  return { text: wellLine(petName, state, stage), told: NOTHING_TOLD };
 };
 
 export const statusLine = (

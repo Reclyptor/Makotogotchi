@@ -3,7 +3,7 @@
 // whole state, most important fact first (SPEC §11.7).
 
 import { describe, expect, it } from "vitest";
-import { SLIPPING_BELOW, statusLine, ticksUntilWake, untilWakeText } from "./status";
+import { SAGE_DEBUT_TICKS, SLIPPING_BELOW, statusLine, ticksUntilWake, untilWakeText } from "./status";
 import { derive, type DerivedState, type HealthReason } from "@/sim/derive";
 import type { PetState } from "@/sim/model";
 import { hatchedState, projectImmortal, testCtx } from "@/sim/testkit";
@@ -406,9 +406,28 @@ describe("status line: meditation and the Sage", () => {
     expect(line(nearlyDone)).toBe("Makoto is in deep meditation. Returns in 15m.");
   });
 
-  it("gives a well Sage its own line", () => {
-    const sage = contented(projectImmortal(ruled, meditationStart + 2 * TICKS_PER_DAY + 1, ctx));
-    expect(derive(sage).stage).toBe("SAGE");
-    expect(line(sage)).toBe("Makoto is radiating calm.");
+  describe("a well Sage", () => {
+    const sageStart = meditationStart + 2 * TICKS_PER_DAY;
+    const sageAt = (tick: number): PetState => contented(projectImmortal(ruled, tick, ctx));
+
+    it("announces itself from the first tick", () => {
+      const sage = sageAt(sageStart);
+      expect(derive(sage).stage).toBe("SAGE");
+      expect(line(sage)).toBe("Makoto has become a Sage!");
+    });
+
+    it("still announces itself on the last tick of the first day", () => {
+      expect(line(sageAt(sageStart + SAGE_DEBUT_TICKS - 1))).toBe("Makoto has become a Sage!");
+    });
+
+    it("goes back to radiating calm once the first day is over", () => {
+      expect(line(sageAt(sageStart + SAGE_DEBUT_TICKS))).toBe("Makoto is radiating calm.");
+    });
+
+    it("lets a warning take over inside the first day", () => {
+      const sage = sageAt(sageStart + TICKS_PER_HOUR);
+      expect(line({ ...sage, needs: { ...sage.needs, hunger: SLIPPING_BELOW - 2 } })).toBe("Makoto is getting hungry.");
+      expect(line({ ...sage, sick: true, sickSinceTick: sage.tick })).toContain("Makoto just fell sick.");
+    });
   });
 });

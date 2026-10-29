@@ -1793,7 +1793,7 @@ wins:
 | 4 | any ailment | "is starving, filthy and sad" — worst first, in §2.9's order — with sickness dated last: "just fell sick" (under an hour), "has been sick for 5 hours", "since yesterday", "for 3 days" |
 | 5 | health below 25% (§2.3) | "is weak." while health is climbing back; "is dangerously weak." while it is not — an elder, a sick pet, or a critical need. Fading takes over only between 25% and 50%: an elder in that band reads "is fading." |
 | 6 | a need under 50% | the lowest one: "is getting hungry." / "is getting sleepy." / "could use a bath." / "is getting bored." |
-| 7 | well | by stage: "is small and curious." / "is full of beans." / "is growing fast." / "is doing fine." / "is taking it slow." / "is radiating calm." (a Sage) |
+| 7 | well | by stage: "is small and curious." / "is full of beans." / "is growing fast." / "is doing fine." / "is taking it slow." / "is radiating calm." (a Sage; for its first day as one, "has become a Sage!") |
 
 **The health sentence.** Rules 3 to 7 are followed by a second sentence that
 says which way health is moving and why, worded from `derive()`'s
