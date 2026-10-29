@@ -1536,6 +1536,13 @@ into `art/` and re-running `npm run atlas`. The generated module is committed
 (so the build needs no image processing), and a duplicate frame name across
 categories is a build error.
 
+A frame can carry an occluder beside it, `<name>.mask.png` (or
+`.mask@1x.png`), opaque wherever a prop stands in front of what the head wears
+(§21.9). The occluders are packed onto the same sheet, after every frame, so
+adding one never moves a frame. They are indexed by frame in `SPRITE_MASKS`. A
+mask with no frame beside it, or one that is not its frame's size, is a build
+error: it is read in its frame's own pixels.
+
 The served sheet is **content-hashed**: the packer writes
 `public/sprites.<hash>.png`, prunes stale sheets, and emits
 `SPRITE_SHEET_URL` in `atlas.generated.ts` — the only way client code may
@@ -2885,6 +2892,22 @@ pet just never looks different. Presentation-layer only:
   beard adds one colour to the pet's palette, `#ffffff`, shaded in the belly's
   `#e0e0e0` and outlined in the art's black: the lightest pet colour before it
   was the belly itself, which a beard would vanish into.
+  - **Behind props.** The beard hangs down the chest, where some frames
+    hold something in front of it: the table on `eat1-2` and
+    `unhappyEat1-2`, the cup, its steam and the paws round it on `tea1-2`,
+    the controller and the paws on `game1-3`, and the quilt, sheet and the
+    paws on them on `sleep1-2`. Each of those frames carries an occluder,
+    `art/pet/<frame>.mask.png` at the frame's own size, opaque where the prop
+    is. The packer puts it on the sheet and indexes it in `SPRITE_MASKS`, and
+    `Atlas.drawOver` erases the beard by it (`destination-out`) before the
+    beard reaches the room. So the prop stays in front and the beard's tip
+    still shows past it. Each frame's clipped beard is composed once, into its
+    own slot of one offscreen strip, so a paint allocates nothing. The slot's
+    source rectangle tells the digest (§10.1) which frame it is, the way a
+    sheet rectangle does. A frame with no mask draws the beard straight from
+    the sheet, and so does a page with no canvas to compose on, over the
+    prop rather than not at all. The brows sit above the eyes, clear of every
+    prop, and are never clipped.
 - **Meditating** (an elder, §2.8): the `meditating` animation key plays its
   own two-frame clip, `meditate1`/`meditate2`, a seated pose with the eyes
   closed and a slow breath. Those frames carry the brow and beard anchors like
@@ -3340,6 +3363,17 @@ picture being shrunk on the canvas, which turns pixel art to mush — and the
 script and `art:portrait` share one filter module, so the two pictures on
 the wall are made the same way.
 
+**A Sage's portrait.** A generation that died a Sage (§2.8) hangs wearing its
+beard. The script generates a second set from the same frame, with
+`sageBeard` composited at the frame's `beard` anchor, placed exactly as the
+room places it (`engine/placement.ts`), then put through the same filter. It
+is never hand-drawn, so it stays in step with the beard. Both sets share one
+palette, cut from their two largest pictures together, with the beard's
+`#ffffff` pinned into it on top of the 8 colours the cut finds. Unpinned, the
+beard's white fell into one box with the paper and the `#e0e0e0` belly and
+came out as neither. `FamilyWall` picks the set per slot, and the sepia fade
+applies unchanged.
+
 **Slots.** The wall is 260 pixels wide and already holds a window and a
 picture, so it has room for five ancestors, largest and most recent first,
 shrinking with distance the way memory does. The pet stands in front of the
@@ -3376,12 +3410,17 @@ memorial page. A
 generation sealed without a name reads `UNNAMED`, as the memorial has it.
 
 **Data.** `RoomView` carries `ancestors`: the sealed generations newest
-first, at most five, as `{ ordinal, name }` — read from the `generations`
+first, at most five, as `{ ordinal, name, sage }` — read from the `generations`
 collection with the rest of the room, and re-announced through the same
 `room` message when a generation is sealed (§7.2), so the new frame goes up
-on every wall the moment the gravestone does. The scene keeps them with its
-decor; the digest (§10.1) repaints the room when the list changes, like any
-other decor change.
+on every wall the moment the gravestone does. `sage` is true when the
+memorial's `finalStage` is `SAGE`. That stage is frozen at sealing, beside the
+quirks, from the same stage of death that blesses the successor's egg (§2.8).
+A generation sealed before it was recorded has none, and hangs plain. The
+scene keeps the ancestors with its decor. The digest (§10.1) repaints the room
+when the list changes, like any other decor change. Which slots hang a Sage
+is folded into it in so many words (`wallKey`), because a picture lands as a
+blit that looks the same whichever set it came from.
 
 ---
 
