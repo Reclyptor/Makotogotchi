@@ -19,6 +19,7 @@ import { snapshotPayload } from "@/server/snapshot";
 import { caretakerCookieHeader, clientIp, rateLimit, resolveCaretaker } from "@/server/http";
 import { deliverableTo, type EngineMessage, type PresenceView } from "@/server/engine/messages";
 import { purseOf } from "@/server/purse";
+import { inBackground } from "@/server/background";
 
 export const dynamic = "force-dynamic";
 
@@ -178,11 +179,14 @@ export async function GET(request: NextRequest): Promise<Response> {
         // Touch, then re-attempt a broadcast: a join or leave whose
         // broadcast lost the 2s guard race would otherwise never be
         // reflected anywhere. This bounds presence staleness at one ping.
-        void touchPresence(redis(), key("presence"), identity.caretakerId, connectionId).then(() => broadcastPresence());
+        inBackground(
+          touchPresence(redis(), key("presence"), identity.caretakerId, connectionId).then(() => broadcastPresence()),
+          "presence heartbeat",
+        );
         // The same heartbeat keeps this stream's cap slot alive. Without it
         // a long-lived stream ages out of the set and stops being counted,
         // which would quietly hand the address a free extra connection.
-        void touchStreamSlot(redis(), key(`streams:${ip}`), connectionId);
+        inBackground(touchStreamSlot(redis(), key(`streams:${ip}`), connectionId), "stream slot refresh");
       }, PING_INTERVAL_MS);
 
       // Reconciliation rides the pod's shared cycle rather than a timer of
@@ -195,8 +199,11 @@ export async function GET(request: NextRequest): Promise<Response> {
       unsubscribe?.();
       unsubscribeSnapshots?.();
       if (pingTimer) clearInterval(pingTimer);
-      void releaseStreamSlot(redis(), key(`streams:${ip}`), connectionId);
-      void dropPresence(redis(), key("presence"), identity.caretakerId, connectionId).then(() => broadcastPresence());
+      inBackground(releaseStreamSlot(redis(), key(`streams:${ip}`), connectionId), "stream slot release");
+      inBackground(
+        dropPresence(redis(), key("presence"), identity.caretakerId, connectionId).then(() => broadcastPresence()),
+        "presence leave",
+      );
     },
   });
 
