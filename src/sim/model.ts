@@ -189,6 +189,10 @@ export const sageStartTickOf = (state: PetState): number | null => {
 export const stageOf = (state: PetState, tick: number): LifeStage =>
   stageAt(state.bornAtTick, tick, sageStartTickOf(state));
 
+/** The stage the pet died in, or null while it lives. */
+export const stageAtDeath = (state: PetState): LifeStage | null =>
+  state.diedAtTick === null ? null : stageOf(state, state.diedAtTick);
+
 /** Whether the pet is in its two days of meditation at `tick` (SPEC §2.8). Derived, never stored. */
 export const meditatingAt = (state: PetState, tick: number): boolean => {
   const start = meditationStartTickOf(state);

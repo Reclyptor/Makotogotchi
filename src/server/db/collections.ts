@@ -6,6 +6,7 @@ import type { Collection, Db } from "mongodb";
 import type { CauseOfDeath, PetState } from "@/sim/model";
 import type { PetEvent } from "@/sim/events";
 import type { Quirks } from "@/sim/quirks";
+import type { LifeStage } from "@/sim/tuning";
 import { once } from "../once";
 
 export type GenerationDoc = {
@@ -36,6 +37,12 @@ export type GenerationDoc = {
      * on generations sealed before titles existed — no backfill.
      */
     titles?: { titleId: string; caretakerId: string; name: string; value: number }[];
+    /**
+     * The stage the pet died in (SPEC §22.10), frozen so the family wall can
+     * hang a Sage with its beard. Absent on generations sealed before it
+     * existed — no backfill.
+     */
+    finalStage?: LifeStage;
     /**
      * What caretakers said goodbye with during mourning (SPEC §2.10), one
      * line each, already validated to the farewell alphabet. Absent on

@@ -7,7 +7,7 @@
 // leader crash or handover mid-transition simply retries next tick.
 
 import type { Db } from "mongodb";
-import { stageOf, type Generation, type PetState } from "@/sim/model";
+import { stageAtDeath, type Generation, type PetState } from "@/sim/model";
 import { FOOD_ITEM_IDS } from "@/sim/economy";
 import { quirks } from "@/sim/quirks";
 import { INCUBATION_TICKS, MOURNING_TICKS } from "@/sim/tuning";
@@ -36,7 +36,7 @@ export class Lifecycle {
    */
   async check(generation: Generation, state: PetState): Promise<Generation | null> {
     if (state.diedAtTick !== null) {
-      await this.sealOnce(generation.id);
+      await this.sealOnce(generation.id, state);
       if (state.tick >= state.diedAtTick + MOURNING_TICKS) {
         return this.rotate(generation, state);
       }
@@ -54,12 +54,23 @@ export class Lifecycle {
   }
 
   /** Seal exactly once across restarts: the guard is the memorial field. */
-  private async sealOnce(generationId: string): Promise<void> {
+  private async sealOnce(generationId: string, final: PetState): Promise<void> {
     const doc = await generations(this.db).findOne({ _id: generationId });
     if (!doc) return;
+    const finalStage = stageAtDeath(final);
     const claimed = await generations(this.db).findOneAndUpdate(
       { _id: generationId, memorial: null, died: { $ne: null } },
-      { $set: { memorial: { sealedAt: new Date(), ranking: [], titles: [], quirks: quirks(doc) } } },
+      {
+        $set: {
+          memorial: {
+            sealedAt: new Date(),
+            ranking: [],
+            titles: [],
+            quirks: quirks(doc),
+            ...(finalStage !== null ? { finalStage } : {}),
+          },
+        },
+      },
     );
     if (!claimed) return; // already sealed, or death not yet recorded
     const ranking = await generationRanking(this.db, generationId);
@@ -92,7 +103,7 @@ export class Lifecycle {
       // The menu this egg is born with: everything the shop sells today.
       foodCatalogSize: FOOD_ITEM_IDS.length,
       // A Sage's care passes on as a gentler childhood (SPEC §2.8).
-      ...(final.diedAtTick !== null && stageOf(final, final.diedAtTick) === "SAGE" ? { sageBlessed: true as const } : {}),
+      ...(stageAtDeath(final) === "SAGE" ? { sageBlessed: true as const } : {}),
     };
     try {
       await createGeneration(this.db, generation);

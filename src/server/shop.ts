@@ -113,7 +113,7 @@ export type RoomView = {
    * wall has slots for (SPEC §22.10). Sealed generations only: a gravestone
    * goes up on the wall the moment it goes up in the room.
    */
-  ancestors: { ordinal: number; name: string }[];
+  ancestors: { ordinal: number; name: string; sage: boolean }[];
 };
 
 /** How many ancestors the home wall can hang — scene/ancestors.ts lays out exactly this many slots. */
@@ -121,9 +121,16 @@ export const FAMILY_WALL_SLOTS = 5;
 
 const ancestorsOf = async (db: Db): Promise<RoomView["ancestors"]> => {
   const sealed = await generations(db)
-    .find({ died: { $ne: null } }, { projection: { ordinal: 1, name: 1 }, sort: { ordinal: -1 }, limit: FAMILY_WALL_SLOTS })
+    .find(
+      { died: { $ne: null } },
+      { projection: { ordinal: 1, name: 1, "memorial.finalStage": 1 }, sort: { ordinal: -1 }, limit: FAMILY_WALL_SLOTS },
+    )
     .toArray();
-  return sealed.map((doc) => ({ ordinal: doc.ordinal, name: doc.name ?? "Unnamed" }));
+  return sealed.map((doc) => ({
+    ordinal: doc.ordinal,
+    name: doc.name ?? "Unnamed",
+    sage: doc.memorial?.finalStage === "SAGE",
+  }));
 };
 
 /** The style a funded item bought the room, or null if it bought something else. */

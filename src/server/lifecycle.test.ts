@@ -107,7 +107,7 @@ describe("generation lifecycle", () => {
     expect((await caretakerProfile(database, "bo"))?.generationsSurvived).toBe(1);
     // ...and the family wall learns of it at once, newest first (SPEC §22.10).
     const wall = await wallWith("Makoto");
-    expect(wall.ancestors[0]).toEqual({ ordinal: first.ordinal, name: "Makoto" });
+    expect(wall.ancestors[0]).toEqual({ ordinal: first.ordinal, name: "Makoto", sage: false });
 
     // ...then mourning ends and the next egg is laid.
     advanceTicks(MOURNING_TICKS + 30);

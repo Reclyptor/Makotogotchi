@@ -157,7 +157,7 @@ describe("the room's ancestors", () => {
     try {
       const { ancestors } = await roomState(database);
       expect(ancestors).toHaveLength(FAMILY_WALL_SLOTS);
-      expect(ancestors[0]).toEqual({ ordinal: 100 + FAMILY_WALL_SLOTS + 1, name: `Gen${100 + FAMILY_WALL_SLOTS + 1}` });
+      expect(ancestors[0]).toEqual({ ordinal: 100 + FAMILY_WALL_SLOTS + 1, name: `Gen${100 + FAMILY_WALL_SLOTS + 1}`, sage: false });
       expect(ancestors.map((a) => a.ordinal)).toEqual([...ancestors.map((a) => a.ordinal)].sort((a, b) => b - a));
       expect(ancestors.some((a) => a.name === "Alive")).toBe(false);
       expect(ancestors.find((a) => a.ordinal === 103)?.name).toBe("Unnamed");

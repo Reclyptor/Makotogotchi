@@ -13,6 +13,7 @@ import { Lifecycle } from "./engine/lifecycle";
 import { ascensionMarkers, SAGE_ASCENSION_COINS, SAGE_ASCENSION_WINDOW_TICKS, settleAscension } from "./ascension";
 import { caretakerProfile, recordContribution, wisdomCoins } from "./social";
 import { settleWantFulfillment, windowClearOfMeditation } from "./wants";
+import { roomState } from "./shop";
 import { startTestInfra, type TestInfra } from "./testsetup";
 import { genesis } from "@/sim/genesis";
 import { meditationStartTickOf, type Generation, type PetState } from "@/sim/model";
@@ -169,6 +170,37 @@ describe("the Sage's blessing", () => {
     const stored = await generations(await db()).findOne({ _id: successor.id });
     expect(stored?.sageBlessed).toBe(true);
     expect(toGeneration(stored!).sageBlessed).toBe(true);
+  });
+
+  const sealedAs = async (generation: Generation, diedAtTick: number) => {
+    await createGeneration(await db(), generation);
+    await generations(await db()).updateOne(
+      { _id: generation.id },
+      { $set: { died: { tick: diedAtTick, at: new Date(fakeNowMs), cause: "age" } } },
+    );
+    const dead: PetState = { ...ruledState(generation, diedAtTick), diedAtTick, causeOfDeath: "age" };
+    await (await lifecycleFor()).check(generation, dead);
+    return generations(await db()).findOne({ _id: generation.id });
+  };
+
+  it("freezes the stage of death into the memorial, and the wall hangs a Sage as one", async () => {
+    const sage = await sealedAs(generationNamed("gen-wall-sage", 901), SAGE_START + TICKS_PER_DAY);
+    const elder = await sealedAs(generationNamed("gen-wall-elder", 902), MEDITATION_START - TICKS_PER_DAY);
+    expect(sage?.memorial?.finalStage).toBe("SAGE");
+    expect(elder?.memorial?.finalStage).toBe("ELDER");
+    const wall = (await roomState(await db())).ancestors;
+    expect(wall.find((ancestor) => ancestor.ordinal === 901)?.sage).toBe(true);
+    expect(wall.find((ancestor) => ancestor.ordinal === 902)?.sage).toBe(false);
+  });
+
+  it("hangs a generation sealed before the stage was recorded as no Sage", async () => {
+    await createGeneration(await db(), generationNamed("gen-wall-legacy", 903));
+    await generations(await db()).updateOne(
+      { _id: "gen-wall-legacy" },
+      { $set: { died: { tick: 1, at: new Date(fakeNowMs), cause: "hunger" }, memorial: { sealedAt: new Date(fakeNowMs), ranking: [] } } },
+    );
+    const wall = (await roomState(await db())).ancestors;
+    expect(wall.find((ancestor) => ancestor.ordinal === 903)?.sage).toBe(false);
   });
 
   it("lays an ordinary egg, with no field at all, after an elder dies", async () => {
