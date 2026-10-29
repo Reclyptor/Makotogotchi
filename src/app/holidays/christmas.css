@@ -1,0 +1,159 @@
+/* ── CHRISTMAS ─────────────────────────────────────────────────────────────
+   The page in its Christmas jumper for Dec 25 (SPEC §22.11). Every rule
+   here sits under [data-holiday="christmas"], which the root carries for the
+   pet's whole day and no other, so on any other day this file is inert.
+
+   The same app, dressed up: the glass, the panels and the layout are
+   untouched. Only the tokens change colour, the headings change face, and
+   three decorations are added — holly in the panel corners, a tree by the
+   wordmark, and snow across the field. Nothing here moves the layout.
+
+   The aurora note in globals.css still binds: nothing loops forever under
+   the glass. The snow falls once and settles. */
+
+/* Tokens. `html[...]` outranks the `:root` block Tailwind emits for @theme,
+   so this wins however the two stylesheets are ordered. */
+html[data-holiday="christmas"] {
+  --color-background: #0b1a13;
+  --color-card: #122419;
+  --color-card-elevated: #183021;
+  --color-surface: #1f3b2a;
+  --color-foreground: #fbf6ea;
+  --color-muted: #b7cbb6;
+  --color-accent: #f3c550;
+  --color-accent-strong: #b9232d;
+  --color-gold: #ffd166;
+  --color-mint: #7ee08a;
+  --color-rose: #ff6b6b;
+
+  /* Gingerbread, the star, ice, holly, cranberry. Each fill reads against
+     the meter track at 5.8:1 or better, and the background colour reads
+     over every fill at 5.9:1 or better; the closest pair (gingerbread and
+     the star) are ΔE 36 apart, the rest 51 or more (contrast.mjs in the
+     session scratchpad has the numbers). */
+  --color-meter-hunger: #ff9a3c;
+  --color-meter-energy: #ffd84a;
+  --color-meter-hygiene: #8fe0ff;
+  --color-meter-joy: #7be07c;
+  --color-meter-health: #ff5c6e;
+
+  scrollbar-color: rgba(243, 197, 80, 0.35) transparent;
+}
+[data-holiday="christmas"] *::-webkit-scrollbar-thumb {
+  background: rgba(243, 197, 80, 0.35);
+}
+
+/* The aurora field, re-lit: candlelight gold top-left, a cranberry glow
+   top-right, and the pine held low. Same two layers, still held still. */
+[data-holiday="christmas"] body::before {
+  background:
+    radial-gradient(38rem 30rem at 24% 18%, rgba(255, 196, 96, 0.26), transparent 65%),
+    radial-gradient(30rem 26rem at 78% 12%, rgba(214, 48, 64, 0.24), transparent 65%),
+    radial-gradient(36rem 30rem at 72% 86%, rgba(72, 180, 110, 0.18), transparent 65%);
+}
+[data-holiday="christmas"] body::after {
+  background:
+    radial-gradient(28rem 24rem at 16% 80%, rgba(255, 110, 110, 0.12), transparent 65%),
+    radial-gradient(34rem 26rem at 55% 48%, rgba(243, 197, 80, 0.08), transparent 70%);
+}
+
+/* Snow, on two fixed layers behind the content so the near flakes and the
+   far ones fall at their own pace. They are tiled backgrounds on
+   pseudo-elements: never in the accessibility tree, never hit-testable, and
+   no element of their own to reflow. Each layer is a viewport taller than
+   the screen and slides down by that much, once, over about a minute, and
+   then rests — a finite animation, as globals.css requires, since any motion
+   under this much frosted glass is paid for by every panel above it. The
+   tile repeats, so the flakes that rest are the same drift that fell. */
+[data-holiday="christmas"]::before,
+[data-holiday="christmas"]::after {
+  content: "";
+  position: fixed;
+  inset: -100vh 0 0 0;
+  z-index: -1;
+  pointer-events: none;
+  background-repeat: repeat;
+}
+/* The near drift: a few larger flakes on a wide tile. */
+[data-holiday="christmas"]::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 220 220'%3E%3Cg fill='%23fff'%3E%3Ccircle cx='28' cy='34' r='3.2' fill-opacity='.72'/%3E%3Ccircle cx='136' cy='18' r='2.4' fill-opacity='.58'/%3E%3Ccircle cx='188' cy='96' r='3' fill-opacity='.66'/%3E%3Ccircle cx='74' cy='128' r='2.2' fill-opacity='.52'/%3E%3Ccircle cx='156' cy='172' r='3.4' fill-opacity='.7'/%3E%3Ccircle cx='24' cy='196' r='2.6' fill-opacity='.6'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 220px 220px;
+  animation: christmas-snow-near 58s linear 1 both;
+}
+/* The far drift: smaller flakes, denser, slower. */
+[data-holiday="christmas"]::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'%3E%3Cg fill='%23fff'%3E%3Ccircle cx='18' cy='12' r='1.5' fill-opacity='.45'/%3E%3Ccircle cx='96' cy='30' r='1.2' fill-opacity='.38'/%3E%3Ccircle cx='58' cy='62' r='1.7' fill-opacity='.42'/%3E%3Ccircle cx='124' cy='84' r='1.3' fill-opacity='.36'/%3E%3Ccircle cx='34' cy='104' r='1.6' fill-opacity='.44'/%3E%3Ccircle cx='86' cy='126' r='1.1' fill-opacity='.34'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 140px 140px;
+  background-position: 37px 19px;
+  animation: christmas-snow-far 84s linear 1 both;
+}
+@keyframes christmas-snow-near {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(0, 100vh, 0); }
+}
+@keyframes christmas-snow-far {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(0, 100vh, 0); }
+}
+
+/* Holly in the two top corners of every panel, and a thread of gold along
+   its top edge. The sprigs are background layers on the panel itself, under
+   the glass fill's own gradient: no pseudo-element, so the press tiles keep
+   their specular sweep; no positioning, so the pills and popovers that are
+   already absolute stay where they are; and a background is neither in the
+   accessibility tree nor in the layout. The sprig scales down with a narrow
+   panel so a pill gets a leaf, not a bush. */
+[data-holiday="christmas"] .panel {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 56'%3E%3Cg stroke='rgba(255,255,255,0.26)' stroke-width='1' stroke-linejoin='round'%3E%3Cpath d='M6 6 L15 4 L20 9 L28 10 L24 16 L26 23 L18 22 L12 27 L10 19 L4 15 L10 12 Z' fill='rgba(96,186,112,0.34)'/%3E%3Cpath d='M6 6 L4 15 L10 27 L22 36 L28 28 L30 20 L22 12 Z' fill='rgba(60,150,86,0.30)'/%3E%3C/g%3E%3Cg fill='rgba(255,92,100,0.82)' stroke='rgba(255,255,255,0.28)' stroke-width='.8'%3E%3Ccircle cx='27' cy='27' r='3.2'/%3E%3Ccircle cx='33' cy='22' r='2.8'/%3E%3Ccircle cx='32' cy='30' r='2.6'/%3E%3C/g%3E%3C/svg%3E")
+      left top / min(48px, 24%) no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 56'%3E%3Cg transform='translate(56 0) scale(-1 1)'%3E%3Cg stroke='rgba(255,255,255,0.26)' stroke-width='1' stroke-linejoin='round'%3E%3Cpath d='M6 6 L15 4 L20 9 L28 10 L24 16 L26 23 L18 22 L12 27 L10 19 L4 15 L10 12 Z' fill='rgba(96,186,112,0.34)'/%3E%3Cpath d='M6 6 L4 15 L10 27 L22 36 L28 28 L30 20 L22 12 Z' fill='rgba(60,150,86,0.30)'/%3E%3C/g%3E%3Cg fill='rgba(255,92,100,0.82)' stroke='rgba(255,255,255,0.28)' stroke-width='.8'%3E%3Ccircle cx='27' cy='27' r='3.2'/%3E%3Ccircle cx='33' cy='22' r='2.8'/%3E%3Ccircle cx='32' cy='30' r='2.6'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")
+      right top / min(48px, 24%) no-repeat,
+    linear-gradient(180deg, rgba(255, 236, 200, 0.10), rgba(255, 255, 255, 0.03));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 214, 120, 0.34),
+    inset 0 0 0 1px rgba(255, 196, 110, 0.10),
+    0 20px 44px -24px rgba(0, 0, 0, 0.8);
+}
+
+/* The display face, for the wordmark and the headings only; body text keeps
+   Atkinson. Mountains of Christmas is drawn light and a touch narrow, so
+   each heading steps up a size to land at about the width it replaces, and
+   the bold it carries is its own 700. */
+[data-holiday="christmas"] [data-wordmark],
+[data-holiday="christmas"] h1,
+[data-holiday="christmas"] h2,
+[data-holiday="christmas"] h3 {
+  font-family: var(--font-christmas), var(--font-atkinson), sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+[data-holiday="christmas"] [data-wordmark] {
+  font-size: 1.3rem;
+  line-height: 1;
+  color: var(--color-accent);
+  filter: drop-shadow(0 0 12px rgba(243, 197, 80, 0.55));
+}
+/* The tree by the title. Generated content with empty alt text, so the
+   wordmark is still read as "MAKOTOGOTCHI". */
+[data-holiday="christmas"] [data-wordmark]::before {
+  content: "🎄 " / "";
+  font-family: var(--font-atkinson), sans-serif;
+  filter: none;
+}
+[data-holiday="christmas"] h1 {
+  font-size: 2rem;
+  line-height: 1.1;
+}
+[data-holiday="christmas"] h2,
+[data-holiday="christmas"] h3 {
+  font-size: 1.25rem;
+  line-height: 1.15;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-holiday="christmas"]::before,
+  [data-holiday="christmas"]::after {
+    animation: none;
+  }
+}

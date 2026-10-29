@@ -1,0 +1,137 @@
+/* ── VALENTINE'S DAY ───────────────────────────────────────────────────────
+   The page as a midnight lounge for Feb 14 (SPEC §22.11). Every rule here
+   sits under [data-holiday="valentines"], which the root carries for the
+   pet's whole day and no other, so on any other day this file is inert.
+
+   The same app, dressed up: the glass, the panels and the layout are
+   untouched. Only the tokens change colour, the headings change face, and
+   two decorations are added — a brass spotlight that fades up once over
+   the field, and a brass hairline with a small note in the panel corners.
+   Nothing here moves the layout, and nothing rains.
+
+   The aurora note in globals.css still binds: nothing loops forever under
+   the glass. Navy, brass and one crimson; nothing pink. */
+
+/* Tokens. `html[...]` outranks the `:root` block Tailwind emits for @theme,
+   so this wins however the two stylesheets are ordered. */
+html[data-holiday="valentines"] {
+  --color-background: #0b1020;
+  --color-card: #121a30;
+  --color-card-elevated: #182240;
+  --color-surface: #1f2c50;
+  --color-foreground: #f3efe4;
+  --color-muted: #b8b4a4;
+  --color-accent: #e0b457;
+  --color-accent-strong: #c8324a;
+  --color-gold: #f0c96a;
+  --color-mint: #7fd9c0;
+  --color-rose: #e8738a;
+
+  /* Amber, brass, ice, lilac, crimson. Each fill reads against the meter
+     track at 6.1:1 or better, and the background colour reads over every
+     fill at 6.3:1 or better; the closest pair (amber and brass) are ΔE 35
+     apart, the rest 53 or more (valentines/C/contrast.mjs in the session scratchpad
+     has the numbers). */
+  --color-meter-hunger: #ff9f4a;
+  --color-meter-energy: #ffd84a;
+  --color-meter-hygiene: #7fd8ff;
+  --color-meter-joy: #c9a0ff;
+  --color-meter-health: #ff5c7a;
+
+  scrollbar-color: rgba(224, 180, 87, 0.35) transparent;
+}
+[data-holiday="valentines"] *::-webkit-scrollbar-thumb {
+  background: rgba(224, 180, 87, 0.35);
+}
+
+/* The aurora field, re-lit: a brass spotlight from the top centre, a
+   crimson stage wash low on the right, and the navy held everywhere else.
+   Same two layers, still held still. */
+[data-holiday="valentines"] body::before {
+  background:
+    radial-gradient(40rem 34rem at 50% -6%, rgba(224, 180, 87, 0.26), transparent 65%),
+    radial-gradient(30rem 26rem at 82% 92%, rgba(200, 50, 74, 0.16), transparent 65%),
+    radial-gradient(36rem 30rem at 12% 70%, rgba(44, 66, 112, 0.30), transparent 65%);
+}
+[data-holiday="valentines"] body::after {
+  background:
+    radial-gradient(28rem 24rem at 20% 20%, rgba(80, 110, 170, 0.10), transparent 65%),
+    radial-gradient(34rem 26rem at 55% 48%, rgba(224, 180, 87, 0.06), transparent 70%);
+}
+
+/* The spotlight: one soft cone from the top of the screen that fades up
+   once, over a few seconds, when the lights go down, and then holds. A
+   fixed pseudo-element behind the content: never in the accessibility
+   tree, never hit-testable, no element of its own to reflow. The second
+   pseudo-element is kept empty on purpose, so nothing else moves. */
+[data-holiday="valentines"]::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(60vw 70vh at 50% 0%, rgba(236, 204, 112, 0.14), transparent 70%);
+  animation: valentines-spotlight 4s ease-out 1 both;
+}
+@keyframes valentines-spotlight {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* A brass hairline along each panel's top edge and a small note in its
+   top-left corner, as background layers under the glass fill's own
+   gradient: no pseudo-element, so the press tiles keep their specular
+   sweep; no positioning, so the pills and popovers that are already
+   absolute stay where they are; and a background is neither in the
+   accessibility tree nor in the layout. */
+[data-holiday="valentines"] .panel {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cg fill='rgba(236,204,112,0.42)'%3E%3Cpath d='M22 8v14.5a4 4 0 1 1-2-3.46V12l8-2v8.5a4 4 0 1 1-2-3.46V6.5z'/%3E%3C/g%3E%3C/svg%3E")
+      left top / min(34px, 20%) no-repeat,
+    linear-gradient(180deg, rgba(236, 204, 112, 0.07), rgba(255, 255, 255, 0.03));
+  box-shadow:
+    inset 0 1px 0 rgba(236, 204, 112, 0.42),
+    inset 0 0 0 1px rgba(224, 180, 87, 0.10),
+    0 20px 44px -24px rgba(0, 0, 0, 0.85);
+}
+
+/* The display face, for the wordmark and the headings only; body text keeps
+   Atkinson. Abril Fatface is a heavy didone with one weight, so the
+   headings ask for 400 by name rather than let the browser embolden it a
+   second time; it runs wide, so the headings keep their sizes. */
+[data-holiday="valentines"] [data-wordmark],
+[data-holiday="valentines"] h1,
+[data-holiday="valentines"] h2,
+[data-holiday="valentines"] h3 {
+  font-family: var(--font-valentines), var(--font-atkinson), serif;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+}
+[data-holiday="valentines"] [data-wordmark] {
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--color-accent);
+  filter: drop-shadow(0 0 12px rgba(224, 180, 87, 0.5));
+}
+/* The sax by the title. Generated content with empty alt text, so the
+   wordmark is still read as "MAKOTOGOTCHI". */
+[data-holiday="valentines"] [data-wordmark]::before {
+  content: "🎷 " / "";
+  font-family: var(--font-atkinson), sans-serif;
+  filter: none;
+}
+[data-holiday="valentines"] h1 {
+  font-size: 1.8rem;
+  line-height: 1.1;
+}
+[data-holiday="valentines"] h2,
+[data-holiday="valentines"] h3 {
+  font-size: 1.15rem;
+  line-height: 1.15;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-holiday="valentines"]::before {
+    animation: none;
+  }
+}

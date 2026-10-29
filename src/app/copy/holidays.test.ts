@@ -3,7 +3,8 @@
 
 import { describe, expect, it } from "vitest";
 import { HALLOWEEN_ICONS } from "@/app/holidays/halloween";
-import { careIcon, dressFeed } from "./holidays";
+import { HOLIDAYS } from "@/sim/holidays";
+import { careIcon, dressFeed, HOLIDAY_COPY, stayingHomeLine } from "./holidays";
 
 const lines = [
   { id: 1, icon: "🌪️", care: "CLEAN" as const },
@@ -31,5 +32,24 @@ describe("a holiday's feed", () => {
   it("names the usual icon only when there is no holiday", () => {
     expect(careIcon("FEED", "🍖", null)).toBe("🍖");
     expect(careIcon("FEED", "🍖", "halloween")).toBe(HALLOWEEN_ICONS.FEED);
+  });
+});
+
+describe("every holiday's words", () => {
+  it.each(HOLIDAYS.map((holiday) => holiday.id))("%s has a caption, a feed line, an icon for every care and a colour for the chrome", (id) => {
+    const copy = HOLIDAY_COPY[id];
+    expect(copy.caption).toContain(copy.icon);
+    expect(copy.dressedUp("Makoto")).toContain("Makoto");
+    expect(Object.keys(copy.careIcons).sort()).toEqual(["CLEAN", "FEED", "LULLABY", "MEDICATE", "PET", "PLAY"]);
+    expect(copy.themeColor).toMatch(/^#[0-9a-f]{6}$/);
+    expect(stayingHomeLine(id)).toBe(`Makoto is staying home for ${copy.name}.`);
+  });
+
+  it("gives every holiday care icons of its own, apart from the everyday ones", () => {
+    const usual = ["🍖", "🎮", "🌪️", "💛", "🎵", "💊"];
+    for (const holiday of HOLIDAYS) {
+      const icons = Object.values(HOLIDAY_COPY[holiday.id].careIcons);
+      expect(icons.some((icon) => usual.includes(icon)), holiday.id).toBe(false);
+    }
   });
 });

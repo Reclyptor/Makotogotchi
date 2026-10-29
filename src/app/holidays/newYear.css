@@ -1,0 +1,162 @@
+/* ── NEW YEAR ──────────────────────────────────────────────────────────────
+   The page dressed for Jan 1 (SPEC §22.11). Every rule here sits under
+   [data-holiday="newYear"], which the root carries for the pet's whole day
+   and no other, so on any other day this file is inert.
+
+   The same app, dressed up: the glass, the panels and the layout are
+   untouched. Only the tokens change colour, the headings change face, and
+   three decorations are added — streamers and stars in the panel corners, a
+   popper by the wordmark, and confetti across the field. Nothing here moves
+   the layout.
+
+   The aurora note in globals.css still binds: nothing loops forever under
+   the glass. The confetti falls in once and settles. */
+
+/* Tokens. `html[...]` outranks the `:root` block Tailwind emits for @theme,
+   so this wins however the two stylesheets are ordered. */
+html[data-holiday="newYear"] {
+  --color-background: #070b24;
+  --color-card: #0f1640;
+  --color-card-elevated: #161e4d;
+  --color-surface: #1e2860;
+  --color-foreground: #faf5e6;
+  --color-muted: #bcc1e0;
+  --color-accent: #f5c75a;
+  --color-accent-strong: #8c5c12;
+  --color-gold: #ffd96a;
+  --color-mint: #7fe6d2;
+  --color-rose: #ff7fa0;
+
+  /* Clementine, champagne gold, ice, lilac, rose. Each fill reads against
+     the meter track at 6.2:1 or better, and the background colour reads
+     over every fill at 6.5:1 or better (contrast.mjs in the session
+     scratchpad has the numbers). */
+  --color-meter-hunger: #ff9f45;
+  --color-meter-energy: #ffd84a;
+  --color-meter-hygiene: #7fd4ff;
+  --color-meter-joy: #d99bff;
+  --color-meter-health: #ff5c7c;
+
+  scrollbar-color: rgba(245, 199, 90, 0.35) transparent;
+}
+[data-holiday="newYear"] *::-webkit-scrollbar-thumb {
+  background: rgba(245, 199, 90, 0.35);
+}
+
+/* The aurora field, re-lit: a gold glow top-left like a chandelier, the
+   midnight blue held in the middle, a champagne warmth low down. Same two
+   layers, still held still. */
+[data-holiday="newYear"] body::before {
+  background:
+    radial-gradient(38rem 30rem at 24% 16%, rgba(245, 199, 90, 0.26), transparent 65%),
+    radial-gradient(30rem 26rem at 78% 12%, rgba(72, 96, 230, 0.30), transparent 65%),
+    radial-gradient(36rem 30rem at 72% 86%, rgba(255, 127, 160, 0.14), transparent 65%);
+}
+[data-holiday="newYear"] body::after {
+  background:
+    radial-gradient(28rem 24rem at 16% 80%, rgba(127, 212, 255, 0.14), transparent 65%),
+    radial-gradient(34rem 26rem at 55% 48%, rgba(245, 199, 90, 0.08), transparent 70%);
+}
+
+/* Confetti, on two fixed layers behind the content. They are backgrounds on
+   pseudo-elements: never in the accessibility tree, never hit-testable, and
+   no element of their own to reflow. Each layer falls in once over about
+   half a minute and then hangs where it landed — a finite animation, as
+   globals.css requires, since any motion under this much frosted glass is
+   paid for by every panel above it. The near layer is bigger and brighter;
+   the far layer smaller and sparser, so the field has depth. */
+[data-holiday="newYear"]::before,
+[data-holiday="newYear"]::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Crect x='10' y='8' width='10' height='5' rx='1' transform='rotate(-24 15 10)' fill='%23f5c75a'/%3E%3Crect x='46' y='22' width='9' height='4' rx='1' transform='rotate(31 50 24)' fill='%237fd4ff'/%3E%3Crect x='84' y='6' width='10' height='5' rx='1' transform='rotate(12 89 8)' fill='%23ff7fa0'/%3E%3Crect x='104' y='40' width='8' height='4' rx='1' transform='rotate(-40 108 42)' fill='%23faf5e6'/%3E%3Crect x='22' y='52' width='10' height='5' rx='1' transform='rotate(50 27 54)' fill='%23faf5e6'/%3E%3Crect x='64' y='60' width='9' height='4' rx='1' transform='rotate(-16 68 62)' fill='%23f5c75a'/%3E%3Crect x='6' y='90' width='9' height='4' rx='1' transform='rotate(18 10 92)' fill='%237fd4ff'/%3E%3Crect x='44' y='98' width='10' height='5' rx='1' transform='rotate(-34 49 100)' fill='%23ff7fa0'/%3E%3Crect x='90' y='84' width='10' height='5' rx='1' transform='rotate(42 95 86)' fill='%23f5c75a'/%3E%3Crect x='112' y='108' width='8' height='4' rx='1' transform='rotate(-8 116 110)' fill='%23faf5e6'/%3E%3Cpath d='M74 38l1.6 3.2 3.4.5-2.5 2.4.6 3.4-3.1-1.6-3.1 1.6.6-3.4-2.5-2.4 3.4-.5z' fill='%23ffd96a'/%3E%3Cpath d='M32 76l1.3 2.6 2.8.4-2 2 .5 2.8-2.6-1.3-2.6 1.3.5-2.8-2-2 2.8-.4z' fill='%23ffd96a'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+}
+[data-holiday="newYear"]::before {
+  background-size: 200px 200px;
+  background-position: 18px 10px;
+  opacity: 0.36;
+  animation: new-year-confetti-near 32s cubic-bezier(0.3, 0.1, 0.25, 1) 1 both;
+}
+[data-holiday="newYear"]::after {
+  background-size: 160px 160px;
+  background-position: 70px 54px;
+  opacity: 0.22;
+  animation: new-year-confetti-far 38s cubic-bezier(0.3, 0.1, 0.25, 1) 1 both;
+}
+@keyframes new-year-confetti-near {
+  0% { transform: translateY(-14vh) rotate(-2deg); opacity: 0; }
+  15% { opacity: 0.36; }
+  100% { transform: translateY(0) rotate(0deg); opacity: 0.36; }
+}
+@keyframes new-year-confetti-far {
+  0% { transform: translateY(-9vh) rotate(1.5deg); opacity: 0; }
+  15% { opacity: 0.22; }
+  100% { transform: translateY(0) rotate(0deg); opacity: 0.22; }
+}
+
+/* A streamer and a scatter of stars in the two top corners of every panel.
+   They are background layers on the panel itself, under the glass fill's
+   own gradient: no pseudo-element, so the press tiles keep their specular
+   sweep; no positioning, so the pills and popovers that are already
+   absolute stay where they are; and a background is neither in the
+   accessibility tree nor in the layout. The corner scales down with a
+   narrow panel so a pill gets a curl, not a garland. The fill warms to
+   champagne and the lit edge goes gold, so the glass itself joins in. */
+[data-holiday="newYear"] .panel {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 56'%3E%3Cpath d='M2 0c2 7-2 10 1 16s-2 10 1 16-2 9 1 15' fill='none' stroke='%23f5c75a' stroke-opacity='.55' stroke-width='1.6' stroke-linecap='round'/%3E%3Cpath d='M12 0c3 5-1 8 2 13s-1 8 2 13' fill='none' stroke='%23faf5e6' stroke-opacity='.4' stroke-width='1.4' stroke-linecap='round'/%3E%3Cpath d='M30 8l1.4 2.9 3.2.5-2.3 2.2.5 3.2-2.8-1.5-2.8 1.5.5-3.2-2.3-2.2 3.2-.5z' fill='%23ffd96a' fill-opacity='.7'/%3E%3Cpath d='M44 3l.9 1.8 2 .3-1.4 1.4.3 2-1.8-.9-1.8.9.3-2-1.4-1.4 2-.3z' fill='%237fd4ff' fill-opacity='.6'/%3E%3Cpath d='M22 24l.9 1.8 2 .3-1.4 1.4.3 2-1.8-.9-1.8.9.3-2-1.4-1.4 2-.3z' fill='%23faf5e6' fill-opacity='.5'/%3E%3C/svg%3E")
+      left top / min(56px, 30%) no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 56'%3E%3Cg transform='translate(56 0) scale(-1 1)'%3E%3Cpath d='M2 0c2 7-2 10 1 16s-2 10 1 16-2 9 1 15' fill='none' stroke='%23f5c75a' stroke-opacity='.55' stroke-width='1.6' stroke-linecap='round'/%3E%3Cpath d='M12 0c3 5-1 8 2 13s-1 8 2 13' fill='none' stroke='%23faf5e6' stroke-opacity='.4' stroke-width='1.4' stroke-linecap='round'/%3E%3Cpath d='M30 8l1.4 2.9 3.2.5-2.3 2.2.5 3.2-2.8-1.5-2.8 1.5.5-3.2-2.3-2.2 3.2-.5z' fill='%23ffd96a' fill-opacity='.7'/%3E%3Cpath d='M44 3l.9 1.8 2 .3-1.4 1.4.3 2-1.8-.9-1.8.9.3-2-1.4-1.4 2-.3z' fill='%237fd4ff' fill-opacity='.6'/%3E%3Cpath d='M22 24l.9 1.8 2 .3-1.4 1.4.3 2-1.8-.9-1.8.9.3-2-1.4-1.4 2-.3z' fill='%23faf5e6' fill-opacity='.5'/%3E%3C/g%3E%3C/svg%3E")
+      right top / min(56px, 30%) no-repeat,
+    linear-gradient(180deg, rgba(255, 236, 190, 0.11), rgba(255, 255, 255, 0.03));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 226, 150, 0.32),
+    inset 0 0 0 1px rgba(245, 199, 90, 0.12),
+    0 20px 44px -24px rgba(0, 0, 0, 0.8);
+}
+
+/* The display face, for the wordmark and the headings only; body text keeps
+   Atkinson. Limelight ships one weight, so the bold the headings ask for is
+   dropped rather than synthesised. It runs wider than Press Start, so the
+   wordmark steps down a touch to land at about the width it replaces. */
+[data-holiday="newYear"] [data-wordmark],
+[data-holiday="newYear"] h1,
+[data-holiday="newYear"] h2,
+[data-holiday="newYear"] h3 {
+  font-family: var(--font-new-year), var(--font-atkinson), sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+[data-holiday="newYear"] [data-wordmark] {
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--color-accent);
+  filter: drop-shadow(0 0 12px rgba(245, 199, 90, 0.55));
+}
+/* The popper by the title. Generated content with empty alt text, so the
+   wordmark is still read as "MAKOTOGOTCHI". */
+[data-holiday="newYear"] [data-wordmark]::before {
+  content: "🎉 " / "";
+  font-family: var(--font-atkinson), sans-serif;
+  filter: none;
+}
+[data-holiday="newYear"] h1 {
+  font-size: 1.6rem;
+  line-height: 1.15;
+}
+[data-holiday="newYear"] h2,
+[data-holiday="newYear"] h3 {
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-holiday="newYear"]::before,
+  [data-holiday="newYear"]::after {
+    animation: none;
+  }
+}

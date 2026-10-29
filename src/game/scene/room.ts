@@ -57,6 +57,8 @@ export type AtmosphereInput = {
    * the same reason as the venue: the caption reads it too.
    */
   holidayId: HolidayId | null;
+  /** New Year's Eve's fireworks are lighting the window (`fireworksAt`). */
+  fireworks: boolean;
 };
 
 const ALERT_CONDITION: Record<DerivedState["alert"], Condition> = {
@@ -210,6 +212,7 @@ export class Room {
     venueId: "home",
     themeId: "cozy",
     holidayId: null,
+    fireworks: false,
     segment: "midday",
     next: "midday",
     blend: 0,
@@ -267,6 +270,7 @@ export class Room {
       venueId: input.venueId,
       themeId: input.themeId ?? "cozy",
       holidayId: input.holidayId,
+      fireworks: input.fireworks,
       segment: moment.segment,
       next: moment.next,
       blend: moment.blend,

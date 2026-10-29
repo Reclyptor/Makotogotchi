@@ -3,7 +3,11 @@
 
 import type { HolidayId } from "@/sim/holidays";
 import type { CareAction } from "@/sim/tuning";
+import { CHRISTMAS_ICONS } from "@/app/holidays/christmas";
 import { HALLOWEEN_ICONS } from "@/app/holidays/halloween";
+import { NEW_YEAR_ICONS } from "@/app/holidays/newYear";
+import { THANKSGIVING_ICONS } from "@/app/holidays/thanksgiving";
+import { VALENTINES_ICONS } from "@/app/holidays/valentines";
 
 type HolidayCopy = {
   name: string;
@@ -26,6 +30,38 @@ export const HOLIDAY_COPY: Record<HolidayId, HolidayCopy> = {
     caption: "🎃 Happy Halloween!",
     careIcons: HALLOWEEN_ICONS,
     dressedUp: (petName) => `${petName} is dressed up as a wizard for Halloween!`,
+  },
+  thanksgiving: {
+    name: "Thanksgiving",
+    themeColor: "#1a0e0a",
+    icon: "🦃",
+    caption: "🦃 Happy Thanksgiving!",
+    careIcons: THANKSGIVING_ICONS,
+    dressedUp: (petName) => `${petName} is dressed up as a pilgrim for Thanksgiving!`,
+  },
+  christmas: {
+    name: "Christmas",
+    themeColor: "#0b1a13",
+    icon: "🎄",
+    caption: "🎄 Merry Christmas!",
+    careIcons: CHRISTMAS_ICONS,
+    dressedUp: (petName) => `${petName} is wearing a Santa suit for Christmas!`,
+  },
+  newYear: {
+    name: "New Year's Day",
+    themeColor: "#070b24",
+    icon: "🎆",
+    caption: "🎆 Happy New Year!",
+    careIcons: NEW_YEAR_ICONS,
+    dressedUp: (petName) => `${petName} is dressed up in a tux for the New Year!`,
+  },
+  valentines: {
+    name: "Valentine's Day",
+    themeColor: "#0b1020",
+    icon: "🌹",
+    caption: "🌹 Happy Valentine's Day!",
+    careIcons: VALENTINES_ICONS,
+    dressedUp: (petName) => `${petName} is dressed up as a crooner for Valentine's Day!`,
   },
 };
 

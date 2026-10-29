@@ -26,6 +26,10 @@ export type HolidayScene = {
   props: readonly HolidayProp[];
   /** `staff` replaces a Sage's cane at the same anchor (SPEC §21.9). */
   costume: { hat: FrameName; robe: Garment; staff?: FrameName };
-  /** Night sky touches. */
-  window: { bats: boolean; moon: RGB | null };
+  /**
+   * Night sky touches. `fireworks` is the palette of the bursts that light the
+   * window around midnight on New Year's Eve (`fireworksAt`), the first colour
+   * being the one a held burst under reduced motion takes.
+   */
+  window: { bats: boolean; moon: RGB | null; fireworks?: readonly RGB[] };
 };

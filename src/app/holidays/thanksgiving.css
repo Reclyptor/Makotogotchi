@@ -1,0 +1,168 @@
+/* ── THANKSGIVING ──────────────────────────────────────────────────────────
+   The page laid for the fourth Thursday of November (SPEC §22.11). Every
+   rule here sits under [data-holiday="thanksgiving"], which the root carries
+   for the pet's whole day and no other, so on any other day this file is
+   inert.
+
+   The same app, dressed for dinner: the glass, the panels and the layout are
+   untouched. Only the tokens change colour, the headings change face, and
+   three decorations are added — a sprig of leaves in the panel corners, a
+   turkey by the wordmark, and leaves drifting down the field. Nothing here
+   moves the layout.
+
+   The aurora note in globals.css still binds: nothing loops forever under
+   the glass. The leaves fall once and settle. */
+
+/* Tokens. `html[...]` outranks the `:root` block Tailwind emits for @theme,
+   so this wins however the two stylesheets are ordered. */
+html[data-holiday="thanksgiving"] {
+  --color-background: #1a0e0a;
+  --color-card: #271510;
+  --color-card-elevated: #321c14;
+  --color-surface: #3f2419;
+  --color-foreground: #fdf3e3;
+  --color-muted: #d9bc9c;
+  --color-accent: #f6a93d;
+  --color-accent-strong: #a3440f;
+  --color-gold: #ffcf4f;
+  --color-mint: #a3d96c;
+  --color-rose: #ff7c6a;
+
+  /* Pumpkin, corn, sage, grape, cranberry. Each fill reads against the
+     meter track at 6.1:1 or better, and the background colour reads over
+     every fill at 6.4:1 or better; the closest pair (pumpkin and corn) are
+     ΔE 37 apart (contrast.mjs in the session scratchpad has the numbers). */
+  --color-meter-hunger: #ff9838;
+  --color-meter-energy: #ffd94a;
+  --color-meter-hygiene: #a8e07a;
+  --color-meter-joy: #d9a3ff;
+  --color-meter-health: #ff5f6e;
+
+  scrollbar-color: rgba(246, 169, 61, 0.35) transparent;
+}
+[data-holiday="thanksgiving"] *::-webkit-scrollbar-thumb {
+  background: rgba(246, 169, 61, 0.35);
+}
+
+/* The aurora field, re-lit: amber from the top-left like a window at
+   dinner, cranberry at the top-right, and a sage green low down. Same two
+   layers, still held still. */
+[data-holiday="thanksgiving"] body::before {
+  background:
+    radial-gradient(38rem 30rem at 24% 18%, rgba(246, 150, 40, 0.28), transparent 65%),
+    radial-gradient(30rem 26rem at 78% 12%, rgba(178, 38, 54, 0.26), transparent 65%),
+    radial-gradient(36rem 30rem at 72% 86%, rgba(120, 160, 60, 0.14), transparent 65%);
+}
+[data-holiday="thanksgiving"] body::after {
+  background:
+    radial-gradient(28rem 24rem at 16% 80%, rgba(196, 52, 40, 0.14), transparent 65%),
+    radial-gradient(34rem 26rem at 55% 48%, rgba(246, 169, 61, 0.10), transparent 70%);
+}
+
+/* Leaves, on two fixed layers behind the content so each handful takes its
+   own path down. They are backgrounds on pseudo-elements: never in the
+   accessibility tree, never hit-testable, and no element of their own to
+   reflow. Each layer drifts down once over about forty seconds and then
+   lies where it fell — a finite animation, as globals.css requires, since
+   any motion under this much frosted glass is paid for by every panel
+   above it. */
+[data-holiday="thanksgiving"]::before,
+[data-holiday="thanksgiving"]::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-repeat: no-repeat;
+}
+/* Where they settle: the near handful in the header band, which is open on
+   a phone, and the far pair in the margins a wide screen has — a leaf
+   behind a frosted panel is blurred away. The near layer is amber, the far
+   one red, so the two read as different leaves rather than one blurred. */
+[data-holiday="thanksgiving"]::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2l2.4 5.4 5.6-1.4-3 4.8 5 2.6-5.6 1.6 1.2 5.8L12 17.6l-5.6 3.2 1.2-5.8L2 13.4l5-2.6-3-4.8 5.6 1.4Z' fill='%23f0a040' fill-opacity='.5'/%3E%3C/svg%3E");
+  background-position: 47% 2%, 6% 9%, 66% 7%;
+  background-size: 30px 30px, 22px 22px, 18px 18px;
+  animation: thanksgiving-leaves-near 42s cubic-bezier(0.45, 0.05, 0.3, 1) 1 both;
+}
+[data-holiday="thanksgiving"]::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2l2.4 5.4 5.6-1.4-3 4.8 5 2.6-5.6 1.6 1.2 5.8L12 17.6l-5.6 3.2 1.2-5.8L2 13.4l5-2.6-3-4.8 5.6 1.4Z' fill='%23d84a34' fill-opacity='.5'/%3E%3C/svg%3E");
+  background-position: 8% 46%, 93% 66%;
+  background-size: 22px 22px, 26px 26px;
+  animation: thanksgiving-leaves-far 48s cubic-bezier(0.4, 0.05, 0.35, 1) 1 both;
+}
+@keyframes thanksgiving-leaves-near {
+  0% { transform: translate(6vw, -16vh) rotate(-40deg); opacity: 0; }
+  12% { opacity: 1; }
+  45% { transform: translate(-3vw, -5vh) rotate(25deg); }
+  100% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+}
+@keyframes thanksgiving-leaves-far {
+  0% { transform: translate(-5vw, -14vh) rotate(35deg); opacity: 0; }
+  12% { opacity: 1; }
+  50% { transform: translate(3vw, -4vh) rotate(-20deg); }
+  100% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+}
+
+/* A sprig of leaves in the two top corners of every panel. They are
+   background layers on the panel itself, under the glass fill's own
+   gradient: no pseudo-element, so the press tiles keep their specular
+   sweep; no positioning, so the pills and popovers that are already
+   absolute stay where they are; and a background is neither in the
+   accessibility tree nor in the layout. The sprig scales down with a narrow
+   panel so a pill gets a leaf, not a bough. */
+[data-holiday="thanksgiving"] .panel {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 56'%3E%3Cg fill='none' stroke='rgba(255,224,176,0.36)' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M0 0C13 9 23 21 29 36'/%3E%3Cpath d='M8 6c6-2 11 1 13 7-6 2-11-1-13-7Z'/%3E%3Cpath d='M8 6l13 7'/%3E%3Cpath d='M16 16c7-1 11 3 12 9-7 1-11-3-12-9Z'/%3E%3Cpath d='M16 16l12 9'/%3E%3Cpath d='M23 27c6 0 10 4 10 10-6 0-10-4-10-10Z'/%3E%3Cpath d='M23 27l10 10'/%3E%3C/g%3E%3C/svg%3E")
+      left top / min(56px, 30%) no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 56'%3E%3Cg fill='none' stroke='rgba(255,224,176,0.36)' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round' transform='translate(56 0) scale(-1 1)'%3E%3Cpath d='M0 0C13 9 23 21 29 36'/%3E%3Cpath d='M8 6c6-2 11 1 13 7-6 2-11-1-13-7Z'/%3E%3Cpath d='M8 6l13 7'/%3E%3Cpath d='M16 16c7-1 11 3 12 9-7 1-11-3-12-9Z'/%3E%3Cpath d='M16 16l12 9'/%3E%3Cpath d='M23 27c6 0 10 4 10 10-6 0-10-4-10-10Z'/%3E%3Cpath d='M23 27l10 10'/%3E%3C/g%3E%3C/svg%3E")
+      right top / min(56px, 30%) no-repeat,
+    linear-gradient(180deg, rgba(255, 214, 160, 0.11), rgba(255, 255, 255, 0.03));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 214, 160, 0.30),
+    inset 0 0 0 1px rgba(246, 169, 61, 0.12),
+    0 20px 44px -24px rgba(0, 0, 0, 0.8);
+}
+
+/* The display face, for the wordmark and the headings only; body text keeps
+   Atkinson. Alfa Slab One ships one weight, so the bold the headings ask
+   for is dropped rather than synthesised. It is a wood-type slab, wider
+   than Creepster, so the wordmark steps up a little less than Halloween's
+   does to land at about the width Press Start had. */
+[data-holiday="thanksgiving"] [data-wordmark],
+[data-holiday="thanksgiving"] h1,
+[data-holiday="thanksgiving"] h2,
+[data-holiday="thanksgiving"] h3 {
+  font-family: var(--font-thanksgiving), var(--font-atkinson), serif;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+[data-holiday="thanksgiving"] [data-wordmark] {
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--color-accent);
+  filter: drop-shadow(0 0 12px rgba(246, 169, 61, 0.55));
+}
+/* The turkey by the title. Generated content with empty alt text, so the
+   wordmark is still read as "MAKOTOGOTCHI". */
+[data-holiday="thanksgiving"] [data-wordmark]::before {
+  content: "🦃 " / "";
+  font-family: var(--font-atkinson), sans-serif;
+  filter: none;
+}
+[data-holiday="thanksgiving"] h1 {
+  font-size: 1.6rem;
+  line-height: 1.15;
+}
+[data-holiday="thanksgiving"] h2,
+[data-holiday="thanksgiving"] h3 {
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-holiday="thanksgiving"]::before,
+  [data-holiday="thanksgiving"]::after {
+    animation: none;
+  }
+}

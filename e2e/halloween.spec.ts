@@ -2,50 +2,20 @@
 // Oct 31 in the pet's zone, which is all it takes: the holiday is read off the
 // pet's calendar day, so no server state is involved.
 //
-// The pet's zone is not a constant here. start-stack.mjs pins it to whichever
-// Etc/GMT zone makes "now" midday, so it moves with the hour CI runs at, and an
-// instant written for America/Chicago lands on another day in it. The tests
-// ask the server for its zone and build their instants in that.
+// The pet's zone is not a constant here; see holiday-clock.ts.
 //
 // What the DOM can say is asserted here: the caption and the feed line. The
 // room itself is a canvas, so the costume and the missing decor are for a
 // human to look at — set E2E_SCREENSHOT_DIR to keep the screenshots there.
 
-import { expect, test, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { instantIn, petZone } from "./holiday-clock";
 
 const YEAR = 2026;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** The pet's zone, as the server announces it to every client. */
-const petZone = async (request: APIRequestContext): Promise<string> => {
-  const response = await request.get("/api/state");
-  return ((await response.json()) as { timeZone: string }).timeZone;
-};
-
-/** What the wall clock in `zone` reads at an instant, as if it were UTC. */
-const wallClockMs = (zone: string, instantMs: number): number => {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: zone,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).formatToParts(instantMs);
-  const field = (type: Intl.DateTimeFormatPartTypes): number => Number(parts.find((part) => part.type === type)?.value);
-  return Date.UTC(field("year"), field("month") - 1, field("day"), field("hour"), field("minute"));
-};
-
-/** The instant at which the wall clock in `zone` reads Oct 31, `hour`:`minute`. */
-const halloweenAt = (zone: string, hour: number, minute = 0): Date => {
-  const wanted = Date.UTC(YEAR, 9, 31, hour, minute);
-  // The zone's offset at the wanted wall time is the gap between the two
-  // readings; one correction lands exactly, two covers a DST change.
-  let instant = wanted;
-  for (let pass = 0; pass < 2; pass++) instant += wanted - wallClockMs(zone, instant);
-  return new Date(instant);
-};
+/** The instant at which the pet's wall clock reads Oct 31, `hour`:`minute`. */
+const halloweenAt = (zone: string, hour: number, minute = 0): Date => instantIn(zone, YEAR, 10, 31, hour, minute);
 
 // The atlas decodes after first paint and nothing in the DOM says when.
 const ATLAS_SETTLE_MS = 2000;

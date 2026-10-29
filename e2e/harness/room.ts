@@ -7,12 +7,13 @@ import { Room, ROOM_HEIGHT, ROOM_WIDTH, stageScale } from "@/game/scene/room";
 import { SPRITE_SHEET_URL, type FrameName } from "@/game/atlas.generated";
 import { derive } from "@/sim/derive";
 import { hatchedState, projectImmortal, testCtx } from "@/sim/testkit";
+import { type HolidayId } from "@/sim/holidays";
 import { TICKS_PER_DAY, type LifeStage } from "@/sim/tuning";
 
 export type RenderOptions = {
   stage: LifeStage;
   frame: FrameName;
-  holidayId: "halloween" | null;
+  holidayId: HolidayId | null;
   /** Pet-clock hour, so the room can be drawn in daylight or dark. */
   hour: number;
 };
@@ -55,6 +56,7 @@ const renderRoom = async (options: RenderOptions): Promise<Painted> => {
     themeId: null,
     venueId: "home",
     holidayId: options.holidayId,
+    fireworks: false,
   });
   room.syncDerived({ ...derive(state), stage: options.stage }, false, 0);
   room.invalidate();

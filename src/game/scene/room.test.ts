@@ -204,7 +204,7 @@ const contentedRoom = (days = 1) => {
     sick: false,
     asleep: false,
   };
-  room.syncAtmosphere({ hour: 13, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, venueId: "home", holidayId: null });
+  room.syncAtmosphere({ hour: 13, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, venueId: "home", holidayId: null, fireworks: false });
   return { room, state: contented, derived: derive(contented) };
 };
 
@@ -700,7 +700,7 @@ describe("a hat on the head", () => {
   });
 
   const onHoliday = (room: Room): void =>
-    room.syncAtmosphere({ hour: 13, minute: 0, month: 10, dayIndex: 1, seed: 1, themeId: null, venueId: "home", holidayId: "halloween" });
+    room.syncAtmosphere({ hour: 13, minute: 0, month: 10, dayIndex: 1, seed: 1, themeId: null, venueId: "home", holidayId: "halloween", fireworks: false });
   const drawnFrame = (recorder: ReturnType<typeof recordingContext>, frame: FrameName) =>
     recorder.drawn.findIndex(
       (entry) => entry.x1 - entry.x0 === SPRITE_FRAMES[frame].w && Math.abs(entry.y1 - entry.y0) === SPRITE_FRAMES[frame].h,
@@ -921,7 +921,7 @@ describe("the family wall", () => {
     const { room, derived } = contentedRoom();
     room.decor = { decor: [], activeCosmetic: null, ancestors };
     room.syncDerived(derived, false, 0);
-    room.syncAtmosphere({ hour: 13, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, venueId: "meadow", holidayId: null });
+    room.syncAtmosphere({ hour: 13, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, venueId: "meadow", holidayId: null, fireworks: false });
     const recorder = recordingContext();
     room.render(recorder.ctx, 1000);
     expect(recorder.blits).toEqual([]);
@@ -933,7 +933,7 @@ describe("the family wall", () => {
 describe("a holiday room", () => {
   const holidayRoom = () => {
     const { room, derived } = contentedRoom(10);
-    room.syncAtmosphere({ hour: 13, minute: 0, month: 10, dayIndex: 1, seed: 1, themeId: null, venueId: "home", holidayId: "halloween" });
+    room.syncAtmosphere({ hour: 13, minute: 0, month: 10, dayIndex: 1, seed: 1, themeId: null, venueId: "home", holidayId: "halloween", fireworks: false });
     room.decor = { decor: ["lamp", "plant", "kotatsu"], activeCosmetic: null, ancestors: [{ ordinal: 4, name: "Makoto", sage: false }] };
     room.syncDerived(derived, false, 0);
     return room;
@@ -954,7 +954,7 @@ describe("a holiday room", () => {
 
   it("brings the decor back the day after", () => {
     const room = holidayRoom();
-    room.syncAtmosphere({ hour: 13, minute: 0, month: 11, dayIndex: 2, seed: 1, themeId: null, venueId: "home", holidayId: null });
+    room.syncAtmosphere({ hour: 13, minute: 0, month: 11, dayIndex: 2, seed: 1, themeId: null, venueId: "home", holidayId: null, fireworks: false });
     const recorder = recordingContext();
     room.render(recorder.ctx, 1000);
     expect(hasLampPole(recorder)).toBe(true);
@@ -1016,7 +1016,7 @@ describe("a holiday room", () => {
     const recorder = recordingContext();
     room.syncDerived(derived, false, 0);
     room.render(recorder.ctx, 1000);
-    room.syncAtmosphere({ hour: 13, minute: 0, month: 10, dayIndex: 1, seed: 1, themeId: null, venueId: "home", holidayId: "halloween" });
+    room.syncAtmosphere({ hour: 13, minute: 0, month: 10, dayIndex: 1, seed: 1, themeId: null, venueId: "home", holidayId: "halloween", fireworks: false });
     const before = recorder.calls();
     room.render(recorder.ctx, 1000);
     expect(recorder.calls()).toBeGreaterThan(before);
@@ -1141,7 +1141,7 @@ describe("skipping frames that would paint the same pixels", () => {
     const recorder = recordingContext();
     room.syncDerived(derived, false, 0);
     room.render(recorder.ctx, 1000);
-    room.syncAtmosphere({ hour: 2, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, venueId: "home", holidayId: null });
+    room.syncAtmosphere({ hour: 2, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, venueId: "home", holidayId: null, fireworks: false });
     expect(paintedCalls(recorder, () => room.render(recorder.ctx, 1000))).toBeGreaterThan(0);
   });
 

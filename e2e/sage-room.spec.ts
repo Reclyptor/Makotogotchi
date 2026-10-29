@@ -14,9 +14,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import type { FrameName } from "@/game/atlas.generated";
+import { HOLIDAYS, type HolidayId } from "@/sim/holidays";
 import { cellEdge, type GarmentRegion } from "@/game/scene/garment";
 import { GARMENT_REGIONS } from "@/game/scene/garment.generated";
 import { PET_Y } from "@/game/scene/auraTypes";
+import { holidayScene } from "@/game/scene/holidays";
 import { HEAD_ANCHORS } from "@/game/scene/head";
 import { SPRITE_FRAMES, SPRITE_SHEET_URL } from "@/game/atlas.generated";
 
@@ -28,10 +30,12 @@ const HARNESS = path.resolve(import.meta.dirname, "harness/room.ts");
 /** The side poses a Sage walks and stands in: the ones whose moustache reaches the body's edge. */
 const SIDE_POSES: readonly FrameName[] = ["idleSide1", "walk1", "walk2", "walk3", "walk4"];
 const MARGIN_CELLS = 2;
+/** The Sage's own cloak's cloth, to tell the coat from the fur, the floor and a holiday's costume in the crops. */
+const CLOAK_RED = [176, 44, 36];
 const DAYTIME = 13;
 
 type Painted = { width: number; height: number; pixels: number[]; scale: number; petX: number };
-type RenderOptions = { stage: "SAGE" | "ELDER"; frame: FrameName; holidayId: "halloween" | null; hour: number };
+type RenderOptions = { stage: "SAGE" | "ELDER"; frame: FrameName; holidayId: HolidayId | null; hour: number };
 
 let bundle = "";
 test.beforeAll(async () => {
@@ -139,21 +143,34 @@ const keep = async (page: Page, testInfo: TestInfo, name: string, frame: FrameNa
 test.describe("a Sage in costume, in the real room", () => {
   test.use({ deviceScaleFactor: 8 });
 
-  for (const frame of SIDE_POSES) {
-    test(`keeps its moustache off the cloth's edge on ${frame}`, async ({ page }, testInfo) => {
+  for (const { id } of HOLIDAYS) for (const frame of SIDE_POSES) {
+    test(`keeps its moustache off the ${id} costume's edge on ${frame}`, async ({ page }, testInfo) => {
       await openHarness(page);
       const region = GARMENT_REGIONS[frame]!;
-      const options = { frame, holidayId: "halloween", hour: DAYTIME } as const;
+      const options = { frame, holidayId: id, hour: DAYTIME } as const;
 
       const sage = await paint(page, { ...options, stage: "SAGE" });
       const elder = await paint(page, { ...options, stage: "ELDER" });
-      const beard = withoutStick(differing(sage, elder, frame), frame, "wizardStaff");
+      const beard = withoutStick(differing(sage, elder, frame), frame, holidayScene(id).costume.staff!);
       expect(beard.length, "the Sage's beard is painted").toBeGreaterThan(50);
       expect(violations(region, beard)).toEqual([]);
 
+      // The day's costume replaces the Sage's own cloak: none of its red shows under it.
+      const frameRect = SPRITE_FRAMES[frame];
+      const left = Math.round(sage.petX - frameRect.w / 2);
+      const top = Math.round(PET_Y - frameRect.h);
+      let cloak = 0;
+      for (let y = 0; y < frameRect.h; y++) {
+        for (let x = 0; x < frameRect.w; x++) {
+          const i = ((top + y) * sage.width + left + x) * 4;
+          if (CLOAK_RED.every((channel, c) => sage.pixels[i + c] === channel)) cloak++;
+        }
+      }
+      expect(cloak, "pixels of the Sage's own cloak under the costume").toBe(0);
+
       if (frame === "idleSide1") {
         await paint(page, { ...options, stage: "SAGE" });
-        await keep(page, testInfo, "live-sage-8x.png", frame);
+        await keep(page, testInfo, id === "halloween" ? "live-sage-8x.png" : `${id}-sage-8x.png`, frame);
       }
     });
   }
@@ -161,9 +178,6 @@ test.describe("a Sage in costume, in the real room", () => {
 
 test.describe("a Sage in its own cloak, in the real room", () => {
   test.use({ deviceScaleFactor: 8 });
-
-  // The cloak's cloth, to tell the coat from the fur and the floor in the crops.
-  const CLOAK_RED = [176, 44, 36];
 
   for (const frame of ["idleSide1", "walk1", "meditate1"] as const) {
     test(`wears the cloak on ${frame}`, async ({ page }, testInfo) => {
