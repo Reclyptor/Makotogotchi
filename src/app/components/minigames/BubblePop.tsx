@@ -98,7 +98,7 @@ export default function BubblePop({ sheet, reportScore, finish }: GameProps) {
       ctx.fillStyle = "#1d1825";
       ctx.fillRect(0, 0, GAME_W, GAME_H);
       const bathPose: FrameName = (["dustbath1", "dustbath2", "dustbath3"] as const)[Math.floor(elapsed / 450) % 3]!;
-      drawFrameAnchored(ctx, sheet, bathPose, 36, GAME_H - 2, 46);
+      drawFrameAnchored(ctx, sheet, bathPose, GAME_W / 2, GAME_H - 2, 46);
       for (const bubble of bubbles) {
         drawFrame(ctx, sheet, bubble.frame, bubble.x - bubble.size / 2, bubble.y - bubble.size / 2, bubble.size, bubble.size);
       }
