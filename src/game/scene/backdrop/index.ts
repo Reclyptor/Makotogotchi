@@ -7,9 +7,10 @@
 import type { Celestial, Weather } from "@/sim/atmosphere";
 import { layer } from "../../engine/layer";
 import { lay, makeCanvas } from "../../engine/offscreen";
-import { keyOf, ROOM_HEIGHT, ROOM_WIDTH, type BackdropKey } from "./compose";
+import { holidayScene } from "../holidays";
+import { keyOf, roomThemeFor, ROOM_HEIGHT, ROOM_WIDTH, type BackdropKey } from "./compose";
 import { venueSpec, type SkyRect } from "./venues";
-import { hex, themeFor, type RGB } from "./theme";
+import { hex, type RGB, type RoomTheme } from "./theme";
 import type { SceneContext } from "../../engine/digest";
 
 export { ROOM_WIDTH, ROOM_HEIGHT, RUG, WINDOW, GLASS, FLOOR_Y, keyOf, type BackdropKey, type Condition } from "./compose";
@@ -25,6 +26,10 @@ const CLOUD_DRIFT_MS = 90_000;
 const RAIN_DROPS = 26;
 const SNOW_FLAKES = 22;
 const PANE_DROPS = 3;
+const BAT_COUNT = 2;
+const BAT_CROSS_MS = 16_000;
+const BAT_FLAP_MS = 240;
+const BAT_COLOR = "#17102a";
 
 type CloudShape = readonly (readonly [number, number])[];
 
@@ -33,6 +38,12 @@ const CLOUD: CloudShape = [
   [2, 3],
   [1, 5],
   [0, 7],
+];
+
+// A bat is five pixels wide: wings raised, then wings spread level.
+const BAT_POSES: readonly (readonly (readonly [number, number])[])[] = [
+  [[0, 0], [1, 1], [2, 1], [3, 1], [4, 0]],
+  [[0, 1], [1, 1], [2, 0], [3, 1], [4, 1]],
 ];
 
 const CLOUD_TINT: Record<Weather, { light: RGB; shade: RGB; count: number }> = {
@@ -86,8 +97,11 @@ export class Backdrop {
 
       const density = venue.weatherDensity;
       if (celestial.body === "moon") this.renderStars(ctx, sky, density, seed, clock, reducedMotion);
-      this.renderCelestial(ctx, sky, venue.horizonAt, celestial, key.weather, key.themeId);
+      this.renderCelestial(ctx, sky, venue.horizonAt, celestial, key.weather, key);
       this.renderClouds(ctx, sky, density, key.weather, seed, clock);
+      if (key.holidayId && celestial.body === "moon" && holidayScene(key.holidayId).window.bats) {
+        this.renderBats(ctx, sky, seed, clock);
+      }
       if (key.weather === "rain") this.renderRain(ctx, sky, density, venue.glassPane, seed, clock);
       if (key.weather === "snow") this.renderSnow(ctx, sky, density, seed, clock);
     });
@@ -146,10 +160,10 @@ export class Backdrop {
   private renderCelestial(
     ctx: SceneContext,
     sky: SkyRect,
-    horizonAt: (theme: ReturnType<typeof themeFor>, sx: number) => number,
+    horizonAt: (theme: RoomTheme, sx: number) => number,
     celestial: Celestial,
     weather: Weather,
-    themeId: string,
+    key: BackdropKey,
   ): void {
     // Overcast skies swallow the disc; a hint survives so the hour still reads.
     const veiled = weather === "rain" || weather === "cloudy";
@@ -157,7 +171,8 @@ export class Backdrop {
     const y = Math.round(sky.y + sky.h - 6 - celestial.height * (sky.h - 14));
     // The sun rises from behind the horizon and sets behind it: clip the disc
     // to the sky above whatever stands in its column.
-    const horizon = sky.y + sky.h - horizonAt(themeFor(themeId), x - sky.x);
+    const theme = roomThemeFor(key);
+    const horizon = sky.y + sky.h - horizonAt(theme, x - sky.x);
     layer(ctx, () => {
       ctx.beginPath();
       ctx.rect(sky.x, sky.y, sky.w, Math.max(0, horizon - sky.y));
@@ -172,13 +187,27 @@ export class Backdrop {
         }
         return;
       }
-      ctx.fillStyle = veiled ? "#b9bcc8" : "#eef0ff";
+      // A holiday may tint the moon (a harvest moon at Halloween).
+      const tint = key.holidayId ? holidayScene(key.holidayId).window.moon : null;
+      ctx.fillStyle = veiled ? "#b9bcc8" : tint ? hex(tint) : "#eef0ff";
       ctx.fillRect(x - 2, y - 1, 5, 3);
       ctx.fillRect(x - 1, y - 2, 3, 5);
       // A bite out of the disc reads as a crescent without another colour.
-      ctx.fillStyle = hex(themeFor(themeId).wall[0]);
+      ctx.fillStyle = hex(theme.wall[0]);
       ctx.fillRect(x + 1, y - 1, 2, 2);
     });
+  }
+
+  /** A holiday night's bats, crossing the pane on their own slow loops. */
+  private renderBats(ctx: SceneContext, sky: SkyRect, seed: number, nowMs: number): void {
+    ctx.fillStyle = BAT_COLOR;
+    for (let index = 0; index < BAT_COUNT; index++) {
+      const progress = (nowMs / (BAT_CROSS_MS * (0.8 + hash(seed + index * 19) * 0.4)) + hash(seed + index * 61)) % 1;
+      const x = Math.round(sky.x - 5 + progress * (sky.w + 10));
+      const y = sky.y + 5 + Math.floor(hash(seed + index * 43) * (sky.h * 0.4)) + Math.round(Math.sin(nowMs / 700 + index * 2.3) * 2);
+      const pose = BAT_POSES[Math.floor(nowMs / BAT_FLAP_MS + index) % BAT_POSES.length]!;
+      for (const [dx, dy] of pose) ctx.fillRect(x + dx, y + dy, 1, 1);
+    }
   }
 
   private renderClouds(

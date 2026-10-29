@@ -13,6 +13,9 @@ import { BASE_CLIPS, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_CLIP } from "../a
 import { HEAD_ANCHORS } from "./head";
 import { MOULDING, WALL_SLOTS } from "./ancestors";
 import { SPRITE_FRAMES, SPRITE_MASKS, type FrameName } from "../atlas.generated";
+import type { HolidayScene } from "./holidays/scene";
+import { GARMENT_REGIONS } from "./garment.generated";
+import { TEST_GARMENT } from "./garment.testkit";
 import { derive } from "@/sim/derive";
 import { hatchedState, projectImmortal, testCtx } from "@/sim/testkit";
 import { HEALTH_MAX, NEED_MAX, STAGE_STARTS, TICKS_PER_DAY, type LifeStage } from "@/sim/tuning";
@@ -29,6 +32,25 @@ const stubHalf =
     ctx.fillRect(reduced ? 0 : Math.round(nowMs / 10), 0, 2, 2);
   };
 const STUB_AURA: AuraPainter = { behind: stubHalf("behind"), front: stubHalf("front") };
+
+// The scene's real art is not under test here, only what the room does with a
+// scene, so a stand-in built from frames that have always been on the sheet —
+// each a different size, so a draw can be told from its neighbours.
+vi.mock("./holidays", async () => {
+  const { CABIN: theme } = await import("./backdrop/theme");
+  const { TEST_GARMENT } = await import("./garment.testkit");
+  const scene: HolidayScene = {
+    id: "halloween",
+    theme,
+    props: [
+      { frame: "rock1", x: 60, y: 150, layer: "behind" },
+      { frame: "sock1", x: 200, y: 170, layer: "front", flicker: true },
+    ],
+    costume: { hat: "coffeeMug", robe: TEST_GARMENT },
+    window: { bats: true, moon: [255, 160, 60] },
+  };
+  return { holidayScene: () => scene };
+});
 
 const ctx = testCtx();
 const RAMP: LifeStage[] = ["HATCHLING", "PUP", "JUVENILE", "ADULT", "ELDER", "SAGE"];
@@ -61,6 +83,8 @@ const recordingContext = (failAtCall = -1) => {
   const paints: (Rect | null)[] = [];
   /** Every smaller image laid onto the canvas — a picture landing on the wall. */
   const blits: { dx: number; dy: number; width: number; height: number }[] = [];
+  /** Everything painted, in the order it landed: a fill with its colour, a sprite with its size. */
+  const trail: { fill: string | null; w: number; h: number }[] = [];
   const stack: CanvasState[] = [];
   let state: CanvasState = { matrix: { ...IDENTITY }, clip: null, alpha: 1 };
   let path: Rect | null = null;
@@ -116,6 +140,7 @@ const recordingContext = (failAtCall = -1) => {
     },
     fillRect: (x: number, y: number, w: number, h: number) => {
       step();
+      trail.push({ fill: String(ctx2d.fillStyle), w, h });
       const { a, d, e, f } = state.matrix;
       const [p, q] = [e + a * x, e + a * (x + w)];
       fills.push({ x0: Math.min(p, q), x1: Math.max(p, q), y0: f + d * y, y1: f + d * (y + h), mirrored: a < 0 });
@@ -138,6 +163,7 @@ const recordingContext = (failAtCall = -1) => {
       step();
       // The 9-argument form: the last four are the destination rectangle.
       const [dx, dy, dw, dh] = args.slice(5);
+      trail.push({ fill: null, w: dw!, h: dh! });
       const a = state.matrix.e + state.matrix.a * dx!;
       const b = state.matrix.e + state.matrix.a * (dx! + dw!);
       const y0 = state.matrix.f + state.matrix.d * dy!;
@@ -151,6 +177,7 @@ const recordingContext = (failAtCall = -1) => {
     fills,
     paints,
     blits,
+    trail,
     depth: () => stack.length,
     current: () => state,
     calls: () => calls,
@@ -176,7 +203,7 @@ const contentedRoom = (days = 1) => {
     sick: false,
     asleep: false,
   };
-  room.syncAtmosphere({ hour: 13, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, venueId: "home" });
+  room.syncAtmosphere({ hour: 13, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, venueId: "home", holidayId: null });
   return { room, state: contented, derived: derive(contented) };
 };
 
@@ -586,6 +613,91 @@ describe("a hat on the head", () => {
     expect(recorder.drawn.some((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES.elderBrows.w)).toBe(true);
   });
 
+  const onHoliday = (room: Room): void =>
+    room.syncAtmosphere({ hour: 13, minute: 0, month: 10, dayIndex: 1, seed: 1, themeId: null, venueId: "home", holidayId: "halloween" });
+  const drawnFrame = (recorder: ReturnType<typeof recordingContext>, frame: FrameName) =>
+    recorder.drawn.findIndex(
+      (entry) => entry.x1 - entry.x0 === SPRITE_FRAMES[frame].w && Math.abs(entry.y1 - entry.y0) === SPRITE_FRAMES[frame].h,
+    );
+
+  const CLOTH = `rgb(${TEST_GARMENT.ramp.cloth.join(", ")})`;
+  const sizeOf = (frame: FrameName) => ({ w: SPRITE_FRAMES[frame].w, h: SPRITE_FRAMES[frame].h });
+  const firstOf = (recorder: ReturnType<typeof recordingContext>, find: (step: { fill: string | null; w: number; h: number }) => boolean): number =>
+    recorder.trail.findIndex(find);
+
+  it("dresses a Sage on a holiday in robe, tufts, beard, then hat", () => {
+    const { room, derived } = agedRoom(43);
+    onHoliday(room);
+    room.reducedMotion = true;
+    room.syncDerived(derived, false, 0);
+    const recorder = recordingContext();
+    room.render(recorder.ctx, 1000);
+    const drawnAs = (frame: FrameName) => firstOf(recorder, (step) => step.fill === null && step.w === sizeOf(frame).w && Math.abs(step.h) === sizeOf(frame).h);
+    const worn = [firstOf(recorder, (step) => step.fill === CLOTH), drawnAs("elderBrows"), drawnAs("sageBeard"), drawnAs("coffeeMug")];
+    expect(worn.every((index) => index >= 0)).toBe(true);
+    expect(worn).toEqual([...worn].sort((a, b) => a - b));
+
+    // The hat sits on the frame's hat anchor, bottom-centre, measured from the pet's feet at y = 172.
+    const frame = BASE_CLIPS.idle.frames[0]!;
+    const anchor = HEAD_ANCHORS[frame]!;
+    const sprite = recorder.drawn.find((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES[frame].w)!;
+    const hat = recorder.drawn[drawnFrame(recorder, "coffeeMug")]!;
+    expect(hat.y1 - 172).toBe(anchor.y);
+    expect(hat.x0 - sprite.x0).toBe(Math.floor(SPRITE_FRAMES[frame].w / 2) + anchor.x - Math.floor(SPRITE_FRAMES.coffeeMug.w / 2));
+  });
+
+  it("wears the garment on the pose's own body, from the neckline down", () => {
+    const { room, derived } = contentedRoom(10);
+    onHoliday(room);
+    room.reducedMotion = true;
+    room.syncDerived(derived, false, 0);
+    const recorder = recordingContext();
+    room.render(recorder.ctx, 1000);
+    const frame = BASE_CLIPS.idle.frames[0]!;
+    const region = GARMENT_REGIONS[frame]!;
+    const sprite = recorder.drawn.find((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES[frame].w)!;
+    const cloth = recorder.fills.filter((_, index) => recorder.trail.filter((step) => step.fill !== null)[index]!.fill === CLOTH);
+    expect(cloth.length).toBeGreaterThan(0);
+    // Every piece of cloth is under the neckline's top row, in the frame's own pixels.
+    const top = sprite.y0 + Math.round((region.neck - 1) * 5.5);
+    for (const fill of cloth) expect(fill.y0).toBeGreaterThanOrEqual(top);
+  });
+
+  it("wears the costume hat in place of the worn cosmetic", () => {
+    const { room, derived } = contentedRoom(10);
+    onHoliday(room);
+    room.reducedMotion = true;
+    room.decor = { decor: [], activeCosmetic: "crown", ancestors: [] };
+    room.syncDerived(derived, false, 0);
+    const recorder = recordingContext();
+    room.render(recorder.ctx, 1000);
+    expect(crownBand(recorder.fills)).toBeUndefined();
+    expect(drawnFrame(recorder, "coffeeMug")).toBeGreaterThanOrEqual(0);
+  });
+
+  it("leaves the cosmetic as it was off a holiday", () => {
+    const { room, derived } = contentedRoom(10);
+    room.reducedMotion = true;
+    room.decor = { decor: [], activeCosmetic: "crown", ancestors: [] };
+    room.syncDerived(derived, false, 0);
+    const recorder = recordingContext();
+    room.render(recorder.ctx, 1000);
+    expect(crownBand(recorder.fills)).toBeDefined();
+    expect(drawnFrame(recorder, "coffeeMug")).toBe(-1);
+    expect(recorder.trail.some((step) => step.fill === CLOTH)).toBe(false);
+  });
+
+  it("keeps a sleeping pet's nightcap on a holiday, and no robe in bed", () => {
+    const { room, state } = contentedRoom(10);
+    onHoliday(room);
+    room.syncDerived(derive({ ...state, asleep: true, sleepReason: "NIGHT" }), true, 0);
+    const recorder = recordingContext();
+    room.render(recorder.ctx, 1000);
+    for (const frame of BASE_CLIPS.sleeping.frames) expect(GARMENT_REGIONS[frame], frame).toBeUndefined();
+    expect(recorder.trail.some((step) => step.fill === CLOTH)).toBe(false);
+    expect(drawnFrame(recorder, "coffeeMug")).toBe(-1);
+  });
+
   it("mirrors the hat with the pet when it faces right", () => {
     vi.useFakeTimers();
     try {
@@ -649,10 +761,105 @@ describe("the family wall", () => {
     const { room, derived } = contentedRoom();
     room.decor = { decor: [], activeCosmetic: null, ancestors };
     room.syncDerived(derived, false, 0);
-    room.syncAtmosphere({ hour: 13, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, venueId: "meadow" });
+    room.syncAtmosphere({ hour: 13, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, venueId: "meadow", holidayId: null });
     const recorder = recordingContext();
     room.render(recorder.ctx, 1000);
     expect(recorder.blits).toEqual([]);
+  });
+});
+
+// A holiday dresses the room itself (SPEC §22.11): its props stand where the
+// communal decor would, and the decor stays away.
+describe("a holiday room", () => {
+  const holidayRoom = () => {
+    const { room, derived } = contentedRoom(10);
+    room.syncAtmosphere({ hour: 13, minute: 0, month: 10, dayIndex: 1, seed: 1, themeId: null, venueId: "home", holidayId: "halloween" });
+    room.decor = { decor: ["lamp", "plant", "kotatsu"], activeCosmetic: null, ancestors: [{ ordinal: 4, name: "Makoto", sage: false }] };
+    room.syncDerived(derived, false, 0);
+    return room;
+  };
+  const indexOf = (recorder: ReturnType<typeof recordingContext>, frame: FrameName): number =>
+    recorder.drawn.findIndex((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES[frame].w && Math.abs(entry.y1 - entry.y0) === SPRITE_FRAMES[frame].h);
+  const LAMP_POLE = { w: 4, h: 66 };
+  const hasLampPole = (recorder: ReturnType<typeof recordingContext>): boolean =>
+    recorder.fills.some((fill) => fill.x1 - fill.x0 === LAMP_POLE.w && fill.y1 - fill.y0 === LAMP_POLE.h);
+
+  it("draws the scene's props in place of the decor", () => {
+    const recorder = recordingContext();
+    holidayRoom().render(recorder.ctx, 1000);
+    expect(hasLampPole(recorder)).toBe(false);
+    expect(recorder.blits).toEqual([]);
+    expect(indexOf(recorder, "rock1")).toBeGreaterThanOrEqual(0);
+  });
+
+  it("brings the decor back the day after", () => {
+    const room = holidayRoom();
+    room.syncAtmosphere({ hour: 13, minute: 0, month: 11, dayIndex: 2, seed: 1, themeId: null, venueId: "home", holidayId: null });
+    const recorder = recordingContext();
+    room.render(recorder.ctx, 1000);
+    expect(hasLampPole(recorder)).toBe(true);
+    expect(indexOf(recorder, "rock1")).toBe(-1);
+  });
+
+  it("puts a prop behind the pet or in front of it as the scene says", () => {
+    const recorder = recordingContext();
+    const room = holidayRoom();
+    room.reducedMotion = true; // pins the pet to its first idle frame
+    room.render(recorder.ctx, 1000);
+    const pet = recorder.drawn.findIndex((entry) => entry.x1 - entry.x0 === SPRITE_FRAMES[BASE_CLIPS.idle.frames[0]!].w);
+    expect(indexOf(recorder, "rock1")).toBeLessThan(pet);
+    expect(indexOf(recorder, "sock1")).toBeGreaterThan(pet);
+  });
+
+  // A candle's glow is a translucent rectangle a little past its sprite.
+  const glowAlphas = (room: Room, nowMs: number): number[] => {
+    const alphas: number[] = [];
+    const recorder = recordingContext();
+    const fill = recorder.ctx.fillRect.bind(recorder.ctx);
+    recorder.ctx.fillRect = (x, y, w, h) => {
+      if (w > SPRITE_FRAMES.sock1.w) alphas.push(recorder.current().alpha);
+      fill(x, y, w, h);
+    };
+    room.render(recorder.ctx, nowMs);
+    return alphas;
+  };
+
+  it("pulses a flickering prop's glow live, and holds it still under reduced motion", () => {
+    const live = holidayRoom();
+    const [early] = glowAlphas(live, 1000);
+    const [later] = glowAlphas(live, 1000 + 200);
+    expect(early).toBeDefined();
+    expect(later).not.toBe(early);
+
+    // A held room skips the second paint outright, so each time gets its own.
+    const stillAt = (nowMs: number): number[] => {
+      const still = holidayRoom();
+      still.reducedMotion = true;
+      return glowAlphas(still, nowMs);
+    };
+    expect(stillAt(1000)).toHaveLength(1);
+    expect(stillAt(1000)).toEqual(stillAt(1000 + 200));
+  });
+
+  it("holds a dressed, still room still, so the garment costs no repaint", () => {
+    const room = holidayRoom();
+    room.reducedMotion = true;
+    const recorder = recordingContext();
+    room.render(recorder.ctx, 1000);
+    const before = recorder.calls();
+    room.render(recorder.ctx, 1000);
+    expect(recorder.calls()).toBe(before);
+  });
+
+  it("paints again when the holiday arrives, though nothing else moved", () => {
+    const { room, derived } = contentedRoom();
+    const recorder = recordingContext();
+    room.syncDerived(derived, false, 0);
+    room.render(recorder.ctx, 1000);
+    room.syncAtmosphere({ hour: 13, minute: 0, month: 10, dayIndex: 1, seed: 1, themeId: null, venueId: "home", holidayId: "halloween" });
+    const before = recorder.calls();
+    room.render(recorder.ctx, 1000);
+    expect(recorder.calls()).toBeGreaterThan(before);
   });
 });
 
@@ -774,7 +981,7 @@ describe("skipping frames that would paint the same pixels", () => {
     const recorder = recordingContext();
     room.syncDerived(derived, false, 0);
     room.render(recorder.ctx, 1000);
-    room.syncAtmosphere({ hour: 2, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, venueId: "home" });
+    room.syncAtmosphere({ hour: 2, minute: 0, month: 6, dayIndex: 1, seed: 1, themeId: null, venueId: "home", holidayId: null });
     expect(paintedCalls(recorder, () => room.render(recorder.ctx, 1000))).toBeGreaterThan(0);
   });
 

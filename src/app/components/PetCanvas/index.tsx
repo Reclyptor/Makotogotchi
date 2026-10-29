@@ -14,6 +14,7 @@ import { SPRITE_SHEET_URL } from "@/game/atlas.generated";
 import { Room, ROOM_HEIGHT, ROOM_WIDTH, type FoodTaste } from "@/game/scene/room";
 import { petClock } from "@/game/scene/backdrop";
 import { sceneVenueAt } from "@/sim/atmosphere";
+import { holidayOn } from "@/sim/holidays";
 import { startLoop } from "@/game/engine/loop";
 import { AURA } from "@/game/scene/aura";
 import { wantToast } from "@/app/components/WantBanner/copy";
@@ -254,6 +255,8 @@ export default function PetCanvas({ stream, localSecret = null }: PetCanvasProps
               ballots: roomViewRef.current?.ballots ?? [],
               sleepReason: state.sleepReason,
             }),
+            // A holiday dresses the room and keeps Makoto in it (§22.11).
+            holidayId: holidayOn(clock.dayIndex),
           });
         }
         if (state) {

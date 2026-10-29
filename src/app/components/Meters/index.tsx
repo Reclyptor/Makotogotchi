@@ -11,11 +11,11 @@ import { CRITICAL_PERCENT } from "@/app/copy/health";
 import { NEED_KEYS, type NeedKey } from "@/sim/tuning";
 
 const METER_ROWS = [
-  { key: "hunger", label: "Hunger", emoji: "🍖", hue: "#fb923c" },
-  { key: "energy", label: "Energy", emoji: "⚡", hue: "#facc15" },
-  { key: "hygiene", label: "Hygiene", emoji: "✨", hue: "#38bdf8" },
-  { key: "joy", label: "Joy", emoji: "💛", hue: "#a78bfa" },
-  { key: "health", label: "Health", emoji: "❤️", hue: "#fb7185" },
+  { key: "hunger", label: "Hunger", emoji: "🍖", hue: "var(--color-meter-hunger)" },
+  { key: "energy", label: "Energy", emoji: "⚡", hue: "var(--color-meter-energy)" },
+  { key: "hygiene", label: "Hygiene", emoji: "✨", hue: "var(--color-meter-hygiene)" },
+  { key: "joy", label: "Joy", emoji: "💛", hue: "var(--color-meter-joy)" },
+  { key: "health", label: "Health", emoji: "❤️", hue: "var(--color-meter-health)" },
 ] as const;
 
 /** The allowance is per need, and these are the same emoji the rows use. */
@@ -78,8 +78,8 @@ export default function Meters({ percentages, population, careMultiplier, allowa
                 className="h-full rounded-full transition-[width] duration-500 ease-out"
                 style={{
                   width: `${value}%`,
-                  background: `linear-gradient(180deg, ${hue}f0, ${hue}b8)`,
-                  boxShadow: `inset 0 1px 0 rgba(255,255,255,0.55), inset 0 -2px 3px rgba(0,0,0,0.25), 0 0 10px ${hue}44`,
+                  background: `linear-gradient(180deg, color-mix(in srgb, ${hue} 94%, transparent), color-mix(in srgb, ${hue} 72%, transparent))`,
+                  boxShadow: `inset 0 1px 0 rgba(255,255,255,0.55), inset 0 -2px 3px rgba(0,0,0,0.25), 0 0 10px color-mix(in srgb, ${hue} 27%, transparent)`,
                 }}
               />
               {key !== "health" && (

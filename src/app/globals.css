@@ -14,6 +14,16 @@
    the compositor at full refresh rate for as long as the tab is open. That
    cost is not paid by the animation; it is paid by the glass. */
 
+/* The meters read their hue from these, which a holiday re-tints (SPEC
+   §22.11). `static` keeps them in the output though no utility names them. */
+@theme static {
+  --color-meter-hunger: #fb923c;
+  --color-meter-energy: #facc15;
+  --color-meter-hygiene: #38bdf8;
+  --color-meter-joy: #a78bfa;
+  --color-meter-health: #fb7185;
+}
+
 @theme {
   --color-background: #0a0918;
   --color-card: #171126;

@@ -20,6 +20,8 @@ import { zeroApplyReason, type ZeroApplyReason } from "@/sim/score";
 import { CARE_ACTIONS, TICK_SECONDS, type CareAction } from "@/sim/tuning";
 import { DRINK_ITEMS, FOOD_ITEMS } from "@/sim/economy";
 import type { PetState, ProjectionContext } from "@/sim/model";
+import { careIcon } from "@/app/copy/holidays";
+import type { HolidayId } from "@/sim/holidays";
 import { feedEntry, needsMoreCoins, type FeedEntry } from "@/app/copy/items";
 import type { Purse } from "@/server/purse";
 import { isLockReason, REASON_GLYPH, REASON_SHORT, rejectionText, zeroApplyText, ZERO_APPLY_GLYPH, ZERO_APPLY_SHORT } from "./copy";
@@ -75,6 +77,8 @@ export type ActionBarProps = {
   purse: Purse | null;
   /** PLAY launches the minigame (SPEC §13.3) instead of posting directly. */
   onPlay: () => void;
+  /** The holiday dressing the page, whose icons replace the usual emoji (SPEC §22.11). */
+  holidayId: HolidayId | null;
 };
 
 type Tile = {
@@ -87,7 +91,7 @@ type Tile = {
   cooldownFraction: number;
 };
 
-export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExact, purse, onPlay }: ActionBarProps) {
+export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExact, purse, onPlay, holidayId }: ActionBarProps) {
   const [notice, setNotice] = useState<string | null>(null);
   const [chooserOpen, setChooserOpen] = useState(false);
   const chooserId = useId();
@@ -265,7 +269,7 @@ export default function ActionBar({ state, ctx, caretakerId, petName, nowTickExa
           aria-hidden="true"
           className={`text-xl leading-none drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)] ${tile.ok ? "" : "opacity-50 grayscale"}`}
         >
-          {meta.emoji}
+          {careIcon(tile.action, meta.emoji, holidayId)}
         </span>
         <span className={`text-[12px] font-semibold leading-tight ${tile.ok ? "" : "text-muted"}`}>{meta.label}</span>
         <span className={`min-h-3.5 max-w-full truncate px-1 text-[10px] leading-tight ${tile.label ? "text-foreground/85" : "text-muted"}`}>

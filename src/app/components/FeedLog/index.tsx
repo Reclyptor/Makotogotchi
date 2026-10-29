@@ -8,10 +8,13 @@
 // aria-live region (SPEC §11.3).
 
 import { useEffect, useRef, useState } from "react";
+import type { CareAction } from "@/sim/tuning";
 
 export type FeedEntry = {
   id: number | string;
   icon: string;
+  /** Set on a care line, so a holiday can swap its icon whenever it is known. */
+  care?: CareAction;
   text: string;
   at: string; // pre-formatted local time
 };

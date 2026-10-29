@@ -33,12 +33,17 @@ import { isMinigameId, MINIGAME_IDS, MINIGAMES, type MinigameId } from "@/sim/mi
 import { isAmbientEvent, type AmbientEvent } from "@/sim/ambient";
 import { isTitleId, TITLES } from "@/sim/titles";
 import { sceneVenueAt } from "@/sim/atmosphere";
+import { holidayOn } from "@/sim/holidays";
+import { dressFeed, HOLIDAY_COPY } from "@/app/copy/holidays";
 import { petClock, venueSpec } from "@/game/scene/backdrop";
 import { usePetStream } from "@/app/hooks/usePetStream";
 import { useKonami } from "@/app/hooks/useKonami";
 import { useRetro } from "@/app/hooks/useRetro";
 import { spectacleMood, type SpectacleMood } from "@/sim/secret";
 import type { FeedEntryPayload } from "@/app/api/feed/route";
+
+/** The last holiday-and-pet-day this browser mentioned in its feed. */
+const HOLIDAY_FEED_STORAGE_KEY = "mgc:holiday-feed";
 
 const ACTION_EMOJI: Record<CareAction, string> = {
   FEED: "🍖",
@@ -264,11 +269,23 @@ export default function GameView() {
     return () => clearInterval(timer);
   }, [projectNow, nowTickExact]);
 
-  const pushFeed = (icon: string, text: string, id?: number | string, at?: Date): void => {
+  const petDay = ui?.petDay ?? null;
+  const holidayId = petDay === null ? null : holidayOn(petDay);
+  // The page was dressed by the server for the day it rendered; this keeps it
+  // right across the pet's midnight, and for a browser whose cached page is
+  // from another day. Cleared with the holiday so nothing lingers.
+  useEffect(() => {
+    if (petDay === null) return;
+    if (holidayId) document.documentElement.setAttribute("data-holiday", holidayId);
+    else document.documentElement.removeAttribute("data-holiday");
+  }, [holidayId, petDay]);
+
+  const pushFeed = (icon: string, text: string, id?: number | string, at?: Date, care?: CareAction): void => {
     localId.current += 1;
     const entry: FeedEntry = {
       id: id ?? `local-${localId.current}`,
       icon,
+      ...(care ? { care } : {}),
       text,
       at: clockTime(at ?? new Date()),
     };
@@ -294,6 +311,7 @@ export default function GameView() {
             {
               id: entry.seq,
               icon: ACTION_EMOJI[entry.action as CareAction] ?? "✨",
+              care: entry.action as CareAction,
               text: `${who} ${actionFeedText(petName)[entry.action as CareAction]}${amount}`,
               at: clockTime(new Date(entry.at)),
             },
@@ -326,6 +344,22 @@ export default function GameView() {
     }
   }, [profile]);
 
+  // A holiday's dress-up is mentioned once per pet-day per browser, not on
+  // every reload. localStorage is unavailable in some privacy modes; a lost
+  // stamp just means the line is said again.
+  useEffect(() => {
+    if (!holidayId || petDay === null) return;
+    const stamp = `${holidayId}:${petDay}`;
+    try {
+      if (window.localStorage.getItem(HOLIDAY_FEED_STORAGE_KEY) === stamp) return;
+      window.localStorage.setItem(HOLIDAY_FEED_STORAGE_KEY, stamp);
+    } catch {
+      // No stamp to read or keep; say it anyway.
+    }
+    const copy = HOLIDAY_COPY[holidayId];
+    pushFeed(copy.icon, copy.dressedUp(petNameRef.current));
+  }, [holidayId, petDay]);
+
   useEffect(() => {
     const offCare = onCare((notice) => {
       if (notice.seq <= maxSeqRef.current) return;
@@ -333,7 +367,7 @@ export default function GameView() {
       const who =
         notice.caretakerId === caretakerRef.current ? "You" : (notice.caretakerName ?? `Friend ${notice.caretakerId.slice(0, 4)}`);
       const amount = notice.applied >= 1000 ? ` (+${(notice.applied / 10_000).toFixed(1)}%)` : "";
-      pushFeed(ACTION_EMOJI[notice.action], `${who} ${actionFeedText(petNameRef.current)[notice.action]}${amount}`, notice.seq);
+      pushFeed(ACTION_EMOJI[notice.action], `${who} ${actionFeedText(petNameRef.current)[notice.action]}${amount}`, notice.seq, undefined, notice.action);
       audioRef.current?.playAction(notice.action);
     });
     const offMilestone = onMilestone((notice) => {
@@ -484,6 +518,8 @@ export default function GameView() {
     });
     return venueId === "home" ? null : venueSpec(venueId).label;
   })();
+  // A holiday keeps Makoto home and takes the outing's place in the caption.
+  const holidayCaption = holidayId && !isEgg && !isDead ? HOLIDAY_COPY[holidayId].caption : null;
 
   const status = ui ? statusLine(petName, ui.state, ui.derived, ctx ?? undefined) : { text: "Connecting…", elder: null };
 
@@ -491,7 +527,7 @@ export default function GameView() {
     <div className="flex w-full max-w-xl flex-col items-center gap-3">
       {/* Top bar: wordmark + live status cluster */}
       <header className="flex w-full items-center justify-between gap-2">
-        <span className="font-pixel text-[13px] tracking-tight text-accent drop-shadow-[0_0_12px_rgba(167,139,250,0.5)]">
+        <span data-wordmark className="font-pixel text-[13px] tracking-tight text-accent drop-shadow-[0_0_12px_rgba(167,139,250,0.5)]">
           MAKOTOGOTCHI
         </span>
         {/* Four pills and a wordmark do not fit a narrow phone on one line, so
@@ -608,6 +644,7 @@ export default function GameView() {
           {status.text}
           {/* An away day reads as an outing, not a bug (SPEC §22.8). */}
           {venueLabel && ` 🧭 Out at ${venueLabel} today.`}
+          {holidayCaption && ` ${holidayCaption}`}
           {/* An elder's hold line and where the needs average now: there for
               whoever looks, quiet for whoever does not. Last, so it reads as
               a footnote to the sentence rather than a break in it. The terse
@@ -657,6 +694,7 @@ export default function GameView() {
           nowTickExact={ui.nowTickExact}
           purse={stream.purse}
           onPlay={() => setPlaying(pickGame())}
+          holidayId={holidayId}
         />
       )}
 
@@ -709,7 +747,7 @@ export default function GameView() {
       )}
       {playing && <MinigameShell gameId={playing} onClose={() => setPlaying(null)} onReact={onReact} />}
 
-      <FeedLog entries={feed} />
+      <FeedLog entries={dressFeed(feed, holidayId)} />
 
       <footer className="flex w-full flex-wrap items-center justify-between gap-2 px-1 pt-1 text-sm">
         <NicknameEditor key={profile?.nickname ?? ""} current={profile?.nickname ?? null} />

@@ -1,17 +1,34 @@
 // The backdrop is pure arithmetic over a palette, so its promises (SPEC
 // §22.6) are testable rather than a matter of taste.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { composeBackdrop, GLASS, keyOf, ROOM_HEIGHT, ROOM_WIDTH, type BackdropKey } from "./compose";
 import { venueSpec } from "./venues";
 import { COZY, hex, type RGB } from "./theme";
+import type { HolidayScene } from "../holidays/scene";
 import { DAY_SEGMENTS, skyMomentAt, type DaySegment } from "@/sim/atmosphere";
+
+// A stand-in holiday whose theme is one the shop already sells, so what these
+// check is that the room is built from the scene's theme, not what is in it.
+vi.mock("../holidays", async () => {
+  const { CABIN: theme } = await import("./theme");
+  const { TEST_GARMENT } = await import("../garment.testkit");
+  const scene: HolidayScene = {
+    id: "halloween",
+    theme,
+    props: [],
+    costume: { hat: "coffeeMug", robe: TEST_GARMENT },
+    window: { bats: false, moon: null },
+  };
+  return { holidayScene: () => scene };
+});
 
 const keyAt = (hour: number, extra: Partial<BackdropKey> = {}): BackdropKey => {
   const moment = skyMomentAt(hour, 0);
   return {
     venueId: "home",
     themeId: "cozy",
+    holidayId: null,
     segment: moment.segment,
     next: moment.next,
     blend: moment.blend,
@@ -143,5 +160,23 @@ describe("backdrop composition", () => {
       return count;
     };
     expect(litPixels(13)).toBeGreaterThan(litPixels(3));
+  });
+});
+
+describe("a holiday's room", () => {
+  it("is built from the scene's theme in place of the home theme", () => {
+    const holiday = composeBackdrop(keyAt(13, { holidayId: "halloween" }));
+    expect(Array.from(holiday)).toEqual(Array.from(composeBackdrop(keyAt(13, { themeId: "cabin" }))));
+    expect(Array.from(holiday)).not.toEqual(Array.from(composeBackdrop(keyAt(13))));
+  });
+
+  it("wins over whichever style the room owns", () => {
+    expect(Array.from(composeBackdrop(keyAt(13, { holidayId: "halloween", themeId: "seaside" })))).toEqual(
+      Array.from(composeBackdrop(keyAt(13, { holidayId: "halloween" }))),
+    );
+  });
+
+  it("keys the cache on the holiday", () => {
+    expect(keyOf(keyAt(13, { holidayId: "halloween" }))).not.toBe(keyOf(keyAt(13)));
   });
 });

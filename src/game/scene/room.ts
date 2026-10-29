@@ -15,10 +15,15 @@ import { BASE_CLIPS, BUTTERFLY_CLIP, IDLE_FLOURISH_CLIPS, ONE_SHOT_CLIPS, WALK_C
 import { SPRITE_FRAMES, type FrameName } from "../atlas.generated";
 import { HEAD_ANCHORS } from "./head";
 import { PET_Y, type AuraPainter } from "./auraTypes";
+
+import { GARMENT_REGIONS } from "./garment.generated";
+import { garmentExtent, paintBeardClip, paintGarment } from "./garment";
+import { holidayScene, type HolidayProp } from "./holidays";
 import { Backdrop, keyOf, ROOM_HEIGHT, ROOM_WIDTH, RUG, venueSpec, WINDOW, type BackdropKey, type Condition } from "./backdrop";
 import { celestialAt, seasonFor, skyMomentAt, weatherFor, type Celestial } from "@/sim/atmosphere";
 import type { DerivedState } from "@/sim/derive";
 import type { AmbientEvent } from "@/sim/ambient";
+import type { HolidayId } from "@/sim/holidays";
 import type { SpectacleMood } from "@/sim/secret";
 import { isOld, type CareAction, type LifeStage } from "@/sim/tuning";
 
@@ -32,7 +37,7 @@ export type AtmosphereInput = {
   minute: number;
   /** 1-based month in the pet's timezone, for the season. */
   month: number;
-  /** Days since genesis in the pet's timezone, which fixes the weather. */
+  /** Epoch days on the pet's calendar (`petClock`), which fixes the weather. */
   dayIndex: number;
   seed: number;
   themeId: string | null;
@@ -42,6 +47,11 @@ export type AtmosphereInput = {
    * caller resolving it once is what stops the two disagreeing.
    */
   venueId: string;
+  /**
+   * The holiday the pet's day falls on (SPEC §22.11), already looked up for
+   * the same reason as the venue: the caption reads it too.
+   */
+  holidayId: HolidayId | null;
 };
 
 const ALERT_CONDITION: Record<DerivedState["alert"], Condition> = {
@@ -159,6 +169,13 @@ const PICTURE_X = 40;
 const PICTURE_Y = WINDOW.y + Math.round((WINDOW.h - (PORTRAIT_HEIGHT + 4)) / 2);
 const PICTURE_MOULDING = 2;
 
+// A holiday candle's glow breathes between these opacities, a little past the
+// sprite on every side (SPEC §22.11).
+const FLICKER_GLOW = "#ffb347";
+const FLICKER_ALPHA = { rest: 0.14, swing: 0.06 } as const;
+const FLICKER_PERIOD_MS = 380;
+const FLICKER_REACH_PX = 6;
+
 // A shared rare moment holds the room for six seconds (SPEC §21.5).
 const AMBIENT_MS = 6000;
 const STAR_FLIGHT_MS = 1200;
@@ -187,6 +204,7 @@ export class Room {
   private backdropKey: BackdropKey = {
     venueId: "home",
     themeId: "cozy",
+    holidayId: null,
     segment: "midday",
     next: "midday",
     blend: 0,
@@ -243,6 +261,7 @@ export class Room {
     this.backdropKey = {
       venueId: input.venueId,
       themeId: input.themeId ?? "cozy",
+      holidayId: input.holidayId,
       segment: moment.segment,
       next: moment.next,
       blend: moment.blend,
@@ -427,6 +446,7 @@ export class Room {
     );
 
     this.renderDecor(ctx, nowMs);
+    this.renderHolidayProps(ctx, nowMs, "behind");
     // Behind the pet on purpose (SPEC §26.4): the wash sinks the room without
     // taking the animal with it, and a meteor passes at depth.
     this.spectacle.renderBehind(ctx, nowMs);
@@ -453,6 +473,7 @@ export class Room {
       });
     }
 
+    this.renderHolidayProps(ctx, nowMs, "front");
     this.particles.render(ctx);
     this.renderAmbient(ctx, nowMs);
     this.spectacle.renderFront(ctx, nowMs);
@@ -512,7 +533,8 @@ export class Room {
    *  item that is a picture. It furnishes the room — away venues carry none
    *  of it (SPEC §22.8). */
   private renderDecor(ctx: SceneContext, nowMs: number): void {
-    if (!venueSpec(this.backdropKey.venueId).decor) return;
+    // A holiday clears the communal decor away for its own props (§22.11).
+    if (this.backdropKey.holidayId || !venueSpec(this.backdropKey.venueId).decor) return;
     const px = (x: number, y: number, w: number, h: number, color: string): void => {
       ctx.fillStyle = color;
       ctx.fillRect(x, y, w, h);
@@ -583,6 +605,23 @@ export class Room {
     }
   }
 
+  /** The day's holiday props on one side of the pet (SPEC §22.11). */
+  private renderHolidayProps(ctx: SceneContext, nowMs: number, depth: HolidayProp["layer"]): void {
+    if (!this.backdropKey.holidayId || !this.atlas.ready) return;
+    for (const prop of holidayScene(this.backdropKey.holidayId).props) {
+      if (prop.layer !== depth) continue;
+      this.atlas.draw(ctx, prop.frame, prop.x, prop.y);
+      if (!prop.flicker) continue;
+      // Held at its resting glow under reduced motion, like the rest of the room.
+      const pulse = this.reducedMotion ? 0 : Math.sin(nowMs / FLICKER_PERIOD_MS + prop.x);
+      const { w, h } = SPRITE_FRAMES[prop.frame];
+      ctx.globalAlpha = FLICKER_ALPHA.rest + pulse * FLICKER_ALPHA.swing;
+      ctx.fillStyle = FLICKER_GLOW;
+      ctx.fillRect(prop.x - w / 2 - FLICKER_REACH_PX, prop.y - h - FLICKER_REACH_PX, w + FLICKER_REACH_PX * 2, h + FLICKER_REACH_PX * 2);
+      ctx.globalAlpha = 1;
+    }
+  }
+
   /**
    * One half of the aura around a pet on the second day of its meditation
    * (SPEC §2.8, §21.9), drawn on the meditation frames only and inside the
@@ -609,16 +648,42 @@ export class Room {
    * wears a nightcap keeps the tufts and leaves the cosmetic off. A frame with
    * no anchor has no head to speak of — the egg, the gravestone — and wears
    * nothing.
+   *
+   * On a holiday the costume goes on under all of that: the robe, then the
+   * tufts and beard over it, then the hat in place of the worn cosmetic
+   * (SPEC §22.11). The robe is a garment worn on the pose's own body (SPEC
+   * §22.12), not a sprite hung in front of it. It and the hat go through the
+   * frame's mask like the beard, so the cup and the quilt still stand in
+   * front of them.
    */
   private renderHead(ctx: SceneContext, frame: FrameName, scale: number): void {
     const anchor = HEAD_ANCHORS[frame];
     if (!anchor) return;
+    const holidayId = this.backdropKey.holidayId;
+    const costume = holidayId ? holidayScene(holidayId).costume : null;
+    // The garment worn this frame, and what names it: a holiday's robe today.
+    const worn = holidayId && costume ? { key: holidayId, garment: costume.robe } : null;
     layer(ctx, () => {
       ctx.translate(0, PET_Y);
       ctx.scale(scale, scale);
+      const region = GARMENT_REGIONS[frame];
+      if (worn && region) {
+        this.atlas.drawPainted(ctx, worn.key, frame, garmentExtent(SPRITE_FRAMES[frame], region), (target) =>
+          paintGarment(target, region, worn.garment),
+        );
+      }
       if (isOld(this.stage)) this.atlas.draw(ctx, "elderBrows", anchor.brows.x, anchor.brows.y);
-      if (this.stage === "SAGE") this.atlas.drawOver(ctx, "sageBeard", anchor.beard.x, anchor.beard.y, frame);
+      if (this.stage === "SAGE") {
+        // Under any garment the beard keeps to the middle of the cloth: its
+        // drooping ends would otherwise show as specks on the silhouette's edge.
+        const clip = worn && region ? { key: worn.key, paint: (target: SceneContext) => paintBeardClip(target, region) } : undefined;
+        this.atlas.drawOver(ctx, "sageBeard", anchor.beard.x, anchor.beard.y, frame, clip);
+      }
       if (anchor.nightcap) return;
+      if (costume) {
+        this.atlas.drawOver(ctx, costume.hat, anchor.x, anchor.y, frame);
+        return;
+      }
       ctx.translate(anchor.x, anchor.y);
       this.renderCosmetic(ctx);
     });

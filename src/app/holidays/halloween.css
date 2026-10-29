@@ -1,0 +1,163 @@
+/* ── HALLOWEEN ─────────────────────────────────────────────────────────────
+   The page in costume for Oct 31 (SPEC §22.11). Every rule here sits under
+   [data-holiday="halloween"], which the root carries for the pet's whole
+   day and no other, so on any other day this file is inert.
+
+   The same app, dressed up: the glass, the panels and the layout are
+   untouched. Only the tokens change colour, the headings change face, and
+   three decorations are added — cobwebs in the panel corners, a pumpkin by
+   the wordmark, and bats across the field. Nothing here moves the layout.
+
+   The aurora note in globals.css still binds: nothing loops forever under
+   the glass. The bats fly in once and hang. */
+
+/* Tokens. `html[...]` outranks the `:root` block Tailwind emits for @theme,
+   so this wins however the two stylesheets are ordered. */
+html[data-holiday="halloween"] {
+  --color-background: #120a1c;
+  --color-card: #1d1030;
+  --color-card-elevated: #271640;
+  --color-surface: #321b4d;
+  --color-foreground: #fbf3e6;
+  --color-muted: #c9b3dc;
+  --color-accent: #ff9b3d;
+  --color-accent-strong: #b83d0a;
+  --color-gold: #ffc247;
+  --color-mint: #8fe36a;
+  --color-rose: #ff6b7a;
+
+  /* Pumpkin, candy corn, slime, witch's purple, blood. Each fill reads
+     against the meter track at 5.7:1 or better, and the background colour
+     reads over every fill at 6:1 or better (contrast.mjs in the session
+     scratchpad has the numbers). */
+  --color-meter-hunger: #ff8c2a;
+  --color-meter-energy: #ffd43b;
+  --color-meter-hygiene: #7df26b;
+  --color-meter-joy: #c58bff;
+  --color-meter-health: #ff4d63;
+
+  scrollbar-color: rgba(255, 155, 61, 0.35) transparent;
+}
+[data-holiday="halloween"] *::-webkit-scrollbar-thumb {
+  background: rgba(255, 155, 61, 0.35);
+}
+
+/* The aurora field, re-lit: a pumpkin glow top-left, a witch's green low
+   down, and the purple held in the middle. Same two layers, still held
+   still. */
+[data-holiday="halloween"] body::before {
+  background:
+    radial-gradient(38rem 30rem at 24% 18%, rgba(255, 122, 24, 0.30), transparent 65%),
+    radial-gradient(30rem 26rem at 78% 12%, rgba(124, 58, 237, 0.26), transparent 65%),
+    radial-gradient(36rem 30rem at 72% 86%, rgba(93, 214, 86, 0.16), transparent 65%);
+}
+[data-holiday="halloween"] body::after {
+  background:
+    radial-gradient(28rem 24rem at 16% 80%, rgba(168, 85, 247, 0.16), transparent 65%),
+    radial-gradient(34rem 26rem at 55% 48%, rgba(255, 155, 61, 0.10), transparent 70%);
+}
+
+/* Bats, on two fixed layers behind the content so each pair takes its own
+   path. They are backgrounds on pseudo-elements: never in the accessibility
+   tree, never hit-testable, and no element of their own to reflow. Each
+   layer drifts in once over about forty seconds and then hangs — a finite
+   animation, as globals.css requires, since any motion under this much
+   frosted glass is paid for by every panel above it. */
+[data-holiday="halloween"]::before,
+[data-holiday="halloween"]::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 12'%3E%3Cpath d='M12 2.2C10.6.4 8.6.6 7.3 2.6 5.4.4 2.2.6 0 2.8c2 .7 2.9 2.4 2.1 4.6 1.8-.9 3.6-.4 4.8 1.5L8.6 7l1.6 2.2L12 7.5l1.8 1.7L15.4 7l1.7 1.9c1.2-1.9 3-2.4 4.8-1.5-.8-2.2.1-3.9 2.1-4.6-2.2-2.2-5.4-2.4-7.3-.2C15.4.6 13.4.4 12 2.2Z' fill='%23b89ad6' fill-opacity='.55'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+}
+/* Where they hang: the near trio in the header band, which is open on a
+   phone, and the far pair in the margins a wide screen has — a bat behind
+   a frosted panel is blurred away. */
+[data-holiday="halloween"]::before {
+  background-position: 42% 3%, 6% 9%, 62% 7.5%;
+  background-size: 34px 17px, 26px 13px, 20px 10px;
+  animation: halloween-bats-near 42s cubic-bezier(0.45, 0.05, 0.3, 1) 1 both;
+}
+[data-holiday="halloween"]::after {
+  background-position: 9% 44%, 92% 64%;
+  background-size: 22px 11px, 28px 14px;
+  animation: halloween-bats-far 48s cubic-bezier(0.4, 0.05, 0.35, 1) 1 both;
+}
+@keyframes halloween-bats-near {
+  0% { transform: translate(-18vw, 14vh) rotate(-6deg); opacity: 0; }
+  12% { opacity: 1; }
+  45% { transform: translate(-6vw, -4vh) rotate(3deg); }
+  100% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+}
+@keyframes halloween-bats-far {
+  0% { transform: translate(16vw, 10vh) rotate(5deg); opacity: 0; }
+  12% { opacity: 1; }
+  50% { transform: translate(5vw, -6vh) rotate(-3deg); }
+  100% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+}
+
+/* Cobwebs in the two top corners of every panel. They are background
+   layers on the panel itself, under the glass fill's own gradient: no
+   pseudo-element, so the press tiles keep their specular sweep; no
+   positioning, so the pills and popovers that are already absolute stay
+   where they are; and a background is neither in the accessibility tree
+   nor in the layout. The web scales down with a narrow panel so a pill
+   gets a thread, not a net. */
+[data-holiday="halloween"] .panel {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 56'%3E%3Cpath d='M0 0L56 0M0 0L51.7 21.4M0 0L39.6 39.6M0 0L21.4 51.7M0 0L0 56M13 0Q11 2.2 12 5M12 5Q9.3 6.2 9.2 9.2M9.2 9.2Q6.2 9.3 5 12M5 12Q2.2 11 0 13M25 0Q21.1 4.2 23.1 9.6M23.1 9.6Q17.9 11.9 17.7 17.7M17.7 17.7Q11.9 17.9 9.6 23.1M9.6 23.1Q4.2 21.1 0 25M37 0Q31.2 6.2 34.2 14.2M34.2 14.2Q26.5 17.7 26.2 26.2M26.2 26.2Q17.7 26.5 14.2 34.2M14.2 34.2Q6.2 31.2 0 37M49 0Q41.3 8.2 45.3 18.8M45.3 18.8Q35 23.4 34.6 34.6M34.6 34.6Q23.4 35 18.8 45.3M18.8 45.3Q8.2 41.3 0 49' fill='none' stroke='rgba(255,255,255,0.32)' stroke-width='1' stroke-linecap='round'/%3E%3C/svg%3E")
+      left top / min(56px, 30%) no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 56'%3E%3Cpath d='M0 0L56 0M0 0L51.7 21.4M0 0L39.6 39.6M0 0L21.4 51.7M0 0L0 56M13 0Q11 2.2 12 5M12 5Q9.3 6.2 9.2 9.2M9.2 9.2Q6.2 9.3 5 12M5 12Q2.2 11 0 13M25 0Q21.1 4.2 23.1 9.6M23.1 9.6Q17.9 11.9 17.7 17.7M17.7 17.7Q11.9 17.9 9.6 23.1M9.6 23.1Q4.2 21.1 0 25M37 0Q31.2 6.2 34.2 14.2M34.2 14.2Q26.5 17.7 26.2 26.2M26.2 26.2Q17.7 26.5 14.2 34.2M14.2 34.2Q6.2 31.2 0 37M49 0Q41.3 8.2 45.3 18.8M45.3 18.8Q35 23.4 34.6 34.6M34.6 34.6Q23.4 35 18.8 45.3M18.8 45.3Q8.2 41.3 0 49' fill='none' stroke='rgba(255,255,255,0.32)' stroke-width='1' stroke-linecap='round' transform='translate(56 0) scale(-1 1)'/%3E%3C/svg%3E")
+      right top / min(56px, 30%) no-repeat,
+    linear-gradient(180deg, rgba(255, 214, 170, 0.10), rgba(255, 255, 255, 0.03));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 214, 170, 0.28),
+    inset 0 0 0 1px rgba(255, 180, 110, 0.10),
+    0 20px 44px -24px rgba(0, 0, 0, 0.8);
+}
+
+/* The display face, for the wordmark and the headings only; body text keeps
+   Atkinson. Creepster ships one weight, so the bold the headings ask for is
+   dropped rather than synthesised, and it runs narrower than both Press
+   Start and a bold Atkinson, so each step up in size lands at about the
+   width it replaces. */
+[data-holiday="halloween"] [data-wordmark],
+[data-holiday="halloween"] h1,
+[data-holiday="halloween"] h2,
+[data-holiday="halloween"] h3 {
+  font-family: var(--font-halloween), var(--font-atkinson), sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+}
+[data-holiday="halloween"] [data-wordmark] {
+  font-size: 1.125rem;
+  line-height: 1;
+  color: var(--color-accent);
+  filter: drop-shadow(0 0 12px rgba(255, 155, 61, 0.55));
+}
+/* The pumpkin by the title. Generated content with empty alt text, so the
+   wordmark is still read as "MAKOTOGOTCHI". */
+[data-holiday="halloween"] [data-wordmark]::before {
+  content: "🎃 " / "";
+  font-family: var(--font-atkinson), sans-serif;
+  filter: none;
+}
+[data-holiday="halloween"] h1 {
+  font-size: 1.75rem;
+  line-height: 1.15;
+}
+[data-holiday="halloween"] h2,
+[data-holiday="halloween"] h3 {
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-holiday="halloween"]::before,
+  [data-holiday="halloween"]::after {
+    animation: none;
+  }
+}

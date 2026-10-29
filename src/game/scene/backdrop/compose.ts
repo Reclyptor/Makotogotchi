@@ -10,6 +10,8 @@
 // instead of turning to mud.
 
 import { BLEND_STEPS, type DaySegment, type Season, type Weather } from "@/sim/atmosphere";
+import type { HolidayId } from "@/sim/holidays";
+import { holidayScene } from "../holidays";
 import { mix, scale, themeFor, type RGB, type RoomTheme } from "./theme";
 
 export const ROOM_WIDTH = 260;
@@ -36,6 +38,8 @@ export type BackdropKey = {
   /** Where the day is being spent (SPEC §22.8). */
   venueId: string;
   themeId: string;
+  /** The holiday dressing the room (SPEC §22.11), which swaps the theme. */
+  holidayId: HolidayId | null;
   segment: DaySegment;
   next: DaySegment;
   blend: number;
@@ -46,8 +50,12 @@ export type BackdropKey = {
   condition: Condition;
 };
 
+/** The theme the room is built from: the holiday's own when there is one. */
+export const roomThemeFor = (key: BackdropKey): RoomTheme =>
+  key.holidayId ? holidayScene(key.holidayId).theme : themeFor(key.themeId);
+
 export const keyOf = (key: BackdropKey): string =>
-  [key.venueId, key.themeId, key.segment, key.next, key.blend, key.weather, key.season, key.sunStep, key.condition].join("|");
+  [key.venueId, key.themeId, key.holidayId ?? "", key.segment, key.next, key.blend, key.weather, key.season, key.sunStep, key.condition].join("|");
 
 // ── dithering ───────────────────────────────────────────────────────────────
 
@@ -209,7 +217,7 @@ export const wear = (color: RGB, condition: Condition): RGB => {
 // ── composition ─────────────────────────────────────────────────────────────
 
 export const composeBackdrop = (key: BackdropKey): Uint8ClampedArray => {
-  const theme = themeFor(key.themeId);
+  const theme = roomThemeFor(key);
   const buffer = new Uint8ClampedArray(ROOM_WIDTH * ROOM_HEIGHT * 4);
   const put = (x: number, y: number, color: RGB): void => {
     const i = (y * ROOM_WIDTH + x) * 4;

@@ -78,8 +78,8 @@ export default function AboutPage() {
           >
             CC BY 4.0
           </a>
-          . Take either — just credit Jingles for the sprites. The meditation pose and the Sage&apos;s beard are
-          modifications of her work.
+          . Take either — just credit Jingles for the sprites. The meditation pose, the Sage&apos;s beard, and the
+          Halloween costume and props are modifications of her work, drawn in her style.
         </p>
       </div>
     </main>

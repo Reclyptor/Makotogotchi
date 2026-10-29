@@ -1,8 +1,15 @@
 import type { Metadata, Viewport } from "next";
+import { connection } from "next/server";
 import { Atkinson_Hyperlegible, Press_Start_2P } from "next/font/google";
 import RetroOverlay from "@/app/components/RetroOverlay";
+import { halloweenDisplay } from "@/app/holidays/halloween.font";
+import { petClock } from "@/sim/clock";
+import { holidayOn, type HolidayId } from "@/sim/holidays";
+import { HOLIDAY_COPY } from "@/app/copy/holidays";
+import { env } from "@/server/env";
 import { SLOGAN, SITE_NAME, SITE_URL } from "@/app/site";
 import "./globals.css";
+import "@/app/holidays/halloween.css";
 
 // The wordmark's retro face — used sparingly; body text stays a system
 // stack for legibility (SPEC §11.6).
@@ -47,13 +54,30 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport: Viewport = {
-  themeColor: "#131017",
-};
+const ORDINARY_THEME_COLOR = "#131017";
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+/** The holiday on the pet's calendar right now, if any (SPEC §22.11). */
+const holidayNow = (): HolidayId | null => holidayOn(petClock(env().PET_TIMEZONE, Date.now()).dayIndex);
+
+export async function generateViewport(): Promise<Viewport> {
+  await connection();
+  const holidayId = holidayNow();
+  return { themeColor: holidayId ? HOLIDAY_COPY[holidayId].themeColor : ORDINARY_THEME_COLOR };
+}
+
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // The holiday is the pet's calendar day (SPEC §22.11), so the page is
+  // dressed per request: a layout that read the clock while prerendering
+  // would bake the build's day into every static page. The client keeps the
+  // attribute in step after that (GameView), across midnight.
+  await connection();
+  const holidayId = holidayNow();
   return (
-    <html lang="en" className={`${pressStart.variable} ${atkinson.variable}`}>
+    <html
+      lang="en"
+      className={`${pressStart.variable} ${atkinson.variable} ${halloweenDisplay.variable}`}
+      data-holiday={holidayId ?? undefined}
+    >
       <body className={`${atkinson.className} min-h-dvh antialiased`}>
         {children}
         <RetroOverlay />
