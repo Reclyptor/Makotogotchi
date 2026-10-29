@@ -6,6 +6,53 @@ follow [Semantic Versioning]. Pre-1.0, so game-rule changes are minor bumps.
 [Keep a Changelog]: https://keepachangelog.com/en/1.1.0/
 [Semantic Versioning]: https://semver.org/spec/v2.0.0.html
 
+## [0.8.0] — 2026-10-28
+
+An elder can grow old well. Ruleset 4 (`RULES{4}`, appended once on deploy)
+adds a last stage: on day 40 an elder sits down to meditate for two days, and
+rises a Sage. Every log written before it folds byte-identically, and one
+under ruleset 3 or below stays an elder for good.
+
+### Added
+
+- **Deep meditation on day 40.** For two days needs and health hold still and
+  nothing can go wrong; feeding, play, cleaning and lullabies are turned away
+  with "in deep meditation", while a pat and medicine still work. The status
+  line counts down to the return, and no wants open (`7c94426`)
+- **The Sage**, with a white beard. Its body is gentler (decay ×1.0, not the
+  elder's 1.2, and a 65% health line, 60% for FRAIL), but it is still mortal
+  (`7c94426`, `7cabeed`)
+- **An ascension payout of 300 coins** to every caretaker who cared for the
+  elder in the 14 days before meditation began, paid once (`7c94426`,
+  `d65bdf4`)
+- **The wisdom bonus:** care coins are ×1.5 while the pet is a Sage, and a
+  granted want pays 15 (`7c94426`)
+- **The Sage's blessing:** the egg laid after a Sage dies is blessed, and its
+  adult form thresholds are 10 points lower, so a thriving adult is easier to
+  raise (`7c94426`)
+- **The beard tucks behind props:** the cup and its steam, the controller,
+  the table, the quilt, and the paws that hold them all sit in front of it
+  (`cd2247d`, `9c33573`)
+- **Sages on the family wall** wear their beard. The stage a pet died in is
+  kept in its memorial; generations sealed before this hang as they did
+  (`15e2bb5`, `9c33573`)
+
+### Changed
+
+- CI runs on Ubuntu 22.04, whose kernel MongoDB 8 starts on, and the test
+  Mongo is pinned to the version production runs, 8.3.13 (`1436fe7`,
+  `1228bdf`)
+- The image build can be started by hand (`95ee68a`)
+
+### Fixed
+
+- A Mongo or Redis outage while a stream is open is logged rather than left
+  as an unhandled rejection that could take down the server (`fe46d9b`)
+- A test Mongo that fails to start says why (`39cdc13`)
+- The elder's brows sit over the eye on the dust-bath frames (`7cabeed`)
+- The spec says what the game does: any drink, not only the Energy Drink, is
+  taken during a daytime nap or lullaby and wakes the pet
+
 ## [0.7.0] — 2026-10-16
 
 A well-cared-for Makoto can be kept alive. Under ruleset 2 ordinary good care
