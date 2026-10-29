@@ -30,6 +30,16 @@ const BAT_COUNT = 2;
 const BAT_CROSS_MS = 16_000;
 const BAT_FLAP_MS = 240;
 const BAT_COLOR = "#17102a";
+// New Year's Eve's fireworks: a few shells in flight at once, each rising, then
+// bursting into a ring of sparks that spreads and fades before the next goes up.
+const FIREWORK_SHELLS = 3;
+const FIREWORK_PERIOD_MS = 4800;
+const FIREWORK_STAGGER_MS = FIREWORK_PERIOD_MS / FIREWORK_SHELLS;
+const FIREWORK_RISE = 0.22;
+const FIREWORK_SPARKS = 12;
+const FIREWORK_RADIUS_PX = 13;
+/** Where along its flight a burst held still under reduced motion is caught. */
+const FIREWORK_HELD_AT = 0.6;
 
 type CloudShape = readonly (readonly [number, number])[];
 
@@ -102,6 +112,10 @@ export class Backdrop {
       if (key.holidayId && celestial.body === "moon" && holidayScene(key.holidayId).window.bats) {
         this.renderBats(ctx, sky, seed, clock);
       }
+      // The Eve's fireworks are not a holiday's own: the room around them is
+      // the ordinary one until midnight, so they ride the key, not the scene.
+      const palette = key.fireworks ? holidayScene("newYear").window.fireworks : undefined;
+      if (palette && palette.length > 0) this.renderFireworks(ctx, sky, palette, seed, clock, reducedMotion);
       if (key.weather === "rain") this.renderRain(ctx, sky, density, venue.glassPane, seed, clock);
       if (key.weather === "snow") this.renderSnow(ctx, sky, density, seed, clock);
     });
@@ -196,6 +210,51 @@ export class Backdrop {
       ctx.fillStyle = hex(theme.wall[0]);
       ctx.fillRect(x + 1, y - 1, 2, 2);
     });
+  }
+
+  /**
+   * Shells rise and burst across the pane, each in a colour of the palette and
+   * at a place of its own every time round. Under reduced motion one burst is
+   * held, in the first colour, at the moment its sparks are widest.
+   */
+  private renderFireworks(
+    ctx: SceneContext,
+    sky: SkyRect,
+    palette: readonly RGB[],
+    seed: number,
+    nowMs: number,
+    reducedMotion: boolean,
+  ): void {
+    const shells = reducedMotion ? 1 : FIREWORK_SHELLS;
+    for (let shell = 0; shell < shells; shell++) {
+      const age = nowMs - shell * FIREWORK_STAGGER_MS;
+      const round = Math.floor(age / FIREWORK_PERIOD_MS);
+      const progress = reducedMotion ? FIREWORK_HELD_AT : (age - round * FIREWORK_PERIOD_MS) / FIREWORK_PERIOD_MS;
+      if (age < 0) continue;
+      const roll = (salt: number): number => hash(seed + (round * FIREWORK_SHELLS + shell) * 101 + salt);
+      const x = sky.x + 10 + Math.floor((reducedMotion ? 0.5 : roll(1)) * (sky.w - 20));
+      const top = sky.y + 8 + Math.floor((reducedMotion ? 0.3 : roll(2)) * (sky.h * 0.4));
+      const colour = hex(palette[reducedMotion ? 0 : Math.floor(roll(3) * palette.length) % palette.length]!);
+      ctx.fillStyle = colour;
+      if (progress < FIREWORK_RISE) {
+        // The shell, climbing from the sill to where it bursts.
+        const climb = progress / FIREWORK_RISE;
+        ctx.fillRect(x, Math.round(sky.y + sky.h - climb * (sky.y + sky.h - top)), 1, 2);
+        continue;
+      }
+      const burst = (progress - FIREWORK_RISE) / (1 - FIREWORK_RISE);
+      const radius = 2 + Math.sin(Math.min(1, burst * 1.4) * (Math.PI / 2)) * FIREWORK_RADIUS_PX;
+      const turn = roll(4) * Math.PI;
+      ctx.globalAlpha = Math.max(0, 1 - burst * burst);
+      for (let spark = 0; spark < FIREWORK_SPARKS; spark++) {
+        const angle = turn + (spark / FIREWORK_SPARKS) * Math.PI * 2;
+        const dx = Math.round(Math.cos(angle) * radius);
+        // Sparks fall as they fade, the way a burst droops.
+        const dy = Math.round(Math.sin(angle) * radius + burst * burst * 5);
+        ctx.fillRect(x + dx, top + dy, 1, 1);
+      }
+      ctx.globalAlpha = 1;
+    }
   }
 
   /** A holiday night's bats, crossing the pane on their own slow loops. */

@@ -36,6 +36,7 @@ const keyAt = (hour: number, holidayId: BackdropKey["holidayId"] = "halloween"):
     venueId: "home",
     themeId: "cozy",
     holidayId,
+    fireworks: false,
     segment: moment.segment,
     next: moment.next,
     blend: moment.blend,

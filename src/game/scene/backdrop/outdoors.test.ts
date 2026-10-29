@@ -49,6 +49,7 @@ const keyAt = (hour: number, extra: Partial<BackdropKey> = {}): BackdropKey => {
     venueId: "garden",
     themeId: "cozy",
     holidayId: null,
+    fireworks: false,
     segment: moment.segment,
     next: moment.next,
     blend: moment.blend,

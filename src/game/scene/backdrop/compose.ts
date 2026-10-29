@@ -40,6 +40,11 @@ export type BackdropKey = {
   themeId: string;
   /** The holiday dressing the room (SPEC §22.11), which swaps the theme. */
   holidayId: HolidayId | null;
+  /**
+   * New Year's Eve's fireworks are lighting the window. They are drawn live
+   * over the composed room, so they are not part of what `keyOf` names.
+   */
+  fireworks: boolean;
   segment: DaySegment;
   next: DaySegment;
   blend: number;

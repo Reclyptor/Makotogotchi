@@ -29,6 +29,7 @@ const keyAt = (hour: number, extra: Partial<BackdropKey> = {}): BackdropKey => {
     venueId: "home",
     themeId: "cozy",
     holidayId: null,
+    fireworks: false,
     segment: moment.segment,
     next: moment.next,
     blend: moment.blend,
@@ -165,18 +166,18 @@ describe("backdrop composition", () => {
 
 describe("a holiday's room", () => {
   it("is built from the scene's theme in place of the home theme", () => {
-    const holiday = composeBackdrop(keyAt(13, { holidayId: "halloween" }));
+    const holiday = composeBackdrop(keyAt(13, { holidayId: "halloween", fireworks: false }));
     expect(Array.from(holiday)).toEqual(Array.from(composeBackdrop(keyAt(13, { themeId: "cabin" }))));
     expect(Array.from(holiday)).not.toEqual(Array.from(composeBackdrop(keyAt(13))));
   });
 
   it("wins over whichever style the room owns", () => {
     expect(Array.from(composeBackdrop(keyAt(13, { holidayId: "halloween", themeId: "seaside" })))).toEqual(
-      Array.from(composeBackdrop(keyAt(13, { holidayId: "halloween" }))),
+      Array.from(composeBackdrop(keyAt(13, { holidayId: "halloween", fireworks: false }))),
     );
   });
 
   it("keys the cache on the holiday", () => {
-    expect(keyOf(keyAt(13, { holidayId: "halloween" }))).not.toBe(keyOf(keyAt(13)));
+    expect(keyOf(keyAt(13, { holidayId: "halloween", fireworks: false }))).not.toBe(keyOf(keyAt(13)));
   });
 });
