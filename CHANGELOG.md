@@ -69,6 +69,9 @@ minigame problems are fixed.
 
 ### Fixed
 
+- A streak is not broken by the day of stillness: a pet-day the second day of
+  meditation overlaps is skipped, neither breaking a streak nor adding to it
+  (`6076beb`)
 - Makoto is centred in the tub in Bubble Bath Pop, not left of the middle
   (`7dbd334`)
 - Holding in a minigame on a phone no longer starts a text selection that

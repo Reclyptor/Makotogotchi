@@ -746,7 +746,9 @@ becomes a fixed list of phrases.
   flat scores since they are not magnitude-shaped). The current leader wears
   a crown in the presence list.
 - **Streaks.** Consecutive days with at least one action, measured in the
-  pet's timezone. The pet greets returning caretakers by name.
+  pet's timezone. A pet-day the deep stillness overlaps (§2.8) is excused: it
+  neither breaks a streak nor adds to it. The pet greets returning caretakers
+  by name.
 
 ---
 
