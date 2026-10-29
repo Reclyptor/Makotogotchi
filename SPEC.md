@@ -1625,7 +1625,7 @@ frame's bottom-centre as the atlas snaps it and rows from its bottom edge.
 Frames with no ears (the egg, the gravestone, the medicine) carry `null` and
 wear nothing.
 
-Each entry carries two more things read off the same art:
+Each entry carries more things read off the same art:
 
 - **`brows`** — where an elder's brow tufts (§21.9) stand, bottom-centre:
   midway between the eyes and one art pixel above them, and never so high
@@ -1635,6 +1635,10 @@ Each entry carries two more things read off the same art:
   once hung nine rows below the hat anchor instead; the dip is the top of the
   skull, so their fur stood above the outline between the ears and read as a
   second, paler pair of ears on every elder.
+- **`cane`** — where a Sage's paw grips its cane (§21.9), bottom-centre like
+  the beard: `{ x, y }`, plus `behind: true` on a pose that holds it behind the
+  body. `null` on every frame that eats, drinks tea, games, sleeps, bathes or
+  meditates, and on `dead1`.
 - **`nightcap`** — the sleeping art wears its own hat. Where the skyline at
   the anchor column is a vivid colour the pet never is, no cosmetic is drawn:
   a crown over the nightcap was a blue-and-gold smear on the head all night.
@@ -2948,6 +2952,26 @@ pet just never looks different. Presentation-layer only:
     is drawn per frame: the masks regenerate from the art, so a redrawn
     pose (the meditation arms) gets its mouth for free. The family wall's Sage
     portraits (§22.10) keep the mouth in front the same way.
+- **The Sage's cane**: a knotted, slightly bent wooden walking stick,
+  `art/pet/sageCane@1x.png`, in Jingles' style and our own drawing. A Sage
+  holds it only when its paws are free — idle, walking, the emotes — and sets
+  it aside to eat, take tea, game, sleep, bathe or meditate. Each frame's
+  `cane` anchor (§10.5) marks where the paw grips it, or is `null` when the
+  paws are busy (and on `dead1`); `renderHead` draws it through the same
+  scaled, mirrored transform as the other overlays, at that anchor, with a
+  plain `Atlas.draw`: no frame that holds it has a prop in front of it, and
+  `drawOver` would erase its knob by the frame's mouth mask. It draws last
+  of the head layer but the hat — on a holiday, after the garment — so the
+  order is robe, brows, beard, cane, hat. The paw holds it, and the Sage's wide
+  hermit beard reaches the grip, so a beard drawn over the cane hid its knob.
+  A pose that holds it behind the body marks the anchor `behind`, and the cane
+  draws under the pet's sprite instead. It never draws on a frame whose anchor
+  is `null`, never on an elder, and not on the family wall, whose portraits
+  keep the beard only. Presentation only: no sim change.
+  - **Halloween**: the holiday scene's `costume` may carry a `staff` frame
+    (§22.11). When it does, `art/pet/wizardStaff@1x.png` — the cane's
+    silhouette and grip, topped with a glowing orb — replaces the cane at the
+    same anchor, over the robe.
 - **Meditating** (an elder, §2.8): the `meditating` animation key plays its
   own two-frame clip, `meditate1`/`meditate2`, a seated pose with the eyes
   closed and a slow breath. Those frames carry the brow and beard anchors like

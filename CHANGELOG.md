@@ -30,6 +30,10 @@ minigame problems are fixed.
   own silhouette, so the arms become sleeves with the paws out of the cuffs and
   no fur shows round the edges; the Sage's moustache stays clear of the
   costume's outline (`a432616`)
+- **The Sage carries a cane.** A Master Roshi style walking stick in whichever
+  paw is free, on every pose that leaves one free; eating, games, sleep,
+  bathing and meditation put it away (`f25d370`). On Halloween it becomes a
+  wizard staff tipped with a glowing crystal (`fa79521`)
 - **Day two of meditation is whole and untouchable (ruleset 5).** On the first
   tick of the second day every need and health go to full and any sickness is
   cured. After that every care button, a pat and medicine included, is turned

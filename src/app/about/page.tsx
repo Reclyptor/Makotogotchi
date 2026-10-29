@@ -43,9 +43,10 @@ export default function AboutPage() {
             made whole again, and nothing can reach it at all.
           </li>
           <li>
-            It rises a Sage, with a white beard. A Sage is asked for less — a flat 65% (60% if frail) — and everyone who
-            cared for it in its last two weeks as an elder gets 300 🪙. Care for a Sage earns half as many coins again, and
-            the egg laid after a Sage has a gentler childhood.
+            It rises a Sage, with a white beard and a walking cane it leans on whenever its paws are free. A Sage is
+            asked for less — a flat 65% (60% if frail) — and everyone who cared for it in its last two weeks as an elder
+            gets 300 🪙. Care for a Sage earns half as many coins again, and the egg laid after a Sage has a gentler
+            childhood.
           </li>
         </ul>
         <p className="text-muted">
@@ -78,7 +79,7 @@ export default function AboutPage() {
           >
             CC BY 4.0
           </a>
-          . Take either — just credit Jingles for the sprites. The meditation pose, the Sage&apos;s beard, and the
+          . Take either — just credit Jingles for the sprites. The meditation pose, the Sage&apos;s beard and cane, and the
           Halloween costume and props are modifications of her work, drawn in her style.
         </p>
       </div>
