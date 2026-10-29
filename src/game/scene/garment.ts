@@ -61,18 +61,23 @@ export type Garment = {
     cloth: RGB;
     /** The neckline's band. */
     collar: RGB;
-    /** The slit's edges, the seam, the cuffs. */
+    /** The slit's edges, and the cuffs unless `cuff` says otherwise. */
     trim: RGB;
     /** The collar's top line and the tails' edges. */
     line: RGB;
+    /** The cuffs, where they are not the trim. */
+    cuff?: RGB;
+    /** A shirt front, which only a front pattern paints. */
+    shirt?: RGB;
   };
   /** An open front, in body columns per facing, where the fur shows; null for a closed one. */
   slit: { side: Span; front: Span } | null;
   /**
-   * A closed seam: one column of trim down the centre where a slit would be,
-   * with no fur showing. Body columns per facing; none when absent.
+   * Details on the front, painted over the cloth after the rules above have
+   * laid it: lapels, a shirt front, a bow tie, a button, a closed seam, an
+   * opening that widens. See `FrontPattern`.
    */
-  seam?: { side: number; front: number };
+  frontPattern?: FrontPattern;
   /** Cuffs above bare paws; false runs the sleeves down to the paw. */
   cuffs: boolean;
   /** A belt two rows above the hem, with a buckle at the middle of its widest run. */
@@ -89,14 +94,36 @@ export type Garment = {
   skirt?: boolean;
   /**
    * A pattern on the last rows of cloth, one string per row, repeated across
-   * the body's columns: c cloth, l collar, t trim, k line, . leaves the cloth.
+   * the body's columns: c cloth, l collar, t trim, k line, s shirt, . leaves
+   * the cloth.
    */
   hemPattern: readonly string[] | null;
   /** How many rows higher the pattern sits on a seated pose, so it clears the floor. */
   seatedHemLift?: number;
 };
 
-type Role = "cloth" | "collar" | "trim" | "line" | "belt" | "buckle";
+/**
+ * Rows of a front pattern, from the neckline down: row 0 is the collar's row,
+ * row i the one i below it, and each string is indexed by body column (the body's
+ * first column is 0; its centre is 10 on a front body, 9 on a side one). A
+ * letter paints the cell: c cloth, l collar, t trim, k line, s shirt (cloth
+ * where the ramp has none), f lets the pose's fur show, and . leaves what the
+ * rules painted. A shorter string leaves the remaining columns alone, and only
+ * cells already painted cloth, collar or trim are touched: never the collar's
+ * top line, a cuff, a bare paw, outline or a prop. `rest` stands in for every
+ * row below the last, down to the last row of cloth.
+ */
+export type FrontRows = { rows: readonly string[]; rest?: string };
+
+/**
+ * A front pattern per facing. A side body takes `front` where it has no rows
+ * of its own, a seated front pose takes `front` and a seated side pose `side`,
+ * unless `sit` and `sitSide` say otherwise: a pose in the lap closes a seam or
+ * an opening a few rows above the floor, which is a shorter set of rows.
+ */
+export type FrontPattern = { front: FrontRows; side?: FrontRows; sit?: FrontRows; sitSide?: FrontRows };
+
+type Role = "cloth" | "collar" | "trim" | "line" | "cuff" | "shirt" | "belt" | "buckle";
 export type GarmentCell = {
   /** Column and row in the frame's cells; a tail hangs past the frame, so may be negative. */
   x: number;
@@ -110,7 +137,7 @@ export type GarmentCell = {
 export const GARMENT_MARGIN_CELLS = 3;
 /** The atlas upscales each art pixel to this many device pixels (scripts/atlas.ts). */
 export const CELL_PX = 5.5;
-/** A seated front pose closes its slit and seam this many rows above the floor, where the lap begins. */
+/** A seated front pose closes its slit this many rows above the floor, where the lap begins. */
 const SIT_SLIT_CLOSES = 5;
 /** The belt's row, counted up from the last row of cloth. */
 const BELT_ROWS_ABOVE_BOTTOM = 2;
@@ -126,7 +153,13 @@ export const cellEdge = (index: number, offset: number): number =>
 const within = (column: number, span: Span): boolean => column >= span[0] && column <= span[1];
 const inBox = (x: number, y: number, box: GarmentBox): boolean => x >= box.x0 && x <= box.x1 && y >= box.y0 && y <= box.y1;
 
-const HEM_ROLES: Record<string, Role> = { c: "cloth", l: "collar", t: "trim", k: "line" };
+const PATTERN_ROLES: Record<string, Role> = { c: "cloth", l: "collar", t: "trim", k: "line", s: "shirt" };
+
+const frontRowsFor = (pattern: FrontPattern, face: GarmentFace): FrontRows => {
+  if (face === "sit") return pattern.sit ?? pattern.front;
+  if (face === "sitSide") return pattern.sitSide ?? pattern.side ?? pattern.front;
+  return face === "side" ? (pattern.side ?? pattern.front) : pattern.front;
+};
 
 /**
  * The cells a garment paints on one frame, in paint order. Everything but the
@@ -138,7 +171,6 @@ export const garmentCells = (region: GarmentRegion, garment: Garment): GarmentCe
   const seated = face === "sit" || face === "sitSide";
   const front = face === "front" || face === "sit";
   const slit = garment.slit ? (front ? garment.slit.front : garment.slit.side) : null;
-  const seam = garment.seam ? (front ? garment.seam.front : garment.seam.side) : null;
   const paws = garment.cuffs ? region.paws : [];
   const cells: { x: number; y: number; role: Role; piece: boolean }[] = [];
 
@@ -148,7 +180,6 @@ export const garmentCells = (region: GarmentRegion, garment: Garment): GarmentCe
   const inSlit = (cx: number, cy: number): boolean => slit !== null && within(column(cx), slit) && openAt(cy);
   const onSlitEdge = (cx: number, cy: number): boolean =>
     slit !== null && (column(cx) === slit[0] - 1 || column(cx) === slit[1] + 1) && openAt(cy);
-  const onSeam = (cx: number, cy: number): boolean => seam !== null && column(cx) === seam && openAt(cy);
   const isPaw = (cx: number, cy: number): boolean => paws.some(({ paw }) => inBox(cx, cy, paw));
   const isCuff = (cx: number, cy: number): boolean => paws.some(({ cuff }) => cuff !== null && inBox(cx, cy, cuff));
 
@@ -159,37 +190,57 @@ export const garmentCells = (region: GarmentRegion, garment: Garment): GarmentCe
       const at = (role: Role): void => void cells.push({ x: cx, y: cy, role, piece: false });
       if (cy === neck - 1) at("line"); // the collar's top line
       else if (isPaw(cx, cy)) continue; // a bare paw
-      else if (isCuff(cx, cy)) at("trim");
+      else if (isCuff(cx, cy)) at("cuff");
       else if (inSlit(cx, cy)) continue; // the open front: fur shows
       else if (cy === neck) at("collar");
-      else if (onSlitEdge(cx, cy) || onSeam(cx, cy)) at("trim");
+      else if (onSlitEdge(cx, cy)) at("trim");
       // The belly's white is a marking, not light: it maps to the cloth too.
       else at("cloth");
     }
   });
 
+  let painted = cells;
+  const openedByPattern = new Set<string>();
+  if (garment.frontPattern) {
+    const { rows, rest } = frontRowsFor(garment.frontPattern, face);
+    const retaggable: readonly Role[] = ["cloth", "collar", "trim"];
+    const bare = new Set<number>();
+    painted.forEach((cell, index) => {
+      if (cell.y < neck || !retaggable.includes(cell.role)) return;
+      const row = rows[cell.y - neck] ?? rest;
+      const mark = row?.[column(cell.x)];
+      if (mark === "f") {
+        bare.add(index);
+        openedByPattern.add(`${cell.x},${cell.y}`);
+      }
+      else if (mark !== undefined && mark in PATTERN_ROLES) cell.role = PATTERN_ROLES[mark]!;
+    });
+    painted = painted.filter((_, index) => !bare.has(index));
+  }
+
   // The skirt goes down before the pattern, so a hem's stars fall on it too.
   // It closes over the legs but not over an open front above the last row of
-  // cloth, where the slit's fur stays in view.
+  // cloth, where a slit's, or a front pattern's, fur stays in view.
   const slitFur = (cx: number, cy: number): boolean => inSlit(cx, cy) && cy < bottom && region.rows[cy - (neck - 1)]?.[cx] === "f";
+  const openFront = (cx: number, cy: number): boolean => slitFur(cx, cy) || (cy < bottom && openedByPattern.has(`${cx},${cy}`));
   if (garment.skirt) {
-    cells.push(...skirtCells(region).filter((cell) => !slitFur(cell.x, cell.y)).map((cell) => ({ ...cell, piece: true })));
+    painted.push(...skirtCells(region).filter((cell) => !openFront(cell.x, cell.y)).map((cell) => ({ ...cell, piece: true })));
   }
 
   const pattern = garment.hemPattern;
   if (pattern) {
     const first = bottom - (seated ? (garment.seatedHemLift ?? 0) : 0) - pattern.length + 1;
-    for (const cell of cells) {
+    for (const cell of painted) {
       if (cell.role !== "cloth" || cell.y < first || cell.y >= first + pattern.length) continue;
       const row = pattern[cell.y - first]!;
       const mark = row[((column(cell.x) % row.length) + row.length) % row.length]!;
-      if (mark in HEM_ROLES) cell.role = HEM_ROLES[mark]!;
+      if (mark in PATTERN_ROLES) cell.role = PATTERN_ROLES[mark]!;
     }
   }
 
   if (garment.belt) {
     const beltRow = bottom - BELT_ROWS_ABOVE_BOTTOM;
-    const onBelt = cells.filter((cell) => cell.y === beltRow && cell.role === "cloth");
+    const onBelt = painted.filter((cell) => cell.y === beltRow && cell.role === "cloth");
     if (beltRow > neck + 1 && onBelt.length > 0) {
       const buckle = widestRunCentre(onBelt.map((cell) => cell.x));
       for (const cell of onBelt) cell.role = cell.x === buckle ? "buckle" : "belt";
@@ -199,9 +250,11 @@ export const garmentCells = (region: GarmentRegion, garment: Garment): GarmentCe
   const color = (role: Role): RGB => {
     if (role === "belt") return garment.belt!.belt;
     if (role === "buckle") return garment.belt!.buckle;
+    if (role === "cuff") return garment.ramp.cuff ?? garment.ramp.trim;
+    if (role === "shirt") return garment.ramp.shirt ?? garment.ramp.cloth;
     return garment.ramp[role];
   };
-  const out: GarmentCell[] = cells.map((cell) => ({ x: cell.x, y: cell.y, color: color(cell.role), piece: cell.piece }));
+  const out: GarmentCell[] = painted.map((cell) => ({ x: cell.x, y: cell.y, color: color(cell.role), piece: cell.piece }));
   if (garment.tails) {
     for (const piece of tailCells(region)) out.push({ x: piece.x, y: piece.y, color: color(piece.role), piece: true });
   }

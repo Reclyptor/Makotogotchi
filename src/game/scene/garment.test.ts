@@ -175,14 +175,99 @@ describe("a worn garment", () => {
     expect(cells.every((cell) => !cell.piece)).toBe(true);
   });
 
-  it("runs a closed seam of trim down the centre with no fur showing, and closes it above a seated lap", () => {
-    const caped: Garment = { ...TEST_GARMENT, slit: null, seam: { side: 9, front: 10 }, tails: false };
-    const front = GARMENT_REGIONS.idleFront1!;
-    const seamCells = garmentCells(front, caped).filter((cell) => cell.x === front.col0 + 10 && same(cell.color, caped.ramp.trim));
-    expect(seamCells.length).toBeGreaterThan(5);
-    const sit = GARMENT_REGIONS.meditate1!;
-    const lap = garmentCells(sit, caped).filter((cell) => cell.x === sit.col0 + 10 && cell.y > sit.bottom - 5 && same(cell.color, caped.ramp.trim));
-    expect(lap).toEqual([]);
+  describe("with a front pattern", () => {
+    const plain: Garment = { ...TEST_GARMENT, slit: null, tails: false, cuffs: true };
+    const colourAt = (cells: GarmentCell[], x: number, y: number): readonly number[] | undefined => cells.filter((cell) => cell.x === x && cell.y === y).at(-1)?.color;
+    const row = (centre: number, letters: string): string => ".".repeat(centre) + letters;
+
+    it("runs a closed seam of trim down the centre to the last row of cloth, with no fur showing", () => {
+      const caped: Garment = {
+        ...plain,
+        frontPattern: { front: { rows: [], rest: row(10, "t") }, side: { rows: [], rest: row(9, "t") } },
+      };
+      for (const [name, centre] of [["idleFront1", 10], ["idleSide1", 9]] as const) {
+        const region = GARMENT_REGIONS[name]!;
+        const cells = garmentCells(region, caped);
+        for (let y = region.neck + 1; y <= region.bottom; y++) {
+          expect(same(colourAt(cells, region.col0 + centre, y) ?? [], caped.ramp.trim), `${name} seam at row ${y}`).toBe(true);
+        }
+      }
+    });
+
+    it("closes a seam above a seated lap with a shorter set of rows for the pose", () => {
+      const caped: Garment = {
+        ...plain,
+        frontPattern: { front: { rows: [], rest: row(10, "t") }, sit: { rows: Array.from({ length: 4 }, () => row(10, "t")) } },
+      };
+      const sit = GARMENT_REGIONS.meditate1!;
+      const cells = garmentCells(sit, caped);
+      expect(same(colourAt(cells, sit.col0 + 10, sit.neck + 3) ?? [], caped.ramp.trim)).toBe(true);
+      expect(same(colourAt(cells, sit.col0 + 10, sit.neck + 6) ?? [], caped.ramp.trim)).toBe(false);
+    });
+
+    it("lets the fur show through an opening that widens a row at a time", () => {
+      // One column for three rows, three for the next three, five from the seventh.
+      const widening: Garment = {
+        ...plain,
+        frontPattern: {
+          front: {
+            rows: [
+              ".........tft.........",
+              ".........tft.........",
+              ".........tft.........",
+              "........tfffft.......",
+              "........tfffft.......",
+              "........tfffft.......",
+            ],
+            rest: ".......tfffffft.......",
+          },
+        },
+      };
+      const region = GARMENT_REGIONS.idleFront1!;
+      const covered = new Set(garmentCells(region, widening).map(keyOf));
+      const at = (column: number, row: number): boolean => covered.has(`${region.col0 + column},${region.neck + row}`);
+      expect(at(10, 1)).toBe(false);
+      expect(at(9, 1)).toBe(true);
+      expect(at(9, 4)).toBe(false);
+      expect(at(8, 4)).toBe(true);
+      expect(at(8, 8)).toBe(false);
+      expect(at(7, 8)).toBe(true);
+    });
+
+    it("paints lapels, a shirt front and a bow tie from the neckline, over cloth only", () => {
+      const tux: Garment = {
+        ...plain,
+        ramp: { ...plain.ramp, shirt: [244, 244, 252], cuff: [240, 240, 250] },
+        frontPattern: { front: { rows: ["........kkkkk........", ".....tssssssssst.....", ".....tssssssssst....."] } },
+      };
+      const region = GARMENT_REGIONS.idleFront1!;
+      const cells = garmentCells(region, tux);
+      expect(same(colourAt(cells, region.col0 + 10, region.neck) ?? [], tux.ramp.line)).toBe(true);
+      expect(same(colourAt(cells, region.col0 + 10, region.neck + 1) ?? [], tux.ramp.shirt!)).toBe(true);
+      expect(same(colourAt(cells, region.col0 + 5, region.neck + 1) ?? [], tux.ramp.trim)).toBe(true);
+      // The collar's top line is never retagged, nor a cuff.
+      for (const cell of cells.filter((candidate) => candidate.y === region.neck - 1)) expect(same(cell.color, tux.ramp.line)).toBe(true);
+      const cuffRows = region.paws.flatMap((arm) => (arm.cuff ? [arm.cuff.y0] : []));
+      const cuff = cells.filter((cell) => cuffRows.includes(cell.y) && same(cell.color, tux.ramp.cuff!));
+      expect(cuff.length).toBeGreaterThan(0);
+    });
+
+    it("falls back to the trim for a cuff and the cloth for a shirt the ramp does not name", () => {
+      const bare: Garment = { ...plain, frontPattern: { front: { rows: [".", ".s"] } } };
+      const region = GARMENT_REGIONS.idleFront1!;
+      const cells = garmentCells(region, bare);
+      expect(same(colourAt(cells, region.col0 + 1, region.neck + 1) ?? [], bare.ramp.cloth)).toBe(true);
+      const cuffRows = region.paws.flatMap((arm) => (arm.cuff ? [arm.cuff.y0] : []));
+      expect(cells.some((cell) => cuffRows.includes(cell.y) && same(cell.color, bare.ramp.trim))).toBe(true);
+    });
+
+    it("takes the front's rows where a facing has none of its own", () => {
+      const shirt: Garment = { ...plain, ramp: { ...plain.ramp, shirt: [1, 2, 3] }, frontPattern: { front: { rows: [".", "..s"] } } };
+      for (const name of ["idleFront1", "idleSide1", "bored1"] as const) {
+        const region = GARMENT_REGIONS[name]!;
+        expect(same(colourAt(garmentCells(region, shirt), region.col0 + 2, region.neck + 1) ?? [], [1, 2, 3]), name).toBe(true);
+      }
+    });
   });
 
   it("draws the collar on the neckline and its black line on the row above", () => {
