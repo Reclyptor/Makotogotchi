@@ -24,7 +24,8 @@ export type HolidayScene = {
   id: HolidayId;
   theme: RoomTheme;
   props: readonly HolidayProp[];
-  costume: { hat: FrameName; robe: Garment };
+  /** `staff` replaces a Sage's cane at the same anchor (SPEC §21.9). */
+  costume: { hat: FrameName; robe: Garment; staff?: FrameName };
   /** Night sky touches. */
   window: { bats: boolean; moon: RGB | null };
 };

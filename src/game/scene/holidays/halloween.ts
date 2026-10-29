@@ -96,7 +96,7 @@ export const HALLOWEEN_SCENE: HolidayScene = {
     { frame: "pumpkinFace", x: 30, y: 198, layer: "front", flicker: true },
     { frame: "pumpkinGrin", x: 238, y: 198, layer: "front", flicker: true },
   ],
-  costume: { hat: "wizardHat", robe: WIZARD_ROBE },
+  costume: { hat: "wizardHat", robe: WIZARD_ROBE, staff: "wizardStaff" },
   // A harvest moon, and bats across it.
   window: { bats: true, moon: [255, 210, 130] },
 };
