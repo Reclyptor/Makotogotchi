@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb, db } from "./db/client";
 import { closeRedis } from "./redis/client";
-import { caretakerProfile, leaderboard, recordContribution, setNickname } from "./social";
+import { caretakerProfile, leaderboard, nextStreak, recordContribution, setNickname } from "./social";
 import { startTestInfra, type TestInfra } from "./testsetup";
 import { TICKS_PER_DAY } from "@/sim/tuning";
 
@@ -75,5 +75,48 @@ describe("contributions and streaks (SPEC §2.11)", () => {
     expect(today.find((row) => row.caretakerId === "ct-streak")?.score).toBe(100);
     expect(generation.find((row) => row.caretakerId === "ct-streak")?.score).toBe(500);
     expect(all[0]!.name).toBeTruthy();
+  });
+});
+
+describe("nextStreak (SPEC §2.11)", () => {
+  const last = (lastActiveDay: number | null, streakDays = 4) => ({ lastActiveDay, streakDays });
+  const window = { first: 47, last: 48 };
+
+  it("starts at one for a first action ever", () => {
+    expect(nextStreak(null, 5)).toBe(1);
+    expect(nextStreak(last(null, 0), 5)).toBe(1);
+  });
+
+  it("holds on the same day and grows on the next", () => {
+    expect(nextStreak(last(5), 5)).toBe(4);
+    expect(nextStreak(last(5), 6)).toBe(5);
+  });
+
+  it("resets over a gap when no window excuses it", () => {
+    expect(nextStreak(last(5), 8)).toBe(1);
+    expect(nextStreak(last(46), 48, null)).toBe(1);
+  });
+
+  it("skips excused days without counting them", () => {
+    expect(nextStreak(last(46), 48, window)).toBe(5);
+    expect(nextStreak(last(46), 49, window)).toBe(5);
+    expect(nextStreak(last(45), 49, { first: 46, last: 48 })).toBe(5);
+  });
+
+  it("resets when only some of the missed days are excused", () => {
+    expect(nextStreak(last(45), 48, window)).toBe(1);
+    expect(nextStreak(last(46), 50, window)).toBe(1);
+  });
+});
+
+describe("a streak across the day of stillness", () => {
+  it("continues when the missed day is excused", async () => {
+    const database = await db();
+    const base = { stage: "ADULT" as const, caretakerId: "ct-still", generationId: "gen-still", action: "FEED" as const, applied: 100_000 };
+    await recordContribution(database, { ...base, tick: 45 * TICKS_PER_DAY + 10 });
+    const before = await recordContribution(database, { ...base, tick: 46 * TICKS_PER_DAY + 10 });
+    expect(before.streakDays).toBe(2);
+    const after = await recordContribution(database, { ...base, tick: 48 * TICKS_PER_DAY + 10, excusedDays: { first: 47, last: 48 } });
+    expect(after.streakDays).toBe(3);
   });
 });

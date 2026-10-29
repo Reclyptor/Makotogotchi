@@ -7,7 +7,7 @@
 // thing, and the UI says so differently.
 
 import { NextResponse, type NextRequest } from "next/server";
-import { stageOf } from "@/sim/model";
+import { deepStillnessDays, stageOf } from "@/sim/model";
 import { z } from "zod";
 import { CARE_ACTIONS } from "@/sim/tuning";
 import { runtime } from "@/server/runtime";
@@ -87,6 +87,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     tick: outcome.state.tick,
     stage,
     changed: outcome.changed,
+    excusedDays: deepStillnessDays(outcome.state),
   });
   // Granting a wish pays extra (SPEC §25.4).
   const wantCoins = await settleWantFulfillment(await db(), identity.caretakerId, outcome.milestones, stage);

@@ -5,6 +5,7 @@
 
 import type { Collection, Db } from "mongodb";
 import { contributionScore, petDay } from "@/sim/score";
+import type { PetDayRange } from "@/sim/model";
 import { NICKNAME_PATTERN } from "@/sim/events";
 import type { CareAction, LifeStage } from "@/sim/tuning";
 import { isDuplicateKeyError } from "./db/collections";
@@ -113,6 +114,24 @@ const emptyProfileFields = (): Omit<CaretakerDoc, "_id" | "nickname" | "nickname
 });
 
 /**
+ * The streak after an action on `day`. A pet-day strictly between the last
+ * active day and today breaks it, unless the deep stillness overlapped that
+ * day: those are skipped, neither breaking nor adding (SPEC §2.11).
+ */
+export const nextStreak = (
+  previous: { streakDays: number; lastActiveDay: number | null } | null,
+  day: number,
+  excused: PetDayRange | null = null,
+): number => {
+  if (previous === null || previous.lastActiveDay === null) return 1;
+  if (previous.lastActiveDay === day) return previous.streakDays;
+  for (let missed = previous.lastActiveDay + 1; missed < day; missed++) {
+    if (excused === null || missed < excused.first || missed > excused.last) return 1;
+  }
+  return previous.streakDays + 1;
+};
+
+/**
  * Roll one performed care action into the ledgers: total score, per-action
  * counts, the daily streak (consecutive pet-days with at least one action),
  * and the per-generation-per-day contribution row the leaderboards read.
@@ -132,6 +151,9 @@ export const recordContribution = async (
     changed?: boolean;
     /** The pet's stage at the action: a Sage pays the wisdom bonus. */
     stage: LifeStage;
+    /** Pet-days that excuse a gap in the streak, when the pet turned every
+     *  action away (SPEC §2.11). */
+    excusedDays?: PetDayRange | null;
   },
 ): Promise<{ score: number; coins: number; streakDays: number }> => {
   await ensureSocialIndexes(db);
@@ -143,12 +165,7 @@ export const recordContribution = async (
   const day = petDay(input.tick);
 
   const existing = await caretakers(db).findOne({ _id: input.caretakerId });
-  const streakDays =
-    existing?.lastActiveDay === day
-      ? existing.streakDays
-      : existing?.lastActiveDay === day - 1
-        ? existing.streakDays + 1
-        : 1;
+  const streakDays = nextStreak(existing, day, input.excusedDays);
 
   // findOneAndUpdate rather than updateOne: the new balance comes back on the
   // same round trip the earning already costs, which is what lets the purse be
