@@ -9,22 +9,10 @@
 import { useEffect, useRef } from "react";
 import type { FrameName } from "@/game/atlas.generated";
 import { drawFrame, drawFrameAnchored, GAME_H, GAME_W, startGameLoop } from "./engine";
+import { advance, APPROACH_MS, createBrew, LEAVING_MS, MAX_POT, RUN_MS, type Brew } from "./sneakyBrewRules";
 import type { GameProps } from "./types";
 
-const RUN_MS = 30_000;
 const COUNTER_Y = 96;
-
-const MAX_POT = 5;
-const MS_PER_CUP = 700;
-
-// Her round trip: away, walking in, standing over the machine, walking off.
-const GONE_MS = [2600, 4200] as const;
-const APPROACH_MS = 1300;
-const OVER_MS = 700;
-const LEAVING_MS = 900;
-
-const SMASHED_MS = 1000;
-const POUR_MS = 500;
 
 const MACHINE_X = 152;
 const MACHINE_W = 44;
@@ -39,8 +27,14 @@ const PET_H = 34;
 // brew level can be drawn into the glass without a second sprite per level.
 const CARAFE = { x: 12 / 22, y: 12 / 23, w: 8 / 22, h: 7 / 23 };
 
-const between = ([low, high]: readonly [number, number]): number => low + Math.random() * (high - low);
 const lerp = (from: number, to: number, t: number): number => from + (to - from) * t;
+
+const natsumiX = ({ natsumi, phaseMs }: Brew): number => {
+  if (natsumi === "coming") return lerp(NATSUMI_AWAY_X, NATSUMI_OVER_X, Math.min(1, phaseMs / APPROACH_MS));
+  if (natsumi === "over") return NATSUMI_OVER_X;
+  if (natsumi === "leaving") return lerp(NATSUMI_OVER_X, NATSUMI_AWAY_X, Math.min(1, phaseMs / LEAVING_MS));
+  return NATSUMI_AWAY_X;
+};
 
 export default function SneakyBrew({ sheet, reportScore, finish }: GameProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -50,20 +44,10 @@ export default function SneakyBrew({ sheet, reportScore, finish }: GameProps) {
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
 
-    let score = 0;
-    let inputs = 0;
+    let brew = createBrew(Math.random);
     let elapsed = 0;
-    let pot = 0;
-    let smashedMs = 0;
-    let pourMs = 0;
     let steamMs = 0;
-    let phase: "gone" | "coming" | "over" | "leaving" = "gone";
-    let phaseMs = 0;
-    let phaseFor = between(GONE_MS);
-    // The raw press, and whether this press has been counted — a press begun
-    // during the pre-roll still brews the moment the count ends.
     let pressed = false;
-    let counted = false;
 
     const press = (): void => {
       pressed = true;
@@ -87,63 +71,11 @@ export default function SneakyBrew({ sheet, reportScore, finish }: GameProps) {
 
     const { stop, armed } = startGameLoop((dtMs) => {
       elapsed += dtMs;
-      phaseMs += dtMs;
-      smashedMs = Math.max(0, smashedMs - dtMs);
-      pourMs = Math.max(0, pourMs - dtMs);
       steamMs += dtMs;
-
-      const live = armed();
-      const brewing = live && pressed && smashedMs === 0;
-      // Both edges are deliberate acts — starting the pot and pouring it — so
-      // both count toward the server's inputs floor.
-      if (live && pressed && !counted) {
-        inputs += 1;
-        counted = true;
-      }
-      if (!pressed && counted) {
-        inputs += 1;
-        counted = false;
-        // Releasing pours: whatever whole cups are in the pot are banked.
-        const cups = Math.floor(pot);
-        if (cups > 0 && smashedMs === 0) {
-          score += cups;
-          reportScore(score);
-          pourMs = POUR_MS;
-        }
-        pot = 0;
-      }
-      if (brewing) pot = Math.min(MAX_POT, pot + dtMs / MS_PER_CUP);
-
-      if (phaseMs >= phaseFor) {
-        phaseMs = 0;
-        if (phase === "gone") {
-          phase = "coming";
-          phaseFor = APPROACH_MS;
-        } else if (phase === "coming") {
-          phase = "over";
-          phaseFor = OVER_MS;
-          // She arrives. A pot on the go is a pot on the floor.
-          if (brewing) {
-            smashedMs = SMASHED_MS;
-            pot = 0;
-          }
-        } else if (phase === "over") {
-          phase = "leaving";
-          phaseFor = LEAVING_MS;
-        } else {
-          phase = "gone";
-          phaseFor = between(GONE_MS);
-        }
-      }
-
-      const natsumiX =
-        phase === "coming"
-          ? lerp(NATSUMI_AWAY_X, NATSUMI_OVER_X, Math.min(1, phaseMs / APPROACH_MS))
-          : phase === "over"
-            ? NATSUMI_OVER_X
-            : phase === "leaving"
-              ? lerp(NATSUMI_OVER_X, NATSUMI_AWAY_X, Math.min(1, phaseMs / LEAVING_MS))
-              : NATSUMI_AWAY_X;
+      const stepped = advance(brew, dtMs, { pressed, live: armed() }, Math.random);
+      brew = stepped.brew;
+      if (stepped.events.some((event) => event.kind === "poured")) reportScore(brew.score);
+      const { pot, score, inputs, brewing, smashedMs, pourMs } = brew;
 
       ctx.imageSmoothingEnabled = false;
       ctx.fillStyle = "#1d1825";
@@ -169,7 +101,7 @@ export default function SneakyBrew({ sheet, reportScore, finish }: GameProps) {
         drawFrame(ctx, sheet, steamMs % 480 < 240 ? "steam1" : "steam2", MACHINE_X + 26, machineY - 10, 6, 10);
       }
 
-      drawFrameAnchored(ctx, sheet, smashedMs > 0 ? "natsumiGrin" : "natsumiWatch", natsumiX, COUNTER_Y + 8, NATSUMI_H);
+      drawFrameAnchored(ctx, sheet, smashedMs > 0 ? "natsumiGrin" : "natsumiWatch", natsumiX(brew), COUNTER_Y + 8, NATSUMI_H);
 
       const pose: FrameName =
         smashedMs > 0 ? "cry1" : pourMs > 0 ? "cheer1" : brewing ? (steamMs % 300 < 150 ? "lift1" : "lift2") : "idleSide1";

@@ -54,6 +54,15 @@ export type MinigameDef = {
   bonus?: { need: NeedKey; base: number };
 };
 
+/** Sneaky Brew's rules that bound its score (SPEC §13.3.3). The client plays
+ *  them and the envelope below is derived from them, so the two can never
+ *  disagree about what a perfect run is. */
+export const SNEAKY_BREW = {
+  runMs: 30_000,
+  msPerCup: 700,
+  maxPot: 5,
+} as const;
+
 const clampPerformance = (value: number): number => Math.max(50, Math.min(150, Math.round(value)));
 
 export const MINIGAMES: Record<MinigameId, MinigameDef> = {
@@ -150,11 +159,12 @@ export const MINIGAMES: Record<MinigameId, MinigameDef> = {
     title: "Sneaky Brew",
     emoji: "☕",
     sessionLifetimeMs: 45_000,
-    // Her shortest round trip is 5.5s and the pot caps at five cups, so a
-    // flawless thirty seconds is about 27 — the envelope has to sit above
-    // what perfect play produces, not at it.
-    maxScorePerSecond: 1.2,
-    maxScore: 32,
+    // Natsumi only smashes a pot that is brewing the instant she arrives, and
+    // her walk-in is in plain view, so a perfect player brews almost the whole
+    // run. The fill rate is the only true limit, and both ceilings are read
+    // straight off it: the envelope must sit at or above perfect play.
+    maxScorePerSecond: 1000 / SNEAKY_BREW.msPerCup,
+    maxScore: Math.floor(SNEAKY_BREW.runMs / SNEAKY_BREW.msPerCup),
     // A single hold can bank five cups at once, so the input floor is well
     // under one per point — as with Snack Catch, it is anti-idle, not anti-fun.
     inputsPerPoint: 0.25,
