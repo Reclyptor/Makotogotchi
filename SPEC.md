@@ -2153,6 +2153,15 @@ letting go pours it — banking those cups as points. Natsumi walks in from the
 right on her own schedule, and a pot still brewing when she arrives is a
 machine on the floor and a pot worth nothing. One button, and the only
 question it ever asks is when to stop: the roster's only press-your-luck game.
+Natsumi only smashes a pot that is brewing the instant she arrives, and her
+walk-in is in plain view, so perfect play brews nearly the whole run and is
+bounded only by the fill rate. The envelope is therefore read off the rules
+themselves (`SNEAKY_BREW` in `src/sim/minigames.ts`: one cup per 700ms, so
+42 cups and 1000/700 cups per second), and the rules live in the pure module
+`sneakyBrewRules.ts`, where a test plays a perfect run across many seeds and
+frame rates and requires it to pass `plausibleRun`. The first envelope was a
+hand estimate of one pot per round trip (32 cups, 1.2 cups/s), so the best
+honest runs were rejected at finish and paid nothing.
 
 **Tea Party.** Guests around the table hold up what they want; serve the
 guest who wants the dish currently on the tray. A right guest is a point, a

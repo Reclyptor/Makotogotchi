@@ -69,6 +69,11 @@ minigame problems are fixed.
 
 ### Fixed
 
+- Sneaky Brew no longer throws away its best runs. The server's limit on a
+  believable score was set for one pot per Natsumi visit, but a well-timed
+  player brews almost the whole time, so any run above 32 cups was rejected
+  and paid nothing. The limit now comes from the brew rate itself (at most 42
+  cups in 30 seconds), and a test plays perfect runs against it (`d32388e`)
 - A streak is not broken by the day of stillness: a pet-day the second day of
   meditation overlaps is skipped, neither breaking a streak nor adding to it
   (`6076beb`)
